@@ -1,10 +1,10 @@
+import { createRequire } from 'module'
 import { describe, expect, it } from 'vitest'
-import type { FormMethodOptions } from 'form-auto-content'
 import sharp from 'sharp'
 import { buildApp } from '../src/app.js'
 import { ClaudeJsonError } from '../src/claude/client.js'
 
-const formAutoContent = require('form-auto-content')
+const formAutoContent = createRequire(import.meta.url)('form-auto-content')
 
 describe('GET /health', () => {
   it('returns ok', async () => {
@@ -47,5 +47,12 @@ describe('POST /analyze', () => {
     const res = await app.inject({ method: 'POST', url: '/analyze', ...form })
     expect(res.statusCode).toBe(502)
     expect(res.json()).toEqual({ error: 'analysis-failed' })
+  })
+  it('500s with {error:"internal"} on a corrupt image', async () => {
+    const app = buildApp({ runAnalysis: async () => ({ kind: 'not-math' }) })
+    const form = formAutoContent({ photo: Buffer.from('not a real jpeg') })
+    const res = await app.inject({ method: 'POST', url: '/analyze', ...form })
+    expect(res.statusCode).toBe(500)
+    expect(res.json()).toEqual({ error: 'internal' })
   })
 })

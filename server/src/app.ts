@@ -15,13 +15,13 @@ export function buildApp(deps: { runAnalysis: RunAnalysisFn }): FastifyInstance 
   app.post('/analyze', async (req, reply) => {
     const file = typeof req.file === 'function' ? await req.file() : undefined
     if (!file) return reply.code(400).send({ error: 'no file' })
-    const raw = await file.toBuffer()
-    const jpeg = await sharp(raw)
-      .rotate() // honor EXIF orientation from phone cameras
-      .resize({ width: 1568, withoutEnlargement: true })
-      .jpeg({ quality: 85 })
-      .toBuffer()
     try {
+      const raw = await file.toBuffer()
+      const jpeg = await sharp(raw)
+        .rotate() // honor EXIF orientation from phone cameras
+        .resize({ width: 1568, withoutEnlargement: true })
+        .jpeg({ quality: 85 })
+        .toBuffer()
       return await deps.runAnalysis({ base64: jpeg.toString('base64'), mediaType: 'image/jpeg' })
     } catch (err) {
       if (err instanceof ClaudeJsonError) return reply.code(502).send({ error: 'analysis-failed' })
