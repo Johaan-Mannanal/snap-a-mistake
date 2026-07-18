@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk'
-import type { ZodType } from 'zod'
+import { z, type ZodType } from 'zod'
 
 export class ClaudeJsonError extends Error {}
 
@@ -33,6 +33,7 @@ export async function callClaudeJson<T>(opts: {
   try {
     return await ask()
   } catch (first) {
+    if (!(first instanceof z.ZodError || first instanceof SyntaxError)) throw first
     const detail = first instanceof Error ? first.message.slice(0, 500) : String(first)
     try {
       return await ask(

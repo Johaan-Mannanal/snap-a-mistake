@@ -6,8 +6,8 @@ import { ClaudeJsonError } from './claude/client.js'
 
 export type RunAnalysisFn = (image: { base64: string; mediaType: 'image/jpeg' }) => Promise<AnalyzeResponse>
 
-export function buildApp(deps: { runAnalysis: RunAnalysisFn }): FastifyInstance {
-  const app = Fastify({ logger: false, bodyLimit: 15 * 1024 * 1024 })
+export function buildApp(deps: { runAnalysis: RunAnalysisFn; logger?: boolean }): FastifyInstance {
+  const app = Fastify({ logger: deps.logger ?? false, bodyLimit: 15 * 1024 * 1024 })
   app.register(multipart, { limits: { fileSize: 15 * 1024 * 1024, files: 1 } })
 
   app.get('/health', async () => ({ ok: true }))

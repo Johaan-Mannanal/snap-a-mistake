@@ -1,3 +1,4 @@
+import type Anthropic from '@anthropic-ai/sdk'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { ClaudeJsonError, callClaudeJson } from '../src/claude/client.js'
@@ -23,5 +24,11 @@ describe('callClaudeJson', () => {
   it('throws ClaudeJsonError after two failures', async () => {
     const client = fakeClient('garbage', 'more garbage')
     await expect(callClaudeJson({ client, ...opts })).rejects.toThrow(ClaudeJsonError)
+  })
+  it('propagates transport errors without retrying', async () => {
+    const create = vi.fn().mockRejectedValueOnce(Object.assign(new Error('connection refused'), { status: 529 }))
+    const client = { messages: { create } } as unknown as Anthropic
+    await expect(callClaudeJson({ client, ...opts })).rejects.toThrow('connection refused')
+    expect(create).toHaveBeenCalledTimes(1)
   })
 })
