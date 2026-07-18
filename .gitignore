@@ -1,0 +1,6 @@
+node_modules/
+.env
+dist/
+server/golden/photos/
+.DS_Store
+.superpowers/

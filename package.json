@@ -1,0 +1,9 @@
+{
+  "name": "snap-a-mistake",
+  "private": true,
+  "workspaces": ["shared", "server"],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces --if-present"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@snap/server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "tsx watch src/index.ts",
+    "golden": "tsx scripts/golden.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "@fastify/multipart": "^8.3.0",
+    "@snap/shared": "*",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.0",
+    "sharp": "^0.33.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "form-auto-content": "^3.2.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.0"
+  }
+}
