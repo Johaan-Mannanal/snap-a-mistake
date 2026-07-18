@@ -1,13 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import type Anthropic from '@anthropic-ai/sdk'
 import { ClaudeJsonError, callClaudeJson } from '../src/claude/client.js'
-
-export function fakeClient(...texts: string[]): Anthropic {
-  const create = vi.fn()
-  for (const t of texts) create.mockResolvedValueOnce({ content: [{ type: 'text', text: t }] })
-  return { messages: { create } } as unknown as Anthropic
-}
+import { fakeClient } from './helpers.js'
 
 const schema = z.object({ n: z.number() })
 const opts = { model: 'm', system: 's', content: [{ type: 'text' as const, text: 'hi' }], schema }

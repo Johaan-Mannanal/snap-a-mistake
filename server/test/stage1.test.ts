@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type Anthropic from '@anthropic-ai/sdk'
 import { transcribe } from '../src/pipeline/stage1.js'
-import { fakeClient } from './client.test.js'
+import { fakeClient } from './helpers.js'
 
 const good = JSON.stringify({
   isMath: true, legibility: 0.85,
