@@ -1,0 +1,8 @@
+{
+  "cases": [
+    { "file": "correct-power-rule.jpg", "expect": "correct" },
+    { "file": "sign-error-derivative.jpg", "expect": "error", "errorStepIndex": 2, "tag": "sign-error" },
+    { "file": "blurry.jpg", "expect": "unreadable" },
+    { "file": "grocery-list.jpg", "expect": "not-math" }
+  ]
+}
