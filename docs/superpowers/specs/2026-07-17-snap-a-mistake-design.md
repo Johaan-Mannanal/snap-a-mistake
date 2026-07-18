@@ -44,6 +44,13 @@ Three pieces:
    - **Stage 2 (text-only, Sonnet):** analyze transcribed steps → broken step
      index, misconception tag (from a small controlled vocabulary), why-it-broke
      explanation, one easier follow-up problem targeting the same concept.
+     Starter tag vocabulary (extendable during prompt tuning): `sign-error`,
+     `dropped-term`, `distribution-error`, `chain-rule-missed`,
+     `product-rule-misapplied`, `integration-by-parts-error`,
+     `u-sub-bounds-error`, `algebraic-slip`, `exponent-rule-error`,
+     `equals-abuse` (treating = as "next step" while values change), `other`.
+     Stage 2 must pick from this list or `other` — free-text tags would make
+     the Insights screen's pattern grouping meaningless.
    - **Verifier (Haiku, fast-follow after MVP pipeline works):** audits the
      diagnosis before display. On disagreement, the app softens to an unsure
      prompt instead of a confident red box.
