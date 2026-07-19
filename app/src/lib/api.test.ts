@@ -1,0 +1,34 @@
+import { describe, expect, it, vi } from 'vitest'
+import { ApiError, analyzePhoto } from './api.js'
+
+const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body }) as Response
+const bad = (status: number) => ({ ok: false, status, json: async () => ({ error: 'x' }) }) as Response
+
+const analysis = {
+  kind: 'analysis', steps: [], errorStepIndex: null, misconceptionTag: null,
+  explanation: null, followUp: null, verifierAgreed: true,
+}
+
+describe('analyzePhoto', () => {
+  it('POSTs multipart and returns the parsed response', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(ok(analysis))
+    const r = await analyzePhoto('file:///photo.jpg', fetchFn)
+    expect(r.kind).toBe('analysis')
+    const [url, init] = fetchFn.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/analyze')
+    expect(init.method).toBe('POST')
+    expect(init.body).toBeInstanceOf(FormData)
+  })
+  it('maps non-2xx to ApiError{server,status}', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(bad(502))
+    await expect(analyzePhoto('file:///p.jpg', fetchFn)).rejects.toMatchObject({ failure: { kind: 'server', status: 502 } })
+  })
+  it('maps a contract-violating body to ApiError{server}', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(ok({ kind: 'nonsense' }))
+    await expect(analyzePhoto('file:///p.jpg', fetchFn)).rejects.toMatchObject({ failure: { kind: 'server', status: 200 } })
+  })
+  it('maps thrown fetch errors to ApiError{network}', async () => {
+    const fetchFn = vi.fn().mockRejectedValue(new TypeError('Network request failed'))
+    await expect(analyzePhoto('file:///p.jpg', fetchFn)).rejects.toMatchObject({ failure: { kind: 'network' } })
+  })
+})
