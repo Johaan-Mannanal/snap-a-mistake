@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { HistoryRecord } from './history.js'
-import { summarize } from './trends.js'
+import type { HistoryRecord } from './history'
+import { summarize } from './trends'
 
 const now = new Date('2026-07-18T12:00:00Z')
 const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000).toISOString()

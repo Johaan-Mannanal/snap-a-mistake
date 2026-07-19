@@ -1,5 +1,5 @@
 import type { MisconceptionTag } from '@snap/shared'
-import type { HistoryRecord } from './history.js'
+import type { HistoryRecord } from './history'
 
 export type TagSummary = { tag: MisconceptionTag; thisWeek: number; trend: 'more' | 'fewer' | 'same' }
 

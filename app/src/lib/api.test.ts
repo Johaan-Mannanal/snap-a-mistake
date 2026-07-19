@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ApiError, analyzePhoto } from './api.js'
+import { ApiError, analyzePhoto } from './api'
 
 const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body }) as Response
 const bad = (status: number) => ({ ok: false, status, json: async () => ({ error: 'x' }) }) as Response

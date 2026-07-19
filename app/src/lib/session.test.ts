@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { AnalyzeResponse } from '@snap/shared'
-import { getSession, resetSession, setAnalysis, setPhoto, startFollowUp } from './session.js'
+import { getSession, resetSession, setAnalysis, setPhoto, startFollowUp } from './session'
 
 const withFollowUp: AnalyzeResponse = {
   kind: 'analysis', steps: [], errorStepIndex: 1, misconceptionTag: 'sign-error',

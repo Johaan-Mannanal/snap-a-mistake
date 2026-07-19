@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bandStyle } from './overlay.js'
+import { bandStyle } from './overlay'
 
 describe('bandStyle', () => {
   it('maps percentages onto the displayed height', () => {

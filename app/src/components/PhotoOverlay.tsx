@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Image, View } from 'react-native'
 import type { Step } from '@snap/shared'
-import { bandStyle } from '../lib/overlay.js'
+import { bandStyle } from '../lib/overlay'
 
 export function PhotoOverlay(props: { uri: string; steps: Step[] }) {
   const [aspect, setAspect] = useState(4 / 3)
