@@ -20,6 +20,15 @@ describe('session', () => {
     setAnalysis(withFollowUp)
     expect(getSession().followUp?.problem).toBe('p')
   })
+  it('setAnalysis keeps the existing followUp when the new analysis has none', () => {
+    const noFollowUp: AnalyzeResponse = {
+      kind: 'analysis', steps: [], errorStepIndex: null, misconceptionTag: null,
+      explanation: null, followUp: null, verifierAgreed: true,
+    }
+    setAnalysis(withFollowUp)
+    setAnalysis(noFollowUp)
+    expect(getSession().followUp?.problem).toBe('p')
+  })
   it('startFollowUp flags a retry and clears photo/analysis but keeps the followUp', () => {
     setPhoto('file:///a.jpg')
     setAnalysis(withFollowUp)
