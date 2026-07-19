@@ -33,7 +33,9 @@
           "imageWidth": 76
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      ["expo-camera", { "cameraPermission": "Snap-a-Mistake uses the camera to photograph your handwritten math work." }],
+      ["expo-image-picker", { "photosPermission": "Snap-a-Mistake reads photos you choose of your handwritten math work." }]
     ],
     "experiments": {
       "typedRoutes": true,
