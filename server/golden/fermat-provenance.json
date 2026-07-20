@@ -244,33 +244,33 @@
       }
     },
     {
-      "file": "fermat-img_459_pert_3_1.jpg",
-      "sourceId": "img_459_pert_3.1",
+      "file": "fermat-img_468_pert_3_1.jpg",
+      "sourceId": "img_468_pert_3.1",
       "shard": "train-00001-of-00010.parquet",
-      "rowIndex": 148,
+      "rowIndex": 167,
       "grade": "c12",
       "domain": "alg",
-      "subdomain": "mat",
+      "subdomain": "det",
       "handwritingStyle": "legible",
       "imageQuality": "good",
       "rotation": "default",
-      "annotatorId": 44,
-      "imageId": 459,
+      "annotatorId": 17,
+      "imageId": 468,
       "hasError": true,
-      "originalQuestion": "Find \\( AB \\), if \n\\[\nA = \\begin{bmatrix} 6 & 9 \\\\ 2 & 3 \\end{bmatrix} \\quad \\text{and} \\quad B = \\begin{bmatrix} 2 & 6 & 0 \\\\ 7 & 9 & 8 \\end{bmatrix}.\n\\]\n\n",
-      "correctSolution": " The matrix \\( A \\) has 2 columns which is equal to the number of rows of \\( B \\). Hence \\( AB \\) is defined. Now\n\\[\nAB = \\begin{bmatrix} 6(2) + 9(7) & 6(6) + 9(9) & 6(0) + 9(8) \\\\ 2(2) + 3(7) & 2(6) + 3(9) & 2(0) + 3(8) \\end{bmatrix}\n\\]\n\\[\n= \\begin{bmatrix} 12 + 63 & 36 + 81 & 0 + 72 \\\\ 4 + 21 & 12 + 27 & 0 + 24 \\end{bmatrix}\n\\]\n\\[\n= \\begin{bmatrix} 75 & 117 & 72 \\\\ 25 & 39 & 24 \\end{bmatrix}.\n\\]\n",
-      "perturbedSolution": " The matrix \\( A \\) has 2 columns which is equal to the number of rows of \\( B \\). Hence \\( AB \\) is defined. Now\n\\[\nAB = \\begin{bmatrix} 6(2) + 9(7) & 6(6) + 9(9) & 6(0) + 9(8) \\\\ 2(2) + 3(7) & 2(6) + 3(9) & 2(0) + 3(8) \\end{bmatrix}\n\\]\n\\[\n= \\begin{bmatrix} 12 + 63 & 36 + 81 & 0 + 72 \\\\ 4 + 21 & 12 + 27 & 0 + 24 \\end{bmatrix}\n\\]\n\\[\n= \\begin{bmatrix} \\textcolor{red}{7^5} & 117 & 72 \\\\ 25 & 39 & 24 \\end{bmatrix}.\n\\]\n\n",
-      "perturbationReasoning": " The perturbation involves changing \\(75\\) to \\(\\textcolor{red}{7^5}\\), which subtly alters the intended value without being immediately obvious. This change requires domain knowledge to detect, as it is a subtle error that affects the meaning of the expression.",
+      "originalQuestion": "Find $\\text{adj} A$ for \n\\[\nA = \\begin{bmatrix}\n2 & 3 \\\\\n1 & 4\n\\end{bmatrix}\n\\]\n\n",
+      "correctSolution": " We have \n\\[\nA_{11} = 4, \\quad A_{12} = -1, \\quad A_{21} = -3, \\quad A_{22} = 2\n\\]\nHence,\n\\[\n\\text{adj} A = \\begin{bmatrix}\nA_{11} & A_{21} \\\\\nA_{12} & A_{22}\n\\end{bmatrix} = \\begin{bmatrix}\n4 & -3 \\\\\n-1 & 2\n\\end{bmatrix}\n\\]\n",
+      "perturbedSolution": " We have \n\\[\nA_{11} = 4, \\quad A_{12} = -1, \\quad A_{21} = -3, \\quad A_{22} = 2\n\\]\nHence,\n\\[\n\\text{adj} A = \\begin{bmatrix}\nA_{11} & A_{21} \\\\\nA_{12} & A_{22}\n\\end{bmatrix} = \\begin{bmatrix}\n\\textcolor{red}{A_{21}} & \\textcolor{red}{A_{11}} \\\\\n\\textcolor{red}{A_{22}} & \\textcolor{red}{A_{12}}\n\\end{bmatrix} = \\begin{bmatrix}\n\\textcolor{red}{-3} & \\textcolor{red}{4} \\\\\n\\textcolor{red}{2} & \\textcolor{red}{-1}\n\\end{bmatrix}\n\\]\n\n",
+      "perturbationReasoning": " The subtle error introduced here is the swapping of the positions of $A_{ij}$ elements in the adjugate matrix. This changes the intended meaning of the expression since the adjugate matrix's components are incorrectly placed, altering the final result. This type of error falls under a minor symbolic perturbation as it requires domain knowledge to detect the incorrect order.",
       "expected": {
         "kind": "error",
-        "errorStepIndex": 3,
-        "tag": "notation-error"
+        "errorStepIndex": 2,
+        "tag": "formula-misapplied"
       },
-      "labelRationale": "The correctly expanded first matrix entry 12+63 is written as 7^5 instead of 75.",
-      "outputSha256": "f6ed66519e7580d0815e564ace24a57c2201ef3eda20d7baa5e3316e238f2f1a",
+      "labelRationale": "After computing the cofactors correctly, four entries are placed in the wrong positions when applying the adjugate transpose formula.",
+      "outputSha256": "c4d8baa3003f25e064429e7185cb188190a4003d2bdd83c859e2e01ed17d5fdd",
       "coherenceAudit": {
-        "firstErrorBasis": "Visible steps 1-2 correctly expand all six dot products; step 3 first writes the correct sum 12+63=75 as the nonequivalent 7^5.",
-        "downstreamCoherence": "No work follows the final matrix, and its other five entries remain correct."
+        "firstErrorBasis": "Visible step 1 computes all cofactors correctly; step 2 first misorders four entries when instantiating the correctly stated adjugate transpose template.",
+        "downstreamCoherence": "The numeric matrix directly instantiates the same misordered symbolic matrix, and no later work follows."
       }
     },
     {

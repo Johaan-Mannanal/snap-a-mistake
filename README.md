@@ -37,7 +37,7 @@ Every task was implemented via fresh-agent TDD with a two-stage review (spec com
 
 ```bash
 npm install                  # root — installs all three workspaces
-npm test                     # 61 tests: shared 9, server 32, app 20
+npm test                     # 74 Vitest tests (shared 9, server 45, app 20) + 4 Python importer tests
 npm run typecheck            # all workspaces
 
 # Server (needs server/.env — copy server/.env.example, add OPENAI_API_KEY)
@@ -54,11 +54,15 @@ npm run golden:fermat -w server   # paid ten-case handwriting-only gate
 cd app && npx expo start     # Expo Go; phone needs EXPO_PUBLIC_API_URL=http://<Mac-LAN-IP>:3000
 ```
 
+The root `npm test` command runs both the workspace Vitest suites and the four
+stock-`python3` importer regression tests; no third-party Python packages are
+needed for the importer tests.
+
 **Conventions that will bite you if you don't know them:** the `app` workspace uses extensionless relative imports (Metro can't resolve `.js`→`.ts`); `server`/`shared` use `.js`-suffixed imports (Node ESM requires them). Model IDs and the legibility threshold live in `server/src/config.ts`. OpenAI JSON mode requires the literal word "JSON" in prompts. Copy strings in the app are tuned demo copy — don't reword casually.
 
 ## Current status (as of July 20)
 
-- Backend + app both complete, reviewed, merged to `main`. 61/61 tests (shared 9, server 32, app 20), typecheck clean.
+- Backend + app both complete, reviewed, merged to `main`. `npm test` passes 74/74 Vitest tests (shared 9, server 45, app 20) plus 4/4 stock-Python importer tests; typecheck clean.
 - Live smoke test passed against the real OpenAI pipeline (~9.5s/analysis).
 - Golden manifest: **25 cases** — 15 generated baseline cases plus 10 curated FERMAT photographs (2 correct, 8 intentional errors across algebra/calculus). The generated baseline last passed 15/15; the FERMAT subset is committed and ready for its first paid pipeline run.
 - API key: in `server/.env` (git-ignored). **It was shared in a chat session — rotate it before the demo.**

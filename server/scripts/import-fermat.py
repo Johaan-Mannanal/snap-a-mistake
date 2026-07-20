@@ -86,13 +86,13 @@ SELECTIONS = [
         },
     },
     {
-        "source_id": "img_459_pert_3.1", "shard": 1, "row": 148,
-        "file": "fermat-img_459_pert_3_1.jpg",
-        "expected": {"kind": "error", "errorStepIndex": 3, "tag": "notation-error"},
-        "label_rationale": "The correctly expanded first matrix entry 12+63 is written as 7^5 instead of 75.",
+        "source_id": "img_468_pert_3.1", "shard": 1, "row": 167,
+        "file": "fermat-img_468_pert_3_1.jpg",
+        "expected": {"kind": "error", "errorStepIndex": 2, "tag": "formula-misapplied"},
+        "label_rationale": "After computing the cofactors correctly, four entries are placed in the wrong positions when applying the adjugate transpose formula.",
         "coherence_audit": {
-            "firstErrorBasis": "Visible steps 1-2 correctly expand all six dot products; step 3 first writes the correct sum 12+63=75 as the nonequivalent 7^5.",
-            "downstreamCoherence": "No work follows the final matrix, and its other five entries remain correct.",
+            "firstErrorBasis": "Visible step 1 computes all cofactors correctly; step 2 first misorders four entries when instantiating the correctly stated adjugate transpose template.",
+            "downstreamCoherence": "The numeric matrix directly instantiates the same misordered symbolic matrix, and no later work follows.",
         },
     },
     {

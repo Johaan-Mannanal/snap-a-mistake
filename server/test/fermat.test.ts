@@ -46,7 +46,7 @@ const expectedFermatCases = [
   { file: 'fermat-img_415_pert_3_1.jpg', sourceId: 'img_415_pert_3.1', expect: 'error', errorStepIndex: 5, tag: 'integration-by-parts-error' },
   { file: 'fermat-img_559_pert_3_1.jpg', sourceId: 'img_559_pert_3.1', expect: 'error', errorStepIndex: 3, tag: 'notation-error' },
   { file: 'fermat-img_601_pert_3_1.jpg', sourceId: 'img_601_pert_3.1', expect: 'error', errorStepIndex: 1, tag: 'sign-error' },
-  { file: 'fermat-img_459_pert_3_1.jpg', sourceId: 'img_459_pert_3.1', expect: 'error', errorStepIndex: 3, tag: 'notation-error' },
+  { file: 'fermat-img_468_pert_3_1.jpg', sourceId: 'img_468_pert_3.1', expect: 'error', errorStepIndex: 2, tag: 'formula-misapplied' },
   { file: 'fermat-img_584_pert_3_2.jpg', sourceId: 'img_584_pert_3.2', expect: 'error', errorStepIndex: 2, tag: 'sign-error' },
 ]
 
@@ -55,6 +55,7 @@ const rejectedSourceIds = [
   'img_384_pert_3.1',
   'img_583_pert_3.1',
   'img_479_pert_3.1',
+  'img_459_pert_3.1',
 ]
 
 const rejectedFiles = [
@@ -62,6 +63,7 @@ const rejectedFiles = [
   'fermat-img_384_pert_3_1.jpg',
   'fermat-img_583_pert_3_1.jpg',
   'fermat-img_479_pert_3_1.jpg',
+  'fermat-img_459_pert_3_1.jpg',
 ]
 
 describe('FERMAT curated subset', () => {

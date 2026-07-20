@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -12,7 +14,31 @@ SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "import-fermat.p
 SPEC = importlib.util.spec_from_file_location("import_fermat", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 import_fermat = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(import_fermat)
+
+pyarrow_stub = types.ModuleType("pyarrow")
+pyarrow_stub.__path__ = []
+parquet_stub = types.ModuleType("pyarrow.parquet")
+pyarrow_stub.parquet = parquet_stub
+
+requests_stub = types.ModuleType("requests")
+requests_stub.get = lambda *_args, **_kwargs: None
+
+pil_stub = types.ModuleType("PIL")
+pil_stub.__path__ = []
+image_stub = types.ModuleType("PIL.Image")
+image_ops_stub = types.ModuleType("PIL.ImageOps")
+pil_stub.Image = image_stub
+pil_stub.ImageOps = image_ops_stub
+
+with patch.dict(sys.modules, {
+    "pyarrow": pyarrow_stub,
+    "pyarrow.parquet": parquet_stub,
+    "requests": requests_stub,
+    "PIL": pil_stub,
+    "PIL.Image": image_stub,
+    "PIL.ImageOps": image_ops_stub,
+}):
+    SPEC.loader.exec_module(import_fermat)
 
 
 class FakeResponse:
