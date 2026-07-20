@@ -13,6 +13,10 @@ const analysis = (over: Partial<Extract<AnalyzeResponse, { kind: 'analysis' }>> 
   explanation: null, followUp: null, verifierAgreed: true, ...over,
 })
 
+const locatedStep = (index: number, verdict: 'wrong' | 'suspect') => ({
+  index, latex: 'x = 1', plain: 'x equals 1', yBandTopPct: 0, yBandBottomPct: 20, verdict,
+})
+
 describe('GoldenCaseSchema', () => {
   it('requires an index and tag for error cases', () => {
     expect(() => GoldenCaseSchema.parse({ file: 'a.jpg', source: 'synthetic', expect: 'error' })).toThrow()
@@ -21,6 +25,22 @@ describe('GoldenCaseSchema', () => {
   it('requires a source ID for FERMAT cases', () => {
     expect(() => GoldenCaseSchema.parse({ file: 'a.jpg', source: 'fermat', expect: 'correct' })).toThrow()
   })
+
+  it('forbids source IDs on synthetic cases', () => {
+    expect(() => GoldenCaseSchema.parse({
+      file: 'a.jpg', source: 'synthetic', sourceId: 'synthetic-1', expect: 'correct',
+    })).toThrow()
+  })
+
+  it.each(['correct', 'unreadable', 'not-math'] as const)(
+    'forbids error-only fields on %s cases',
+    (outcome) => {
+      expect(() => GoldenCaseSchema.parse({
+        file: 'a.jpg', source: 'synthetic', expect: outcome,
+        errorStepIndex: 1, tag: 'sign-error',
+      })).toThrow()
+    },
+  )
 
   it('parses a complete manifest', () => {
     const parsed = GoldenManifestSchema.parse({
@@ -59,9 +79,35 @@ describe('judge', () => {
     const expected: GoldenCase = {
       file: 'b.jpg', source: 'synthetic', expect: 'error', errorStepIndex: 2, tag: 'sign-error',
     }
-    expect(judge(expected, analysis({ errorStepIndex: 2, misconceptionTag: 'sign-error' })).pass).toBe(true)
+    expect(judge(expected, analysis({
+      steps: [locatedStep(2, 'wrong')], errorStepIndex: 2, misconceptionTag: 'sign-error',
+    })).pass).toBe(true)
     expect(judge(expected, analysis({ errorStepIndex: 2, misconceptionTag: 'algebraic-slip' })).pass).toBe(false)
     expect(judge(expected, analysis({ errorStepIndex: 0, misconceptionTag: 'sign-error' })).pass).toBe(false)
+  })
+
+  it('fails an expected error when the verifier disagrees', () => {
+    const expected: GoldenCase = {
+      file: 'b.jpg', source: 'synthetic', expect: 'error', errorStepIndex: 2, tag: 'sign-error',
+    }
+    const actual = analysis({
+      steps: [locatedStep(2, 'wrong')], errorStepIndex: 2,
+      misconceptionTag: 'sign-error', verifierAgreed: false,
+    })
+
+    expect(judge(expected, actual)).toMatchObject({ pass: false })
+  })
+
+  it('fails an expected error when the located step is only suspect', () => {
+    const expected: GoldenCase = {
+      file: 'b.jpg', source: 'synthetic', expect: 'error', errorStepIndex: 2, tag: 'sign-error',
+    }
+    const actual = analysis({
+      steps: [locatedStep(2, 'suspect')], errorStepIndex: 2,
+      misconceptionTag: 'sign-error', verifierAgreed: true,
+    })
+
+    expect(judge(expected, actual)).toMatchObject({ pass: false })
   })
 
   it('matches unreadable and not-math kinds directly', () => {
