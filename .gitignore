@@ -4,5 +4,7 @@ dist/
 server/golden/photos/*
 !server/golden/photos/fermat-*.jpg
 .DS_Store
+__pycache__/
+*.py[cod]
 .superpowers/
 .worktrees/

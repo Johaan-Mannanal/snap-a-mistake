@@ -36,7 +36,8 @@
       "expected": {
         "kind": "correct"
       },
-      "labelRationale": "Consistent variable renaming leaves the age equation correct."
+      "labelRationale": "Consistent variable renaming leaves the age equation correct.",
+      "outputSha256": "7942ac54eb9520a9cd3ba2b01aee23257feef8cd74bf0b05fca5fb6b84901f00"
     },
     {
       "file": "fermat-img_400_pert_5_1.jpg",
@@ -59,32 +60,38 @@
       "expected": {
         "kind": "correct"
       },
-      "labelRationale": "Consistent y-to-z renaming leaves d(a^x)/dx correct."
+      "labelRationale": "Consistent y-to-z renaming leaves d(a^x)/dx correct.",
+      "outputSha256": "af5df93366b6fb796bab28fd75c9ced7b47547f1e72c98f4d4a496e95bee97ce"
     },
     {
-      "file": "fermat-img_423_pert_3_1.jpg",
-      "sourceId": "img_423_pert_3.1",
+      "file": "fermat-img_438_pert_3_1.jpg",
+      "sourceId": "img_438_pert_3.1",
       "shard": "train-00001-of-00010.parquet",
-      "rowIndex": 117,
+      "rowIndex": 136,
       "grade": "c12",
       "domain": "clc",
-      "subdomain": "ifi",
+      "subdomain": "deq",
       "handwritingStyle": "legible",
       "imageQuality": "good",
       "rotation": "default",
-      "annotatorId": 55,
-      "imageId": 423,
+      "annotatorId": 57,
+      "imageId": 438,
       "hasError": true,
-      "originalQuestion": "Find \\( \\int \\cos 6x \\sqrt{1 + \\sin 6x} \\, dx \\)\n\n",
-      "correctSolution": " Put \\( t = 1 + \\sin 6x \\), so that \\( dt = 6 \\cos 6x \\, dx \\).\n\nTherefore, \n\\[\n\\int \\cos 6x \\sqrt{1 + \\sin 6x} \\, dx = \\frac{1}{6} \\int t^{-\\frac{1}{2}} \\, dt\n\\]\n\\[\n= \\frac{1}{6} \\times \\frac{2}{3} t^{\\frac{3}{2}} + C = \\frac{1}{9} (1 + \\sin 6x)^{\\frac{3}{2}} + C\n\\]\n",
-      "perturbedSolution": " Put \\( t = 1 + \\sin 6x \\), so that \\( dt = 6 \\cos 6x \\, dx \\).\n\nTherefore, \n\\[\n\\int \\cos 6x \\sqrt{1 + \\sin 6x} \\, dx = \\frac{1}{6} \\int \\textcolor{red}{t^2} \\, dt\n\\]\n\\[\n= \\frac{1}{6} \\times \\frac{2}{3} \\textcolor{red}{t^3} + C = \\frac{1}{9} (1 + \\sin 6x)^{\\frac{3}{2}} + C\n\\]\n\n",
-      "perturbationReasoning": " The exponent of \\( t \\) should be \\( -\\frac{1}{2} \\) instead of \\( 2 \\). This subtle change alters the integral’s meaning and final answer, requiring careful verification to identify the mistake.",
+      "originalQuestion": "Find the general solution of the differential equation \n\\[\n\\frac{dy}{dx} = \\frac{1+y^2}{1+x^2}.\n\\]\n\n",
+      "correctSolution": " Since \\(1 + y^2 \\neq 0\\), we can separate the variables. The given differential equation can be written as\n\\[\n\\frac{dy}{1+y^2} = \\frac{dx}{1+x^2} \\quad \\cdots (1)\n\\]\nIntegrating both sides of equation (1), we get\n\\[\n\\int \\frac{dy}{1+y^2} = \\int \\frac{dx}{1+x^2}\n\\]\nwhich results in \n\\[\n\\tan^{-1} y = \\tan^{-1} x + C,\n\\]\nwhere \\(C\\) is the constant of integration. This is the general solution of equation (1).\n",
+      "perturbedSolution": " Since \\(1 + y^2 \\neq 0\\), we can separate the variables. The given differential equation can be written as\n\\[\n\\frac{dy}{1+y^2} = \\frac{dx}{1+x^2} \\quad \\cdots (1)\n\\]\nIntegrating both sides of equation (1), we get\n\\[\n\\int \\frac{dy}{1+y^2} = \\int \\frac{dx}{1+x^2}\n\\]\nwhich results in \n\\[\n\\tan^{-1} y = \\textcolor{red}{x^{-1}} + C,\n\\]\nwhere \\(C\\) is the constant of integration. This is the general solution of equation (1).\n\n",
+      "perturbationReasoning": " The perturbation involves changing \\(\\tan^{-1} x\\) to \\(\\textcolor{red}{x^{-1}}\\). This subtle change alters the meaning of the expression, making it incorrect, but the error is not immediately obvious without careful examination.",
       "expected": {
         "kind": "error",
-        "errorStepIndex": 2,
-        "tag": "exponent-rule-error"
+        "errorStepIndex": 3,
+        "tag": "notation-error"
       },
-      "labelRationale": "sqrt(t) is rewritten as t^2 at the first transformed integral."
+      "labelRationale": "After valid separation and integration setup, tan^(-1)(x) is changed to the nonequivalent reciprocal x^(-1).",
+      "outputSha256": "9634293846d8a0d89f03cc825a305a6fa5e590448302700e5ae759564c09d1c4",
+      "coherenceAudit": {
+        "firstErrorBasis": "Visible steps 1-2 correctly separate variables and set up both arctangent integrals; step 3 uniquely changes tan^(-1)(x) to x^(-1).",
+        "downstreamCoherence": "No later computation follows; the remaining prose only identifies step 3 as the general solution."
+      }
     },
     {
       "file": "fermat-img_401_pert_3_1.jpg",
@@ -109,32 +116,42 @@
         "errorStepIndex": 4,
         "tag": "algebraic-slip"
       },
-      "labelRationale": "A previously correct (6x+4) numerator is halved during an algebraic rewrite."
+      "labelRationale": "A previously correct (6x+4) numerator is halved during an algebraic rewrite.",
+      "outputSha256": "00162ecb570d4e6dc9e2618b2b3b906bc15ecd0de0a93ee9b251f141e6261ff8",
+      "coherenceAudit": {
+        "firstErrorBasis": "Visible steps 1-3 preserve the logarithmic-differentiation setup and the correct (6x+4) derivative; step 4 first changes it to (3x+2).",
+        "downstreamCoherence": "The final line carries the same halved numerator forward without introducing another independent error."
+      }
     },
     {
-      "file": "fermat-img_384_pert_3_1.jpg",
-      "sourceId": "img_384_pert_3.1",
+      "file": "fermat-img_414_pert_3_1.jpg",
+      "sourceId": "img_414_pert_3.1",
       "shard": "train-00001-of-00010.parquet",
-      "rowIndex": 140,
+      "rowIndex": 165,
       "grade": "c12",
       "domain": "clc",
-      "subdomain": "der",
+      "subdomain": "ifi",
       "handwritingStyle": "legible",
       "imageQuality": "good",
       "rotation": "default",
-      "annotatorId": 57,
-      "imageId": 384,
+      "annotatorId": 60,
+      "imageId": 414,
       "hasError": true,
-      "originalQuestion": "The total revenue in Rupees received from the sale of \\( x \\) units of a product is given by \\( R(x) = 3x^2 + 36x + 5 \\). Find the marginal revenue when \\( x = 5 \\), where by marginal revenue we mean the rate of change of total revenue with respect to the number of items sold at an instant.\n\n",
-      "correctSolution": " Since marginal revenue is the rate of change of total revenue with respect to the number of units sold, we have\n\n\\[\n\\text{Marginal Revenue} \\quad (MR) = \\frac{dR}{dx} = 6x + 36\n\\]\n\nWhen \\( x = 5 \\),\n\n\\[\nMR = 6(5) + 36 = 66\n\\]\n\nHence, the required marginal revenue is \\( \\text{₹} \\, 66 \\).\n",
-      "perturbedSolution": " Since marginal revenue is the rate of change of total revenue with respect to the number of units sold, we have\n\n\\[\n\\text{Marginal Revenue} \\quad (MR) = \\frac{dR}{dx} = \\textcolor{red}{6^x} + 36\n\\]\n\nWhen \\( x = 5 \\),\n\n\\[\nMR = \\textcolor{red}{6^5} + 36 = 7776\n\\]\n\nHence, the required marginal revenue is \\( \\text{₹} \\, 7776 \\).\n\n",
-      "perturbationReasoning": " The exponentiation \\( x \\) in \\( 6x \\) was subtly changed to \\( 6^x \\), altering the mathematical expression and thus the final result. This requires careful attention to detail to detect, aligning with the desired minor symbolic perturbation.",
+      "originalQuestion": "Find \\( \\int \\frac{3x - 2}{(x+1)^2(x+3)} \\, dx \\)\n\n",
+      "correctSolution": " \n\n\\[\n\\frac{3x - 2}{(x+1)^2(x+3)} = \\frac{A}{x+1} + \\frac{B}{(x+1)^2} + \\frac{C}{x+3}\n\\]\n\nSo that \n\n\\[\n3x - 2 = A(x + 1)(x + 3) + B(x + 3) + C(x + 1)^2\n\\]\n\nWe compare the coefficients of \\( x^2 \\), \\( x \\), and the constant term on both sides:\n\n\\[\nA + C = 0, \\quad 4A + B + 2C = 3, \\quad 3A + 3B + C = -2\n\\]\n\nSolving these equations, we get \n\n\\[\nA = \\frac{11}{4}, \\quad B = -\\frac{5}{2}, \\quad C = -\\frac{11}{4}\n\\]\n\nThus the integrand is given by \n\n\\[\n\\int \\frac{3x - 2}{(x+1)^2(x+3)} \\, dx = \\frac{11}{4} \\int \\frac{dx}{x+1} - \\frac{5}{2} \\int \\frac{dx}{(x+1)^2} - \\frac{11}{4} \\int \\frac{dx}{x+3}\n\\]\n\nTherefore, \n\n\\[\n= \\frac{11}{4} \\log |x+1| + \\frac{5}{2(x+1)} - \\frac{11}{4} \\log |x+3| + C\n\\]\n\nFinal result:\n\n\\[\n= \\frac{11}{4} \\log \\left| \\frac{x+1}{x+3} \\right| + \\frac{5}{2(x+1)} + C\n\\]\n",
+      "perturbedSolution": " \n\n\\[\n\\frac{3x - 2}{(x+1)^2(x+3)} = \\frac{A}{x+1} + \\frac{B}{(x+1)^2} + \\frac{C}{x+3}\n\\]\n\nSo that \n\n\\[\n3x - 2 = A(x + 1)(x + 3) + B(x + 3) + C(x + 1)^2\n\\]\n\nWe compare the coefficients of \\( x^2 \\), \\( x \\), and the constant term on both sides:\n\n\\[\nA + C = 0, \\quad 4A + B + 2C = 3, \\quad 3A + 3B + C = -2\n\\]\n\nSolving these equations, we get \n\n\\[\nA = \\frac{11}{4}, \\quad B = -\\frac{5}{2}, \\quad C = -\\frac{11}{4}\n\\]\n\nThus the integrand is given by \n\n\\[\n\\int \\frac{3x - 2}{(x+1)^2(x+3)} \\, dx = \\frac{11}{4} \\int \\frac{dx}{x+1} - \\frac{5}{2} \\int \\frac{dx}{(x+1)^2} - \\frac{11}{4} \\int \\frac{dx}{x+3}\n\\]\n\nTherefore, \n\n\\[\n= \\frac{11}{4} \\log |x+1| + \\frac{5}{2(x+1)} - \\frac{11}{4} \\log |x+3| + C\n\\]\n\nFinal result:\n\n\\[\n= \\frac{11}{4} \\log \\left| \\frac{\\textcolor{red}{x+3}}{\\textcolor{red}{x+1}} \\right| + \\frac{5}{2(x+1)} + C\n\\]\n\n",
+      "perturbationReasoning": " The expression inside the logarithm in the final result was subtly altered from \\(\\left| \\frac{x+1}{x+3} \\right|\\) to \\(\\left| \\frac{\\textcolor{red}{x+3}}{\\textcolor{red}{x+1}} \\right|\\), which changes the meaning of the expression, as it inverts the argument of the logarithm. This kind of error requires careful attention to detect, aligning well with the goal of creating a subtle and not immediately obvious perturbation.",
       "expected": {
         "kind": "error",
-        "errorStepIndex": 1,
-        "tag": "notation-error"
+        "errorStepIndex": 7,
+        "tag": "algebraic-slip"
       },
-      "labelRationale": "The derivative term 6x is changed to the nonequivalent notation 6^x."
+      "labelRationale": "The correct logarithm difference is combined with its argument inverted, reversing the sign of the log term.",
+      "outputSha256": "f938026e017c0ec0c27953c93fd9521909db3afe6179f506082111e996ec2281",
+      "coherenceAudit": {
+        "firstErrorBasis": "Visible steps 1-6 give the correct partial fractions and antiderivative; step 7 first inverts (x+1)/(x+3) to (x+3)/(x+1).",
+        "downstreamCoherence": "No work follows the erroneous final simplification."
+      }
     },
     {
       "file": "fermat-img_415_pert_3_1.jpg",
@@ -159,7 +176,12 @@
         "errorStepIndex": 5,
         "tag": "integration-by-parts-error"
       },
-      "labelRationale": "The final integration-by-parts line replaces cos(x) with sin(x)."
+      "labelRationale": "The final integration-by-parts line replaces cos(x) with sin(x).",
+      "outputSha256": "d47a215ff6cc4e50ffc6dc1668391ec5f7c146df6527f631658994b2f2a60350",
+      "coherenceAudit": {
+        "firstErrorBasis": "Visible steps 1-4 correctly apply integration by parts twice and solve for 2I; step 5 first replaces the established cos(x) term with sin(x).",
+        "downstreamCoherence": "The substitution occurs in the final displayed result, with no later computation."
+      }
     },
     {
       "file": "fermat-img_559_pert_3_1.jpg",
@@ -184,57 +206,72 @@
         "errorStepIndex": 3,
         "tag": "notation-error"
       },
-      "labelRationale": "The result drops the exponent from 2x^2 to 2x."
+      "labelRationale": "The result drops the exponent from 2x^2 to 2x.",
+      "outputSha256": "f52cb9c511d8da85b6edb4d49bd4056104dac38b154e92ca43b0d894d6613366",
+      "coherenceAudit": {
+        "firstErrorBasis": "Visible steps 1-2 correctly align the subtraction; the result at step 3 first changes 2x^2 to 2x while the other combined terms remain correct.",
+        "downstreamCoherence": "Step 3 is the final line, so no later work can contradict or add to the error."
+      }
     },
     {
-      "file": "fermat-img_583_pert_3_1.jpg",
-      "sourceId": "img_583_pert_3.1",
+      "file": "fermat-img_601_pert_3_1.jpg",
+      "sourceId": "img_601_pert_3.1",
       "shard": "train-00001-of-00010.parquet",
-      "rowIndex": 185,
-      "grade": "c09",
-      "domain": "alg",
-      "subdomain": "pyn",
-      "handwritingStyle": "legible",
-      "imageQuality": "good",
-      "rotation": "default",
-      "annotatorId": 23,
-      "imageId": 583,
-      "hasError": true,
-      "originalQuestion": "Evaluate \\( 105 \\times 106 \\) without multiplying directly. \\\\\n\n",
-      "correctSolution": " \n\\[\n105 \\times 106 = (100 + 5) \\times (100 + 6) \n\\]\n\\[\n= (100)^2 + (5 + 6)(100) + (5 \\times 6) \n\\]\n\\[\n= 10000 + 1100 + 30 \n\\]\n\\[\n= 11130 \n\\]\n",
-      "perturbedSolution": " \n\\[\n105 \\times 106 = (100 + 5) \\times (100 + 6) \n\\]\n\\[\n= (100)^2 + \\textcolor{red}{(5 \\cdot 6)}(100) + (5 \\times 6) \n\\]\n\\[\n= 10000 + \\textcolor{red}{30} + 30 \n\\]\n\\[\n= 10060 \n\\]\n\n",
-      "perturbationReasoning": " The perturbation involves changing the addition operation in \\((5 + 6)(100)\\) to multiplication, leading to \\((5 \\cdot 6)(100)\\). This subtle change alters the calculation and the final result, requiring careful attention to detect.",
-      "expected": {
-        "kind": "error",
-        "errorStepIndex": 2,
-        "tag": "distribution-error"
-      },
-      "labelRationale": "The product expansion changes the cross-term sum 5+6 into 5*6."
-    },
-    {
-      "file": "fermat-img_479_pert_3_1.jpg",
-      "sourceId": "img_479_pert_3.1",
-      "shard": "train-00001-of-00010.parquet",
-      "rowIndex": 191,
+      "rowIndex": 143,
       "grade": "c11",
       "domain": "alg",
-      "subdomain": "lin",
+      "subdomain": "set",
       "handwritingStyle": "legible",
       "imageQuality": "good",
       "rotation": "default",
-      "annotatorId": 37,
-      "imageId": 479,
+      "annotatorId": 65,
+      "imageId": 601,
       "hasError": true,
-      "originalQuestion": "In an experiment, a solution of hydrochloric acid is to be kept between \\(30^\\circ\\) and \\(35^\\circ\\) Celsius. What is the range of temperature in degree Fahrenheit if the conversion formula is given by \n\n\\[\nC = \\frac{5}{9} (F - 32)\n\\]\n\nwhere \\(C\\) and \\(F\\) represent temperature in degree Celsius and degree Fahrenheit, respectively?\n\n",
-      "correctSolution": " It is given that \n\n\\[\n30 < C < 35.\n\\]\n\nPutting \\(C = \\frac{5}{9} (F - 32)\\), we get \n\n\\[\n30 < \\frac{5}{9} (F - 32) < 35.\n\\]\n\nMultiplying through by \\(\\frac{9}{5}\\):\n\n\\[\n\\frac{9}{5} \\times 30 < (F - 32) < \\frac{9}{5} \\times 35\n\\]\n\nwhich simplifies to \n\n\\[\n54 < (F - 32) < 63.\n\\]\n\nAdding \\(32\\) to all parts gives:\n\n\\[\n86 < F < 95.\n\\]\n\nThus, the required range of temperature is between \\(86^\\circ\\) F and \\(95^\\circ\\) F.\n",
-      "perturbedSolution": " It is given that \n\n\\[\n30 < C < 35.\n\\]\n\nPutting \\(C = \\frac{5}{9} (F - 32)\\), we get \n\n\\[\n30 < \\textcolor{red}{\\frac{9}{5}} (F - 32) < 35.\n\\]\n\nMultiplying through by \\(\\frac{9}{5}\\):\n\n\\[\n\\frac{9}{5} \\times 30 < (F - 32) < \\frac{9}{5} \\times 35\n\\]\n\nwhich simplifies to \n\n\\[\n54 < (F - 32) < 63.\n\\]\n\nAdding \\(32\\) to all parts gives:\n\n\\[\n86 < F < 95.\n\\]\n\nThus, the required range of temperature is between \\(86^\\circ\\) F and \\(95^\\circ\\) F.\n\n",
-      "perturbationReasoning": " The perturbation involves swapping the fraction \\(\\frac{5}{9}\\) with \\(\\frac{9}{5}\\) in the expression for \\(C\\). This subtle error alters the conversion formula, resulting in incorrect calculations for the range of temperatures.",
+      "originalQuestion": "Write the set \\(\\left\\{ \\frac{1}{2}, \\frac{2}{3}, \\frac{3}{4}, \\frac{4}{5}, \\frac{5}{6}, \\frac{6}{7} \\right\\}\\) in the set-builder form.\n\n",
+      "correctSolution": " We see that each member in the given set has the numerator one less than the denominator. Also, the numerator begins from 1 and does not exceed 6. Hence, in the set-builder form the given set is \n\\[\n\\left\\{ x : x = \\frac{n}{n + 1}, \\text{ where } n \\text{ is a natural number and } 1 \\leq n \\leq 6 \\right\\}\n\\]\n",
+      "perturbedSolution": " We see that each member in the given set has the numerator one less than the denominator. Also, the numerator begins from 1 and does not exceed 6. Hence, in the set-builder form the given set is \n\\[\n\\left\\{ x : x = \\frac{n}{n \\textcolor{red}{-} 1}, \\text{ where } n \\text{ is a natural number and } 1 \\leq n \\leq 6 \\right\\}\n\\]\n\n",
+      "perturbationReasoning": " The perturbation involves changing the plus sign in the denominator to a minus sign, subtly altering the formula to \\(\\frac{n}{n - 1}\\). This change impacts the meaning of the expression by altering the relationship between the numerator and denominator, requiring careful attention to detect.",
       "expected": {
         "kind": "error",
-        "errorStepIndex": 2,
-        "tag": "formula-misapplied"
+        "errorStepIndex": 1,
+        "tag": "sign-error"
       },
-      "labelRationale": "The Celsius conversion substitutes reciprocal factor 9/5 for 5/9."
+      "labelRationale": "The requested fractions follow n/(n+1), but the set-builder denominator changes +1 to -1.",
+      "outputSha256": "723034587bff7ba8ac19544f0d3274de68c2d1f3feaeeb2c8cc048f9c0722095",
+      "coherenceAudit": {
+        "firstErrorBasis": "The question is visible step 0; step 1 is the only solution line and first changes the denominator pattern from n+1 to n-1.",
+        "downstreamCoherence": "No later computation follows the erroneous set-builder expression."
+      }
+    },
+    {
+      "file": "fermat-img_459_pert_3_1.jpg",
+      "sourceId": "img_459_pert_3.1",
+      "shard": "train-00001-of-00010.parquet",
+      "rowIndex": 148,
+      "grade": "c12",
+      "domain": "alg",
+      "subdomain": "mat",
+      "handwritingStyle": "legible",
+      "imageQuality": "good",
+      "rotation": "default",
+      "annotatorId": 44,
+      "imageId": 459,
+      "hasError": true,
+      "originalQuestion": "Find \\( AB \\), if \n\\[\nA = \\begin{bmatrix} 6 & 9 \\\\ 2 & 3 \\end{bmatrix} \\quad \\text{and} \\quad B = \\begin{bmatrix} 2 & 6 & 0 \\\\ 7 & 9 & 8 \\end{bmatrix}.\n\\]\n\n",
+      "correctSolution": " The matrix \\( A \\) has 2 columns which is equal to the number of rows of \\( B \\). Hence \\( AB \\) is defined. Now\n\\[\nAB = \\begin{bmatrix} 6(2) + 9(7) & 6(6) + 9(9) & 6(0) + 9(8) \\\\ 2(2) + 3(7) & 2(6) + 3(9) & 2(0) + 3(8) \\end{bmatrix}\n\\]\n\\[\n= \\begin{bmatrix} 12 + 63 & 36 + 81 & 0 + 72 \\\\ 4 + 21 & 12 + 27 & 0 + 24 \\end{bmatrix}\n\\]\n\\[\n= \\begin{bmatrix} 75 & 117 & 72 \\\\ 25 & 39 & 24 \\end{bmatrix}.\n\\]\n",
+      "perturbedSolution": " The matrix \\( A \\) has 2 columns which is equal to the number of rows of \\( B \\). Hence \\( AB \\) is defined. Now\n\\[\nAB = \\begin{bmatrix} 6(2) + 9(7) & 6(6) + 9(9) & 6(0) + 9(8) \\\\ 2(2) + 3(7) & 2(6) + 3(9) & 2(0) + 3(8) \\end{bmatrix}\n\\]\n\\[\n= \\begin{bmatrix} 12 + 63 & 36 + 81 & 0 + 72 \\\\ 4 + 21 & 12 + 27 & 0 + 24 \\end{bmatrix}\n\\]\n\\[\n= \\begin{bmatrix} \\textcolor{red}{7^5} & 117 & 72 \\\\ 25 & 39 & 24 \\end{bmatrix}.\n\\]\n\n",
+      "perturbationReasoning": " The perturbation involves changing \\(75\\) to \\(\\textcolor{red}{7^5}\\), which subtly alters the intended value without being immediately obvious. This change requires domain knowledge to detect, as it is a subtle error that affects the meaning of the expression.",
+      "expected": {
+        "kind": "error",
+        "errorStepIndex": 3,
+        "tag": "notation-error"
+      },
+      "labelRationale": "The correctly expanded first matrix entry 12+63 is written as 7^5 instead of 75.",
+      "outputSha256": "f6ed66519e7580d0815e564ace24a57c2201ef3eda20d7baa5e3316e238f2f1a",
+      "coherenceAudit": {
+        "firstErrorBasis": "Visible steps 1-2 correctly expand all six dot products; step 3 first writes the correct sum 12+63=75 as the nonequivalent 7^5.",
+        "downstreamCoherence": "No work follows the final matrix, and its other five entries remain correct."
+      }
     },
     {
       "file": "fermat-img_584_pert_3_2.jpg",
@@ -259,7 +296,12 @@
         "errorStepIndex": 2,
         "tag": "sign-error"
       },
-      "labelRationale": "Evaluating p(2) replaces subtraction with addition."
+      "labelRationale": "Evaluating p(2) replaces subtraction with addition.",
+      "outputSha256": "a66d3aa8b3414ce2fb2381bbafd77de0076292d2f44d9d3978654d2903c2a52b",
+      "coherenceAudit": {
+        "firstErrorBasis": "Visible step 1 defines the polynomial correctly; step 2 first replaces subtraction by addition when evaluating p(2).",
+        "downstreamCoherence": "The p(0) check stays correct and the final conclusion consistently follows the erroneous p(2)=8 result."
+      }
     }
   ]
 }
