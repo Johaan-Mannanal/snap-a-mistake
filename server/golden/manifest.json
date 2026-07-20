@@ -1,8 +1,19 @@
 {
   "cases": [
-    { "file": "correct-power-rule.jpg", "expect": "correct" },
-    { "file": "sign-error-derivative.jpg", "expect": "error", "errorStepIndex": 2, "tag": "sign-error" },
+    { "file": "correct-linear.jpg", "expect": "correct" },
+    { "file": "correct-quadratic.jpg", "expect": "correct" },
+    { "file": "correct-derivative.jpg", "expect": "correct" },
+    { "file": "correct-integral.jpg", "expect": "correct" },
+    { "file": "sign-error.jpg", "expect": "error", "errorStepIndex": 1, "tag": "sign-error" },
+    { "file": "dropped-term.jpg", "expect": "error", "errorStepIndex": 1, "tag": "dropped-term" },
+    { "file": "distribution-error.jpg", "expect": "error", "errorStepIndex": 1, "tag": "distribution-error" },
+    { "file": "chain-rule-missed.jpg", "expect": "error", "errorStepIndex": 1, "tag": "chain-rule-missed" },
+    { "file": "product-rule.jpg", "expect": "error", "errorStepIndex": 1, "tag": "product-rule-misapplied" },
+    { "file": "parts-error.jpg", "expect": "error", "errorStepIndex": 1, "tag": "integration-by-parts-error" },
+    { "file": "usub-bounds.jpg", "expect": "error", "errorStepIndex": 2, "tag": "u-sub-bounds-error" },
+    { "file": "exponent-error.jpg", "expect": "error", "errorStepIndex": 1, "tag": "exponent-rule-error" },
     { "file": "blurry.jpg", "expect": "unreadable" },
-    { "file": "grocery-list.jpg", "expect": "not-math" }
+    { "file": "grocery-list.jpg", "expect": "not-math" },
+    { "file": "faint-math.jpg", "expect": "unreadable" }
   ]
 }
