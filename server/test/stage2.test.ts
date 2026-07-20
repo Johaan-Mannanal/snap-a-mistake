@@ -23,5 +23,7 @@ describe('analyzeSteps', () => {
     const call = (client.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as OpenAI.Chat.Completions.ChatCompletionCreateParams
     const text = JSON.stringify(call.messages)
     expect(text).toContain('x e^x - e^x x') // steps actually reached the prompt
+    expect(text).toContain('notation-error')
+    expect(text).toContain('formula-misapplied')
   })
 })

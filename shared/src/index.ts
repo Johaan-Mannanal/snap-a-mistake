@@ -3,7 +3,8 @@ import { z } from 'zod'
 export const MISCONCEPTION_TAGS = [
   'sign-error', 'dropped-term', 'distribution-error', 'chain-rule-missed',
   'product-rule-misapplied', 'integration-by-parts-error', 'u-sub-bounds-error',
-  'algebraic-slip', 'exponent-rule-error', 'equals-abuse', 'other',
+  'algebraic-slip', 'exponent-rule-error', 'equals-abuse',
+  'notation-error', 'formula-misapplied', 'other',
 ] as const
 export type MisconceptionTag = (typeof MISCONCEPTION_TAGS)[number]
 

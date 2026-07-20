@@ -51,9 +51,11 @@ describe('AnalyzeResponseSchema', () => {
   })
 })
 
-it('vocabulary matches the spec', () => {
+it('vocabulary matches the approved controlled set', () => {
   expect(MISCONCEPTION_TAGS).toContain('equals-abuse')
-  expect(MISCONCEPTION_TAGS).toHaveLength(11)
+  expect(MISCONCEPTION_TAGS).toContain('notation-error')
+  expect(MISCONCEPTION_TAGS).toContain('formula-misapplied')
+  expect(MISCONCEPTION_TAGS).toHaveLength(13)
 })
 
 it('verifier schema', () => {

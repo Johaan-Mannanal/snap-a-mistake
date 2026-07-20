@@ -12,6 +12,8 @@ const LABELS: Record<MisconceptionTag, string> = {
   'algebraic-slip': 'Algebraic slip',
   'exponent-rule-error': 'Exponent rule error',
   'equals-abuse': 'Equals sign misuse',
+  'notation-error': 'Notation error',
+  'formula-misapplied': 'Formula misapplied',
   other: 'Other misconception',
 }
 

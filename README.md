@@ -14,7 +14,7 @@ photo → app (Expo/RN) → POST /analyze → server (Fastify, stateless)
   → typed AnalyzeResponse → app renders photo overlay + step cards → history saved to on-device SQLite
 ```
 
-- **`shared/`** — the API contract: zod schemas (`AnalyzeResponse`, `Step`, `Stage1/2/Verifier` results) and the 11-tag misconception vocabulary. Both server and app import from here; never re-declare these types.
+- **`shared/`** — the API contract: zod schemas (`AnalyzeResponse`, `Step`, `Stage1/2/Verifier` results) and the 13-tag misconception vocabulary. Both server and app import from here; never re-declare these types.
 - **`server/`** — Fastify. One route that matters: `POST /analyze` (multipart `photo`) → sharp normalize → 3-stage LLM pipeline → JSON. Stateless by design: no DB, no accounts. All model calls flow through one wrapper (`src/llm/client.ts`: zod-validated JSON with one correction retry; transport errors propagate untouched). Provider swaps only touch this workspace.
 - **`app/`** — Expo (expo-router, strict TS). Screens: camera home → analyzing (staged progress) → result (red-band photo overlay + ✓/⚠️/✗/↓ step cards) → follow-up loop → insights (weekly misconception trends). Pure logic lives in `app/src/lib/` (no RN imports — vitest-tested in node); screens are thin components over it. History is device-local SQLite.
 - **Parked feature:** an AI video-generation lesson exists in the separate `midnight apps tutor` repo; the Result screen reserves a disabled "🎬 Video lesson — coming soon" slot for it. Deliberately untouched so far.

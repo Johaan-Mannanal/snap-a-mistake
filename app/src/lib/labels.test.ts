@@ -9,4 +9,9 @@ describe('tagLabel', () => {
       expect(tagLabel(tag)).not.toContain('-')
     }
   })
+
+  it('uses student-facing labels for the handwriting additions', () => {
+    expect(tagLabel('notation-error')).toBe('Notation error')
+    expect(tagLabel('formula-misapplied')).toBe('Formula misapplied')
+  })
 })
