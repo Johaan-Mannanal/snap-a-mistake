@@ -17,6 +17,7 @@ const provenance = JSON.parse(
   revision: string
   license: string
   transformation: string
+  shards: Array<{ file: string; sha256: string }>
   cases: Array<{
     file: string
     sourceId: string
@@ -43,8 +44,33 @@ describe('FERMAT curated subset', () => {
     expect(provenance.dataset).toBe('ai4bharat/FERMAT')
     expect(provenance.revision).toBe('80ff9934c38615bb8d3a33c24252db02e21774f0')
     expect(provenance.license).toBe('CC BY 4.0')
+    expect(provenance.shards).toEqual([
+      {
+        file: 'train-00000-of-00010.parquet',
+        sha256: 'fc144ae82fb8e2704978f2f74b965a7c85e090997b7c49607f282ea48b1d066f',
+      },
+      {
+        file: 'train-00001-of-00010.parquet',
+        sha256: 'a8216e3780a99d2652afc8e7566d97190863d35b16699c528fee202344b3ed51',
+      },
+    ])
     expect(provenance.cases.map((c) => c.file).sort()).toEqual(cases.map((c) => c.file).sort())
     expect(new Set(provenance.cases.map((c) => c.sourceId)).size).toBe(10)
+    for (const manifestCase of cases) {
+      const record = provenance.cases.find((c) => c.file === manifestCase.file)
+      expect(record?.sourceId).toBe(manifestCase.sourceId)
+      expect(record?.hasError).toBe(manifestCase.expect === 'error')
+      expect(record?.expected.kind).toBe(manifestCase.expect)
+      if (manifestCase.expect === 'error') {
+        expect(record?.expected).toEqual({
+          kind: 'error',
+          errorStepIndex: manifestCase.errorStepIndex,
+          tag: manifestCase.tag,
+        })
+      } else {
+        expect(record?.expected).toEqual({ kind: 'correct' })
+      }
+    }
     for (const record of provenance.cases) {
       expect(record.originalQuestion).not.toBe('')
       expect(record.correctSolution).not.toBe('')

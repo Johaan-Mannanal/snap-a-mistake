@@ -4,6 +4,16 @@
   "license": "CC BY 4.0",
   "sourceUrl": "https://huggingface.co/datasets/ai4bharat/FERMAT",
   "transformation": "Embedded source PNG converted to JPEG quality 88 with EXIF orientation applied; no crop or resize.",
+  "shards": [
+    {
+      "file": "train-00000-of-00010.parquet",
+      "sha256": "fc144ae82fb8e2704978f2f74b965a7c85e090997b7c49607f282ea48b1d066f"
+    },
+    {
+      "file": "train-00001-of-00010.parquet",
+      "sha256": "a8216e3780a99d2652afc8e7566d97190863d35b16699c528fee202344b3ed51"
+    }
+  ],
   "cases": [
     {
       "file": "fermat-img_486_pert_5_1.jpg",

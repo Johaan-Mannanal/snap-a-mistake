@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -15,6 +17,10 @@ REVISION = "80ff9934c38615bb8d3a33c24252db02e21774f0"
 SHARDS = {
     0: "train-00000-of-00010.parquet",
     1: "train-00001-of-00010.parquet",
+}
+SHARD_SHA256 = {
+    0: "fc144ae82fb8e2704978f2f74b965a7c85e090997b7c49607f282ea48b1d066f",
+    1: "a8216e3780a99d2652afc8e7566d97190863d35b16699c528fee202344b3ed51",
 }
 SELECTIONS = [
     {"source_id": "img_486_pert_5.1", "shard": 0, "row": 0, "file": "fermat-img_486_pert_5_1.jpg", "expected": {"kind": "correct"}, "label_rationale": "Consistent variable renaming leaves the age equation correct."},
@@ -45,20 +51,50 @@ def env_token() -> str:
     raise RuntimeError("HF_TOKEN is required; accept FERMAT access and set it in server/.env")
 
 
+def verify_shard(number: int, path: Path) -> Path:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    actual = digest.hexdigest()
+    expected = SHARD_SHA256[number]
+    if actual != expected:
+        raise RuntimeError(f"SHA-256 mismatch for {path}: expected {expected}, got {actual}")
+    return path
+
+
+def promote_legacy_shard(number: int, legacy: Path, target: Path) -> Path:
+    verify_shard(number, legacy)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target.hardlink_to(legacy)
+    except FileExistsError:
+        pass
+    except OSError:
+        partial = target.with_name(f"{target.name}.legacy-partial")
+        shutil.copy2(legacy, partial)
+        partial.replace(target)
+    return verify_shard(number, target)
+
+
 def download_shard(number: int, cache_dir: Path, token: str) -> Path:
     filename = SHARDS[number]
-    target = cache_dir / filename
+    target = cache_dir / REVISION / filename
     if target.exists():
-        return target
+        return verify_shard(number, target)
+    legacy = cache_dir / filename
+    if legacy.exists():
+        return promote_legacy_shard(number, legacy, target)
+    target.parent.mkdir(parents=True, exist_ok=True)
     url = f"https://huggingface.co/datasets/{DATASET}/resolve/{REVISION}/data/{filename}"
     with requests.get(url, headers={"Authorization": f"Bearer {token}"}, stream=True, timeout=60) as response:
         response.raise_for_status()
-        partial = target.with_suffix(".partial")
+        partial = target.with_name(f"{target.name}.partial")
         with partial.open("wb") as output:
             for chunk in response.iter_content(chunk_size=1024 * 1024):
                 output.write(chunk)
         partial.replace(target)
-    return target
+    return verify_shard(number, target)
 
 
 def main() -> None:
@@ -107,6 +143,10 @@ def main() -> None:
         "license": "CC BY 4.0",
         "sourceUrl": f"https://huggingface.co/datasets/{DATASET}",
         "transformation": "Embedded source PNG converted to JPEG quality 88 with EXIF orientation applied; no crop or resize.",
+        "shards": [
+            {"file": SHARDS[number], "sha256": SHARD_SHA256[number]}
+            for number in sorted(SHARDS)
+        ],
         "cases": records,
     }
     (GOLDEN_DIR / "fermat-provenance.json").write_text(json.dumps(provenance, indent=2, ensure_ascii=False) + "\n")
