@@ -1,8 +1,8 @@
 import { vi } from 'vitest'
-import type Anthropic from '@anthropic-ai/sdk'
+import type OpenAI from 'openai'
 
-export function fakeClient(...texts: string[]): Anthropic {
+export function fakeClient(...texts: string[]): OpenAI {
   const create = vi.fn()
-  for (const t of texts) create.mockResolvedValueOnce({ content: [{ type: 'text', text: t }] })
-  return { messages: { create } } as unknown as Anthropic
+  for (const t of texts) create.mockResolvedValueOnce({ choices: [{ message: { content: t } }] })
+  return { chat: { completions: { create } } } as unknown as OpenAI
 }

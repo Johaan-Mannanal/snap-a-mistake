@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type Anthropic from '@anthropic-ai/sdk'
+import type OpenAI from 'openai'
 import type { TranscribedStep } from '@snap/shared'
 import { analyzeSteps } from '../src/pipeline/stage2.js'
 import { fakeClient } from './helpers.js'
@@ -17,10 +17,10 @@ const diagnosis = JSON.stringify({
 describe('analyzeSteps', () => {
   it('serializes steps into the prompt and parses the diagnosis', async () => {
     const client = fakeClient(diagnosis)
-    const r = await analyzeSteps(client, 'claude-sonnet-5', steps)
+    const r = await analyzeSteps(client, 'gpt-5.6-sol', steps)
     expect(r.errorStepIndex).toBe(1)
     expect(r.misconceptionTag).toBe('integration-by-parts-error')
-    const call = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Anthropic.Messages.MessageCreateParams
+    const call = (client.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as OpenAI.Chat.Completions.ChatCompletionCreateParams
     const text = JSON.stringify(call.messages)
     expect(text).toContain('x e^x - e^x x') // steps actually reached the prompt
   })

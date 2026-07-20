@@ -1,19 +1,21 @@
-import type Anthropic from '@anthropic-ai/sdk'
+import type OpenAI from 'openai'
 import { z, type ZodType } from 'zod'
 
-export class ClaudeJsonError extends Error {}
+export class ModelJsonError extends Error {}
 
-type ContentBlockParam = Anthropic.Messages.TextBlockParam | Anthropic.Messages.ImageBlockParam | Anthropic.Messages.ToolUseBlockParam | Anthropic.Messages.ToolResultBlockParam
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
 
 function stripFences(text: string): string {
   return text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
 }
 
-export async function callClaudeJson<T>(opts: {
-  client: Anthropic
+export async function callModelJson<T>(opts: {
+  client: OpenAI
   model: string
   system: string
-  content: ContentBlockParam[]
+  content: ContentPart[]
   schema: ZodType<T>
   maxTokens?: number
 }): Promise<T> {
@@ -21,13 +23,16 @@ export async function callClaudeJson<T>(opts: {
     const content = correction
       ? [...opts.content, { type: 'text' as const, text: correction }]
       : opts.content
-    const res = await opts.client.messages.create({
+    const res = await opts.client.chat.completions.create({
       model: opts.model,
-      max_tokens: opts.maxTokens ?? 2000,
-      system: opts.system,
-      messages: [{ role: 'user', content }],
+      max_completion_tokens: opts.maxTokens ?? 2000,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: opts.system },
+        { role: 'user', content },
+      ],
     })
-    const text = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('')
+    const text = res.choices[0]?.message?.content ?? ''
     return opts.schema.parse(JSON.parse(stripFences(text)))
   }
   try {
@@ -40,7 +45,7 @@ export async function callClaudeJson<T>(opts: {
         `Your previous reply was not valid for the required JSON schema (${detail}). Reply with ONLY the corrected JSON object — no prose, no code fences.`,
       )
     } catch (second) {
-      throw new ClaudeJsonError(`invalid model output after retry: ${second}`)
+      throw new ModelJsonError(`invalid model output after retry: ${second}`)
     }
   }
 }

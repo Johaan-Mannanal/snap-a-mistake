@@ -2,7 +2,7 @@ import { createRequire } from 'module'
 import { describe, expect, it } from 'vitest'
 import sharp from 'sharp'
 import { buildApp } from '../src/app.js'
-import { ClaudeJsonError } from '../src/claude/client.js'
+import { ModelJsonError } from '../src/llm/client.js'
 
 const formAutoContent = createRequire(import.meta.url)('form-auto-content')
 
@@ -41,8 +41,8 @@ describe('POST /analyze', () => {
     expect(res.statusCode).toBeGreaterThanOrEqual(400)
     expect(res.statusCode).toBeLessThan(500)
   })
-  it('502s on ClaudeJsonError', async () => {
-    const app = buildApp({ runAnalysis: async () => { throw new ClaudeJsonError('bad') } })
+  it('502s on ModelJsonError', async () => {
+    const app = buildApp({ runAnalysis: async () => { throw new ModelJsonError('bad') } })
     const form = formAutoContent({ photo: await tinyJpeg() })
     const res = await app.inject({ method: 'POST', url: '/analyze', ...form })
     expect(res.statusCode).toBe(502)

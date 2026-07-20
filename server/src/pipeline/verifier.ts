@@ -1,6 +1,6 @@
-import type Anthropic from '@anthropic-ai/sdk'
+import type OpenAI from 'openai'
 import { VerifierSchema, type TranscribedStep, type VerifierResult } from '@snap/shared'
-import { callClaudeJson } from '../claude/client.js'
+import { callModelJson } from '../llm/client.js'
 
 const SYSTEM = `You audit another tutor's diagnosis of a student's math work. You are the last line of defense against FALSELY accusing correct work.
 
@@ -11,13 +11,13 @@ Respond with ONLY: {"agrees": boolean, "note": string}
 - note: one sentence of reasoning.`
 
 export async function verifyDiagnosis(
-  client: Anthropic,
+  client: OpenAI,
   model: string,
   steps: TranscribedStep[],
   diagnosis: { errorStepIndex: number; explanation: string },
 ): Promise<VerifierResult> {
   const rendered = steps.map((s) => `Step ${s.index}: ${s.latex}`).join('\n')
-  return callClaudeJson({
+  return callModelJson({
     client, model, system: SYSTEM, schema: VerifierSchema, maxTokens: 400,
     content: [{
       type: 'text',

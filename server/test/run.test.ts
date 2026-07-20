@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { Stage1Result, Stage2Result, VerifierResult } from '@snap/shared'
-import type Anthropic from '@anthropic-ai/sdk'
-import { ClaudeJsonError } from '../src/claude/client.js'
+import type OpenAI from 'openai'
+import { ModelJsonError } from '../src/llm/client.js'
 import { makeRunAnalysis } from '../src/pipeline/run.js'
 import type { Config } from '../src/config.js'
 
-const client = {} as Anthropic
+const client = {} as OpenAI
 const config: Config = {
-  port: 0, anthropicApiKey: 'k', legibilityThreshold: 0.4,
+  port: 0, openaiApiKey: 'k', legibilityThreshold: 0.4,
   models: { vision: 'v', analysis: 'a', verifier: 'h' },
 }
 const image = { base64: 'AAAA', mediaType: 'image/jpeg' as const }
@@ -62,7 +62,7 @@ describe('runAnalysis', () => {
     expect(r.steps[1]?.verdict).toBe('suspect')
     expect(r.verifierAgreed).toBe(false)
   })
-  it('throws ClaudeJsonError on out-of-range error index', async () => {
-    await expect(run({ s2: { ...errorDiag, errorStepIndex: 99 } })).rejects.toThrow(ClaudeJsonError)
+  it('throws ModelJsonError on out-of-range error index', async () => {
+    await expect(run({ s2: { ...errorDiag, errorStepIndex: 99 } })).rejects.toThrow(ModelJsonError)
   })
 })

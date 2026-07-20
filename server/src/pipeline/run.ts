@@ -1,6 +1,6 @@
-import type Anthropic from '@anthropic-ai/sdk'
+import type OpenAI from 'openai'
 import type { AnalyzeResponse, Step, TranscribedStep } from '@snap/shared'
-import { ClaudeJsonError } from '../claude/client.js'
+import { ModelJsonError } from '../llm/client.js'
 import type { Config } from '../config.js'
 import type { RunAnalysisFn } from '../app.js'
 import { transcribe } from './stage1.js'
@@ -31,7 +31,7 @@ function withVerdicts(steps: TranscribedStep[], errorIndex: number | null, verif
 }
 
 export function makeRunAnalysis(
-  client: Anthropic,
+  client: OpenAI,
   config: Config,
   deps: Deps = { transcribe, analyzeSteps, verifyDiagnosis },
 ): RunAnalysisFn {
@@ -52,7 +52,7 @@ export function makeRunAnalysis(
     }
 
     if (!s1.steps.some((s) => s.index === s2.errorStepIndex))
-      throw new ClaudeJsonError(`stage 2 flagged nonexistent step ${s2.errorStepIndex}`)
+      throw new ModelJsonError(`stage 2 flagged nonexistent step ${s2.errorStepIndex}`)
 
     const v = await deps.verifyDiagnosis(client, config.models.verifier, s1.steps, {
       errorStepIndex: s2.errorStepIndex,

@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import multipart from '@fastify/multipart'
 import sharp from 'sharp'
 import type { AnalyzeResponse } from '@snap/shared'
-import { ClaudeJsonError } from './claude/client.js'
+import { ModelJsonError } from './llm/client.js'
 
 export type RunAnalysisFn = (image: { base64: string; mediaType: 'image/jpeg' }) => Promise<AnalyzeResponse>
 
@@ -24,7 +24,7 @@ export function buildApp(deps: { runAnalysis: RunAnalysisFn; logger?: boolean })
         .toBuffer()
       return await deps.runAnalysis({ base64: jpeg.toString('base64'), mediaType: 'image/jpeg' })
     } catch (err) {
-      if (err instanceof ClaudeJsonError) return reply.code(502).send({ error: 'analysis-failed' })
+      if (err instanceof ModelJsonError) return reply.code(502).send({ error: 'analysis-failed' })
       req.log?.error?.(err)
       return reply.code(500).send({ error: 'internal' })
     }

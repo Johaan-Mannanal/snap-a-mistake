@@ -1,6 +1,6 @@
-import type Anthropic from '@anthropic-ai/sdk'
+import type OpenAI from 'openai'
 import { MISCONCEPTION_TAGS, Stage2Schema, type Stage2Result, type TranscribedStep } from '@snap/shared'
-import { callClaudeJson } from '../claude/client.js'
+import { callModelJson } from '../llm/client.js'
 
 const SYSTEM = `You are a calculus/algebra tutor diagnosing a student's transcribed work, step by step.
 
@@ -17,14 +17,14 @@ Rules:
 - Notation quirks, skipped-but-valid shortcuts, and unsimplified answers are NOT errors.`
 
 export async function analyzeSteps(
-  client: Anthropic,
+  client: OpenAI,
   model: string,
   steps: TranscribedStep[],
 ): Promise<Stage2Result> {
   const rendered = steps
     .map((s) => `Step ${s.index}: ${s.latex}   (${s.plain})`)
     .join('\n')
-  return callClaudeJson({
+  return callModelJson({
     client, model, system: SYSTEM, schema: Stage2Schema, maxTokens: 1500,
     content: [{ type: 'text', text: `Student's work:\n${rendered}` }],
   })

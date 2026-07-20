@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import { loadConfig } from '../src/config.js'
 import { makeRunAnalysis } from '../src/pipeline/run.js'
 import { judge, type GoldenCase } from './judge.js'
@@ -11,7 +11,7 @@ const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'golde
 const manifest = JSON.parse(await readFile(path.join(dir, 'manifest.json'), 'utf8')) as { cases: GoldenCase[] }
 
 const config = loadConfig()
-const client = new Anthropic({ apiKey: config.anthropicApiKey, timeout: 30_000, maxRetries: 1 })
+const client = new OpenAI({ apiKey: config.openaiApiKey, timeout: 30_000, maxRetries: 1 })
 const run = makeRunAnalysis(client, config)
 
 let failures = 0

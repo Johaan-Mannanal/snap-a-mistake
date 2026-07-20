@@ -11,7 +11,7 @@ const steps: TranscribedStep[] = [
 describe('verifyDiagnosis', () => {
   it('returns disagreement when the auditor rejects the claim', async () => {
     const client = fakeClient(JSON.stringify({ agrees: false, note: 'step 1 is valid: 6/2 = 3' }))
-    const r = await verifyDiagnosis(client, 'claude-haiku-4-5-20251001', steps, {
+    const r = await verifyDiagnosis(client, 'gpt-5.6-luna', steps, {
       errorStepIndex: 1, explanation: 'Division mistake',
     })
     expect(r.agrees).toBe(false)

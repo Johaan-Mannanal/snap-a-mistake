@@ -1,6 +1,6 @@
-import type Anthropic from '@anthropic-ai/sdk'
+import type OpenAI from 'openai'
 import { Stage1Schema, type Stage1Result } from '@snap/shared'
-import { callClaudeJson } from '../claude/client.js'
+import { callModelJson } from '../llm/client.js'
 
 const SYSTEM = `You transcribe photographed handwritten math work (algebra/calculus) into discrete solution steps.
 
@@ -16,14 +16,14 @@ Rules:
 - Transcribe faithfully, INCLUDING any mistakes the student made. Never correct their work.`
 
 export async function transcribe(
-  client: Anthropic,
+  client: OpenAI,
   model: string,
   image: { base64: string; mediaType: 'image/jpeg' },
 ): Promise<Stage1Result> {
-  return callClaudeJson({
+  return callModelJson({
     client, model, system: SYSTEM, schema: Stage1Schema, maxTokens: 3000,
     content: [
-      { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.base64 } },
+      { type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.base64}` } },
       { type: 'text', text: 'Transcribe this handwritten math work.' },
     ],
   })
