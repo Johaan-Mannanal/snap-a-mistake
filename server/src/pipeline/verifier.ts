@@ -6,7 +6,7 @@ const SYSTEM = `You audit another tutor's diagnosis of a student's math work. Yo
 
 Independently check ONE thing: is the flagged step actually mathematically invalid given the steps before it?
 
-Respond with ONLY: {"agrees": boolean, "note": string}
+Respond with ONLY a JSON object: {"agrees": boolean, "note": string}
 - agrees=false if the flagged step is actually valid, or the real first error is a different step.
 - note: one sentence of reasoning.`
 
