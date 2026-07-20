@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   GOLDEN_DIR,
   GOLDEN_PHOTO_DIR,
@@ -25,6 +25,11 @@ async function temporaryPhotoDirectory(): Promise<string> {
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true })))
+  vi.doUnmock('openai')
+  vi.doUnmock('../src/config.js')
+  vi.doUnmock('../src/pipeline/run.js')
+  vi.doUnmock('../scripts/golden-fixtures.js')
+  vi.resetModules()
 })
 
 describe('golden fixture paths', () => {
@@ -43,15 +48,30 @@ describe('golden fixture paths', () => {
 })
 
 describe('golden runner initialization', () => {
-  it('completes fixture preflight before constructing paid-run configuration', async () => {
-    const source = await readFile(path.join(serverDir, 'scripts', 'golden.ts'), 'utf8')
-    const preflight = source.indexOf('await preflightGoldenCases')
-    const config = source.indexOf('loadConfig()')
+  it('does not evaluate configuration or OpenAI modules when fixture preflight fails', async () => {
+    const evaluations: string[] = []
+    vi.doMock('openai', () => {
+      evaluations.push('openai')
+      return { default: class OpenAI {} }
+    })
+    vi.doMock('../src/config.js', () => {
+      evaluations.push('config')
+      return { loadConfig: () => { throw new Error('config must not load') } }
+    })
+    vi.doMock('../src/pipeline/run.js', () => {
+      evaluations.push('pipeline')
+      return { makeRunAnalysis: () => { throw new Error('pipeline must not load') } }
+    })
+    vi.doMock('../scripts/golden-fixtures.js', () => ({
+      GOLDEN_DIR,
+      preflightGoldenCases: async () => {
+        evaluations.push('preflight')
+        throw new Error('fixture preflight stopped the run')
+      },
+    }))
 
-    expect(preflight).toBeGreaterThan(-1)
-    expect(preflight).toBeLessThan(config)
-    expect(source).not.toContain('SKIP')
-    expect(source).not.toContain('existsSync')
+    await expect(import('../scripts/golden.js')).rejects.toThrow('fixture preflight stopped the run')
+    expect(evaluations).toEqual(['preflight'])
   })
 })
 

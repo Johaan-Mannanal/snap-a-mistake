@@ -1,8 +1,5 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import OpenAI from 'openai'
-import { loadConfig } from '../src/config.js'
-import { makeRunAnalysis } from '../src/pipeline/run.js'
 import { GOLDEN_DIR, preflightGoldenCases } from './golden-fixtures.js'
 import { GoldenManifestSchema, GoldenSourceSchema, judge, selectCases } from './judge.js'
 
@@ -12,6 +9,11 @@ const source = requestedSource ? GoldenSourceSchema.parse(requestedSource) : und
 const cases = selectCases(parsed.cases, source)
 const fixtures = await preflightGoldenCases(cases)
 
+const [{ default: OpenAI }, { loadConfig }, { makeRunAnalysis }] = await Promise.all([
+  import('openai'),
+  import('../src/config.js'),
+  import('../src/pipeline/run.js'),
+])
 const config = loadConfig()
 const client = new OpenAI({ apiKey: config.openaiApiKey, timeout: 30_000, maxRetries: 1 })
 const run = makeRunAnalysis(client, config)
