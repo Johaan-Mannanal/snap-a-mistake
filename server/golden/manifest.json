@@ -1,19 +1,19 @@
 {
   "cases": [
-    { "file": "correct-linear.jpg", "expect": "correct" },
-    { "file": "correct-quadratic.jpg", "expect": "correct" },
-    { "file": "correct-derivative.jpg", "expect": "correct" },
-    { "file": "correct-integral.jpg", "expect": "correct" },
-    { "file": "sign-error.jpg", "expect": "error", "errorStepIndex": 1, "tag": "sign-error" },
-    { "file": "dropped-term.jpg", "expect": "error", "errorStepIndex": 1, "tag": "dropped-term" },
-    { "file": "distribution-error.jpg", "expect": "error", "errorStepIndex": 1, "tag": "distribution-error" },
-    { "file": "chain-rule-missed.jpg", "expect": "error", "errorStepIndex": 1, "tag": "chain-rule-missed" },
-    { "file": "product-rule.jpg", "expect": "error", "errorStepIndex": 1, "tag": "product-rule-misapplied" },
-    { "file": "parts-error.jpg", "expect": "error", "errorStepIndex": 1, "tag": "integration-by-parts-error" },
-    { "file": "usub-bounds.jpg", "expect": "error", "errorStepIndex": 2, "tag": "u-sub-bounds-error" },
-    { "file": "exponent-error.jpg", "expect": "error", "errorStepIndex": 1, "tag": "exponent-rule-error" },
-    { "file": "blurry.jpg", "expect": "unreadable" },
-    { "file": "grocery-list.jpg", "expect": "not-math" },
-    { "file": "faint-math.jpg", "expect": "unreadable" }
+    { "file": "correct-linear.jpg", "source": "synthetic", "expect": "correct" },
+    { "file": "correct-quadratic.jpg", "source": "synthetic", "expect": "correct" },
+    { "file": "correct-derivative.jpg", "source": "synthetic", "expect": "correct" },
+    { "file": "correct-integral.jpg", "source": "synthetic", "expect": "correct" },
+    { "file": "sign-error.jpg", "source": "synthetic", "expect": "error", "errorStepIndex": 1, "tag": "sign-error" },
+    { "file": "dropped-term.jpg", "source": "synthetic", "expect": "error", "errorStepIndex": 1, "tag": "dropped-term" },
+    { "file": "distribution-error.jpg", "source": "synthetic", "expect": "error", "errorStepIndex": 1, "tag": "distribution-error" },
+    { "file": "chain-rule-missed.jpg", "source": "synthetic", "expect": "error", "errorStepIndex": 1, "tag": "chain-rule-missed" },
+    { "file": "product-rule.jpg", "source": "synthetic", "expect": "error", "errorStepIndex": 1, "tag": "product-rule-misapplied" },
+    { "file": "parts-error.jpg", "source": "synthetic", "expect": "error", "errorStepIndex": 1, "tag": "integration-by-parts-error" },
+    { "file": "usub-bounds.jpg", "source": "synthetic", "expect": "error", "errorStepIndex": 2, "tag": "u-sub-bounds-error" },
+    { "file": "exponent-error.jpg", "source": "synthetic", "expect": "error", "errorStepIndex": 1, "tag": "exponent-rule-error" },
+    { "file": "blurry.jpg", "source": "synthetic", "expect": "unreadable" },
+    { "file": "grocery-list.jpg", "source": "synthetic", "expect": "not-math" },
+    { "file": "faint-math.jpg", "source": "synthetic", "expect": "unreadable" }
   ]
 }
