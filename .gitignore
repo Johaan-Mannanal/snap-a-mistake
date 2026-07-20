@@ -4,3 +4,4 @@ dist/
 server/golden/photos/
 .DS_Store
 .superpowers/
+.worktrees/
