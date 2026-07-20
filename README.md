@@ -26,6 +26,9 @@ photo → app (Expo/RN) → POST /analyze → server (Fastify, stateless)
 | Approved design spec (source of truth for scope/behavior) | `docs/superpowers/specs/2026-07-17-snap-a-mistake-design.md` |
 | Backend implementation plan (executed, complete) | `docs/superpowers/plans/2026-07-17-snap-a-mistake-backend.md` |
 | App implementation plan (executed, complete) | `docs/superpowers/plans/2026-07-18-snap-a-mistake-app.md` |
+| FERMAT license, citation, and attribution | [`server/golden/FERMAT-ATTRIBUTION.md`](server/golden/FERMAT-ATTRIBUTION.md) |
+| FERMAT source records, labels, pinned revision, and shard checksums | [`server/golden/fermat-provenance.json`](server/golden/fermat-provenance.json) |
+| Optional FERMAT subset importer (requires accepted FERMAT access and `HF_TOKEN`) | [`server/scripts/import-fermat.py`](server/scripts/import-fermat.py) |
 | Execution ledger: what was built, reviewed, fixed, deferred | `.superpowers/sdd/progress.md` (git-ignored scratch — read it before assuming anything is undone) |
 
 Every task was implemented via fresh-agent TDD with a two-stage review (spec compliance + code quality) and a final whole-branch review per plan. Deferred minor findings are listed at the bottom of the ledger.
@@ -34,7 +37,7 @@ Every task was implemented via fresh-agent TDD with a two-stage review (spec com
 
 ```bash
 npm install                  # root — installs all three workspaces
-npm test                     # 54 tests: shared 9, server 26, app 19
+npm test                     # 61 tests: shared 9, server 32, app 20
 npm run typecheck            # all workspaces
 
 # Server (needs server/.env — copy server/.env.example, add OPENAI_API_KEY)
@@ -55,7 +58,7 @@ cd app && npx expo start     # Expo Go; phone needs EXPO_PUBLIC_API_URL=http://<
 
 ## Current status (as of July 20)
 
-- Backend + app both complete, reviewed, merged to `main`. 54/54 tests, typecheck clean.
+- Backend + app both complete, reviewed, merged to `main`. 61/61 tests (shared 9, server 32, app 20), typecheck clean.
 - Live smoke test passed against the real OpenAI pipeline (~9.5s/analysis).
 - Golden manifest: **25 cases** — 15 generated baseline cases plus 10 curated FERMAT photographs (2 correct, 8 intentional errors across algebra/calculus). The generated baseline last passed 15/15; the FERMAT subset is committed and ready for its first paid pipeline run.
 - API key: in `server/.env` (git-ignored). **It was shared in a chat session — rotate it before the demo.**
