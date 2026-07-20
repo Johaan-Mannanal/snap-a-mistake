@@ -13,7 +13,7 @@ export function getSession(): Session {
   return session
 }
 export function setPhoto(uri: string): void {
-  session = { ...session, photoUri: uri, analysis: null }
+  session = { ...session, photoUri: uri, analysis: null, isRetry: false }
 }
 export function setAnalysis(a: AnalyzeResponse): void {
   const followUp = a.kind === 'analysis' && a.followUp ? a.followUp : session.followUp

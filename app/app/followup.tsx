@@ -23,7 +23,7 @@ export default function FollowUp() {
       </Text>
       <Text style={{ color: '#94a3b8', marginTop: 8 }}>Work it out on paper, then snap your solution.</Text>
       <Pressable
-        onPress={() => { startFollowUp(); router.replace('/') }}
+        onPress={() => { startFollowUp(); router.dismissTo('/') }}
         style={{ backgroundColor: '#6366f1', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 16 }}
       >
         <Text style={{ color: 'white', fontWeight: '700', fontSize: 15 }}>I'm done — check it</Text>

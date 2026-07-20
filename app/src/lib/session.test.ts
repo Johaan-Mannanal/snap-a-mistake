@@ -39,6 +39,14 @@ describe('session', () => {
     expect(s.analysis).toBeNull()
     expect(s.followUp?.problem).toBe('p')
   })
+  it('setPhoto consumes retry mode', () => {
+    setPhoto('file:///a.jpg')
+    setAnalysis(withFollowUp)
+    startFollowUp()
+    setPhoto('file:///b.jpg')
+    expect(getSession().isRetry).toBe(false)
+    expect(getSession().followUp?.problem).toBe('p')
+  })
   it('resetSession clears everything', () => {
     setPhoto('file:///a.jpg')
     startFollowUp()

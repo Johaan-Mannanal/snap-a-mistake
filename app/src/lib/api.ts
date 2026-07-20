@@ -17,17 +17,22 @@ export async function analyzePhoto(uri: string, fetchFn: typeof fetch = fetch): 
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 35_000)
-  let res: Response
+  let body: unknown
+  let status: number
   try {
-    res = await fetchFn(`${API_URL}/analyze`, { method: 'POST', body: form, signal: controller.signal })
-  } catch {
-    throw new ApiError({ kind: 'network' })
+    let res: Response
+    try {
+      res = await fetchFn(`${API_URL}/analyze`, { method: 'POST', body: form, signal: controller.signal })
+    } catch {
+      throw new ApiError({ kind: 'network' })
+    }
+    if (!res.ok) throw new ApiError({ kind: 'server', status: res.status })
+    status = res.status
+    body = await res.json().catch(() => null)
   } finally {
     clearTimeout(timer)
   }
-  if (!res.ok) throw new ApiError({ kind: 'server', status: res.status })
-  const body = await res.json().catch(() => null)
   const parsed = AnalyzeResponseSchema.safeParse(body)
-  if (!parsed.success) throw new ApiError({ kind: 'server', status: res.status })
+  if (!parsed.success) throw new ApiError({ kind: 'server', status })
   return parsed.data
 }

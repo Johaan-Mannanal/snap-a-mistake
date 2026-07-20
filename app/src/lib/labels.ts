@@ -7,6 +7,7 @@ const LABELS: Record<MisconceptionTag, string> = {
   'chain-rule-missed': 'Chain rule missed',
   'product-rule-misapplied': 'Product rule misapplied',
   'integration-by-parts-error': 'Integration by parts error',
+  // U+2011 non-breaking hyphen (not a plain hyphen) — intentional, keeps "U-substitution" from wrapping mid-word.
   'u-sub-bounds-error': 'U‑substitution bounds error',
   'algebraic-slip': 'Algebraic slip',
   'exponent-rule-error': 'Exponent rule error',

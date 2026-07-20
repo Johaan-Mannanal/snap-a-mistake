@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import type { AnalyzeResponse } from '@snap/shared'
-import { ApiError, analyzePhoto } from '../src/lib/api'
-import { getSession, setAnalysis, startFollowUp, resetSession } from '../src/lib/session'
+import { analyzePhoto } from '../src/lib/api'
+import { getSession, setAnalysis, resetSession } from '../src/lib/session'
 import { recordAnalysis } from '../src/lib/history'
 import { tagLabel } from '../src/lib/labels'
 import { Screen } from '../src/components/Screen'
@@ -43,7 +43,7 @@ export default function Analyze() {
         setAnalysis(r)
         setResult(r)
         if (r.kind === 'analysis') {
-          void recordAnalysis({ tag: r.misconceptionTag, correct: r.errorStepIndex === null })
+          recordAnalysis({ tag: r.misconceptionTag, correct: r.errorStepIndex === null }).catch(() => {})
         }
       })
       .catch((e: unknown) => {
@@ -59,7 +59,7 @@ export default function Analyze() {
     return () => clearInterval(t)
   }, [result, failed])
 
-  const snapAnother = () => { resetSession(); router.replace('/') }
+  const snapAnother = () => { resetSession(); router.dismissTo('/') }
 
   if (failed) {
     return (
@@ -119,7 +119,7 @@ export default function Analyze() {
       ) : suspect ? (
         <View style={{ backgroundColor: '#451a03', borderRadius: 12, padding: 16 }}>
           <Text style={{ color: '#fbbf24', fontSize: 17, fontWeight: '700' }}>
-            I'm not fully sure about step {result.errorStepIndex} — want to walk through it?
+            I'm not fully sure about step {result.errorStepIndex! + 1} — want to walk through it?
           </Text>
         </View>
       ) : null}
