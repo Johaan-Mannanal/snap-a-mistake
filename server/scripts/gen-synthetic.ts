@@ -2,8 +2,7 @@
 // Run from server/: npm run gen-synthetic -w server
 import sharp from 'sharp'
 import path from 'node:path'
-
-const OUT = '/Users/johaanmannanal/Documents/GitHub/snap-a-mistake/server/golden/photos'
+import { GOLDEN_PHOTO_DIR } from './golden-fixtures.js'
 
 const FONTS = ['Bradley Hand, cursive', 'Comic Sans MS, cursive', 'Marker Felt, fantasy', 'Chalkboard, cursive']
 
@@ -48,7 +47,7 @@ async function main() {
     const faint = c.file === 'faint-math.jpg'
     let img = sharp(page(c.lines, FONTS[i % FONTS.length]!, faint ? { ink: '#8a8678', size: 34 } : {}))
     if (c.blur) img = img.blur(c.blur)
-    await img.jpeg({ quality: 88 }).toFile(path.join(OUT, c.file))
+    await img.jpeg({ quality: 88 }).toFile(path.join(GOLDEN_PHOTO_DIR, c.file))
     console.log('wrote', c.file)
   }
 }
