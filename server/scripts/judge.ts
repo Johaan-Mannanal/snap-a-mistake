@@ -23,10 +23,6 @@ export const GoldenCaseSchema = z.object({
     const hasAnchor = value.errorStepAnchor !== undefined
     if (hasIndex === hasAnchor)
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['errorStepIndex'], message: 'error cases require exactly one locator' })
-    if (value.source === 'fermat' && !hasAnchor)
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['errorStepAnchor'], message: 'FERMAT error cases require errorStepAnchor' })
-    if (value.source === 'synthetic' && !hasIndex)
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['errorStepIndex'], message: 'synthetic error cases require errorStepIndex' })
     if (value.tag === undefined)
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['tag'], message: 'error cases require tag' })
   } else {
