@@ -49,7 +49,7 @@ const pipelineErrorEntry: GoldenAuditEntry = {
   kind: 'pipeline-error',
   file: 'error.jpg',
   sourceId: 'img_123_pert_3.1',
-  expected: { expect: 'error', errorStepIndex: 2, tag: 'sign-error' },
+  expected: { expect: 'error', errorStepAnchor: { all: ['x^{-1}'] }, tag: 'sign-error' },
   pipelineError: 'request timed out; Authorization: Bearer secret-authorization; apiKey=secret-api-key; base64=secret-image-data',
 }
 
@@ -69,7 +69,10 @@ describe('appendGoldenAudit', () => {
       version: 1,
       entries: [
         { kind: 'response', actual: { steps: actual.steps }, judgment: { pass: true, detail: 'ok' } },
-        { kind: 'pipeline-error', sourceId: 'img_123_pert_3.1' },
+        {
+          kind: 'pipeline-error', sourceId: 'img_123_pert_3.1',
+          expected: { errorStepAnchor: { all: ['x^{-1}'] } },
+        },
       ],
     })
     expect(document.generatedAt).toEqual(expect.any(String))

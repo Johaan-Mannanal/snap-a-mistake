@@ -3,7 +3,7 @@ import path from 'node:path'
 import { AnalyzeResponseSchema, type AnalyzeResponse } from '@snap/shared'
 import type { GoldenCase, judge } from './judge.js'
 
-type GoldenAuditExpected = Pick<GoldenCase, 'expect' | 'errorStepIndex' | 'tag'>
+type GoldenAuditExpected = Pick<GoldenCase, 'expect' | 'errorStepIndex' | 'errorStepAnchor' | 'tag'>
 type GoldenJudgment = ReturnType<typeof judge>
 
 type GoldenAuditCommon = {
@@ -35,6 +35,7 @@ function serializableEntry(entry: GoldenAuditEntry): GoldenAuditEntry {
     expected: {
       expect: entry.expected.expect,
       ...(entry.expected.errorStepIndex === undefined ? {} : { errorStepIndex: entry.expected.errorStepIndex }),
+      ...(entry.expected.errorStepAnchor === undefined ? {} : { errorStepAnchor: entry.expected.errorStepAnchor }),
       ...(entry.expected.tag === undefined ? {} : { tag: entry.expected.tag }),
     },
   }

@@ -18,8 +18,39 @@ const locatedStep = (index: number, verdict: 'wrong' | 'suspect') => ({
 })
 
 describe('GoldenCaseSchema', () => {
-  it('requires an index and tag for error cases', () => {
+  it('requires a locator and tag for error cases', () => {
     expect(() => GoldenCaseSchema.parse({ file: 'a.jpg', source: 'synthetic', expect: 'error' })).toThrow()
+  })
+
+  it('accepts a semantic locator for FERMAT errors', () => {
+    expect(GoldenCaseSchema.parse({
+      file: 'photo.jpg', source: 'fermat', sourceId: 'img_1', expect: 'error',
+      errorStepAnchor: { all: ['x^{-1}'] }, tag: 'notation-error',
+    })).toMatchObject({ errorStepAnchor: { all: ['x^{-1}'] } })
+  })
+
+  it.each([
+    {
+      file: 'fermat-index.jpg', source: 'fermat', sourceId: 'img_1', expect: 'error',
+      errorStepIndex: 2, tag: 'notation-error',
+    },
+    {
+      file: 'synthetic-anchor.jpg', source: 'synthetic', expect: 'error',
+      errorStepAnchor: { all: ['x^{-1}'] }, tag: 'notation-error',
+    },
+    {
+      file: 'both.jpg', source: 'fermat', sourceId: 'img_1', expect: 'error',
+      errorStepIndex: 2, errorStepAnchor: { all: ['x^{-1}'] }, tag: 'notation-error',
+    },
+    {
+      file: 'neither.jpg', source: 'fermat', sourceId: 'img_1', expect: 'error', tag: 'notation-error',
+    },
+    {
+      file: 'empty-anchor.jpg', source: 'fermat', sourceId: 'img_1', expect: 'error',
+      errorStepAnchor: { all: [] }, tag: 'notation-error',
+    },
+  ] as const)('rejects invalid error locator %s', (entry) => {
+    expect(() => GoldenCaseSchema.parse(entry)).toThrow()
   })
 
   it('requires a source ID for FERMAT cases', () => {
@@ -37,7 +68,7 @@ describe('GoldenCaseSchema', () => {
     (outcome) => {
       expect(() => GoldenCaseSchema.parse({
         file: 'a.jpg', source: 'synthetic', expect: outcome,
-        errorStepIndex: 1, tag: 'sign-error',
+        errorStepIndex: 1, errorStepAnchor: { all: ['x'] }, tag: 'sign-error',
       })).toThrow()
     },
   )
@@ -84,6 +115,46 @@ describe('judge', () => {
     })).pass).toBe(true)
     expect(judge(expected, analysis({ errorStepIndex: 2, misconceptionTag: 'algebraic-slip' })).pass).toBe(false)
     expect(judge(expected, analysis({ errorStepIndex: 0, misconceptionTag: 'sign-error' })).pass).toBe(false)
+  })
+
+  it.each([8, 9])('passes a FERMAT anchor at runtime index %i', (index) => {
+    const expected: GoldenCase = {
+      file: 'fermat.jpg', source: 'fermat', sourceId: 'img_1', expect: 'error',
+      errorStepAnchor: { all: ['x^{-1}'] }, tag: 'notation-error',
+    }
+    const actual = analysis({
+      steps: [{ ...locatedStep(index, 'wrong'), latex: '\\tan^{-1}y=x^{-1}+C' }],
+      errorStepIndex: index,
+      misconceptionTag: 'notation-error',
+    })
+
+    expect(judge(expected, actual)).toMatchObject({ pass: true })
+  })
+
+  it('fails a FERMAT selection whose located step does not match its anchor', () => {
+    const expected: GoldenCase = {
+      file: 'fermat.jpg', source: 'fermat', sourceId: 'img_1', expect: 'error',
+      errorStepAnchor: { all: ['x^{-1}'] }, tag: 'notation-error',
+    }
+    const actual = analysis({
+      steps: [locatedStep(8, 'wrong')], errorStepIndex: 8, misconceptionTag: 'notation-error',
+    })
+
+    expect(judge(expected, actual)).toMatchObject({ pass: false, detail: expect.stringContaining('missing: x^{-1}') })
+  })
+
+  it('fails a FERMAT selection with a forbidden anchor fragment', () => {
+    const expected: GoldenCase = {
+      file: 'fermat.jpg', source: 'fermat', sourceId: 'img_1', expect: 'error',
+      errorStepAnchor: { all: ['x^{-1}'], none: ['tan^{-1}'] }, tag: 'notation-error',
+    }
+    const actual = analysis({
+      steps: [{ ...locatedStep(8, 'wrong'), latex: '\\tan^{-1}y=x^{-1}+C' }],
+      errorStepIndex: 8,
+      misconceptionTag: 'notation-error',
+    })
+
+    expect(judge(expected, actual)).toMatchObject({ pass: false, detail: expect.stringContaining('forbidden: tan^{-1}') })
   })
 
   it('fails an expected error when the verifier disagrees', () => {
