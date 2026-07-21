@@ -50,6 +50,8 @@ describe('analyzeSteps', () => {
       previousIndex = index
     }
 
+    expect(text).toContain('choose the FIRST applicable category')
+    expect(text).toContain('10. other (last resort only)')
     expect(text).toMatch(/inverse-function notation.*reciprocal.*notation-error/i)
     expect(text).toMatch(/incorrect log-ratio recombination.*correct integration.*algebraic-slip/i)
     expect(text).toMatch(/replacing the established cosine term.*final integration-by-parts answer.*integration-by-parts-error/i)
