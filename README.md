@@ -58,6 +58,12 @@ Key decisions made during that workflow:
 
 Every task was implemented via fresh-agent TDD with a two-stage review (spec compliance + code quality) and a final whole-branch review per plan. Deferred minor findings are listed at the bottom of the ledger.
 
+## Submission kit
+
+The [ready-to-paste Devpost form copy](docs/submission/DEVPOST.md) and [timed
+recording plan](docs/submission/DEMO-SCRIPT.md) are prepared for the final
+submission.
+
 ## Running things
 
 ### Judge quickstart — no API key
