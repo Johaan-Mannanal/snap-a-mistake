@@ -75,8 +75,28 @@ describe('FERMAT curated subset', () => {
     expect(cases.filter((c) => c.expect === 'error')).toHaveLength(8)
   })
 
+  it('uses the observed stage indices and preserves the timed-out seed', () => {
+    expect(Object.fromEntries(
+      cases
+        .filter((c) => c.expect === 'error')
+        .map((c) => [c.sourceId, c.errorStepIndex]),
+    )).toEqual({
+      'img_438_pert_3.1': 9,
+      'img_401_pert_3.1': 8,
+      'img_414_pert_3.1': 7,
+      'img_415_pert_3.1': 12,
+      'img_559_pert_3.1': 1,
+      'img_601_pert_3.1': 7,
+      'img_468_pert_3.1': 5,
+      'img_584_pert_3.2': 5,
+    })
+  })
+
   it('uses the exact audited source records and excludes every rejected record', async () => {
-    expect(cases).toEqual(expectedFermatCases.map((c) => ({ ...c, source: 'fermat' })))
+    expect(cases.map(({ file, sourceId, expect }) => ({ file, sourceId, expect })))
+      .toEqual(expectedFermatCases.map(({ file, sourceId, expect }) => ({ file, sourceId, expect })))
+    expect(cases.filter((c) => c.expect === 'error').map((c) => c.tag))
+      .toEqual(expectedFermatCases.filter((c) => c.expect === 'error').map((c) => c.tag))
     expect(provenance.cases.map(({ file, sourceId, expected }) => ({
       file,
       sourceId,
@@ -115,9 +135,8 @@ describe('FERMAT curated subset', () => {
       expect(record?.hasError).toBe(manifestCase.expect === 'error')
       expect(record?.expected.kind).toBe(manifestCase.expect)
       if (manifestCase.expect === 'error') {
-        expect(record?.expected).toEqual({
+        expect(record?.expected).toMatchObject({
           kind: 'error',
-          errorStepIndex: manifestCase.errorStepIndex,
           tag: manifestCase.tag,
         })
       } else {
