@@ -1,0 +1,74 @@
+[
+  {
+    "sourceId": "img_438_pert_3.1",
+    "actualIndex": 8,
+    "latex": "\\tan^{-1}y=x^{-1}+C,",
+    "plain": "Inverse tangent of y equals x to the power negative one plus C.",
+    "actualTag": "formula-misapplied",
+    "verifierAgreed": true,
+    "verdict": "wrong"
+  },
+  {
+    "sourceId": "img_401_pert_3.1",
+    "actualIndex": 8,
+    "latex": "\\text{or}\\quad \\frac{dy}{dx}=\\frac{y}{2}\\left[\\frac{1}{x-3}+\\frac{2x}{x^2+4}-\\frac{3x+2}{3x^2+4x+5}\\right]",
+    "plain": "Or, dy by dx equals y over 2 times the quantity one over x minus 3 plus 2x over x squared plus 4 minus 3x plus 2 over 3x squared plus 4x plus 5.",
+    "actualTag": "algebraic-slip",
+    "verifierAgreed": true,
+    "verdict": "wrong"
+  },
+  {
+    "sourceId": "img_414_pert_3.1",
+    "actualIndex": 15,
+    "latex": "=\\frac{11}{4}\\log\\left|\\frac{x+3}{x+1}\\right|+\\frac{5}{2(x+1)}+C",
+    "plain": "Equals 11 over 4 times log of the absolute value of (x plus 3) over (x plus 1), plus 5 over (2 times (x plus 1)), plus C.",
+    "actualTag": "formula-misapplied",
+    "verifierAgreed": true,
+    "verdict": "wrong"
+  },
+  {
+    "sourceId": "img_415_pert_3.1",
+    "actualIndex": 12,
+    "latex": "I=\\int e^x\\sin x\\,dx=\\frac{1}{2}e^x(\\sin x-\\sin x)+C",
+    "plain": "I equals the integral of e to the x sine x d x, equals one half e to the x times sine x minus sine x, plus C.",
+    "actualTag": "notation-error",
+    "verifierAgreed": true,
+    "verdict": "wrong"
+  },
+  {
+    "sourceId": "img_559_pert_3.1",
+    "actualIndex": 1,
+    "latex": "-4xy+8y^2+5x-3y",
+    "plain": "minus 4 x y plus 8 y squared plus 5 x minus 3 y",
+    "actualTag": "other",
+    "verifierAgreed": true,
+    "verdict": "wrong"
+  },
+  {
+    "sourceId": "img_601_pert_3.1",
+    "actualIndex": 7,
+    "latex": "\\left\\{x:x=\\frac{n}{n-1},\\ \\text{where }n\\text{ is a natural number}",
+    "plain": "{x such that x equals n over n minus 1, where n is a natural number",
+    "actualTag": "formula-misapplied",
+    "verifierAgreed": true,
+    "verdict": "wrong"
+  },
+  {
+    "sourceId": "img_468_pert_3.1",
+    "actualIndex": 5,
+    "latex": "\\operatorname{adj}A=\\begin{bmatrix}A_{11}&A_{21}\\\\A_{12}&A_{22}\\end{bmatrix}=\\begin{bmatrix}A_{21}&A_{11}\\\\A_{22}&A_{12}\\end{bmatrix}=\\begin{bmatrix}-3&4\\\\2&-1\\end{bmatrix}",
+    "plain": "adj A equals the matrix with rows A sub 11, A sub 21 and A sub 12, A sub 22, equals the matrix with rows A sub 21, A sub 11 and A sub 22, A sub 12, equals the matrix with rows negative 3, 4 and 2, negative 1.",
+    "actualTag": "equals-abuse",
+    "verifierAgreed": true,
+    "verdict": "wrong"
+  },
+  {
+    "sourceId": "img_584_pert_3.2",
+    "actualIndex": 5,
+    "latex": "P(2)=2^2+2\\cdot2=4+4=8",
+    "plain": "P of 2 equals 2 squared plus 2 times 2 equals 4 plus 4 equals 8",
+    "actualTag": "sign-error",
+    "verifierAgreed": true,
+    "verdict": "wrong"
+  }
+]

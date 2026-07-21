@@ -29,15 +29,18 @@ describe('GoldenCaseSchema', () => {
     })).toMatchObject({ errorStepAnchor: { all: ['x^{-1}'] } })
   })
 
-  it('temporarily permits either single locator for either source during manifest migration', () => {
-    expect(GoldenCaseSchema.parse({
+  it('rejects numeric locators for FERMAT errors', () => {
+    expect(() => GoldenCaseSchema.parse({
       file: 'fermat-index.jpg', source: 'fermat', sourceId: 'img_1', expect: 'error',
       errorStepIndex: 2, tag: 'notation-error',
-    })).toMatchObject({ errorStepIndex: 2 })
-    expect(GoldenCaseSchema.parse({
+    })).toThrow()
+  })
+
+  it('rejects semantic anchors for synthetic errors', () => {
+    expect(() => GoldenCaseSchema.parse({
       file: 'synthetic-anchor.jpg', source: 'synthetic', expect: 'error',
       errorStepAnchor: { all: ['x^{-1}'] }, tag: 'notation-error',
-    })).toMatchObject({ errorStepAnchor: { all: ['x^{-1}'] } })
+    })).toThrow()
   })
 
   it.each([

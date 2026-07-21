@@ -17,13 +17,13 @@
     { "file": "faint-math.jpg", "source": "synthetic", "expect": "unreadable" },
     { "file": "fermat-img_486_pert_5_1.jpg", "source": "fermat", "sourceId": "img_486_pert_5.1", "expect": "correct" },
     { "file": "fermat-img_400_pert_5_1.jpg", "source": "fermat", "sourceId": "img_400_pert_5.1", "expect": "correct" },
-    { "file": "fermat-img_438_pert_3_1.jpg", "source": "fermat", "sourceId": "img_438_pert_3.1", "expect": "error", "errorStepIndex": 3, "tag": "notation-error" },
-    { "file": "fermat-img_401_pert_3_1.jpg", "source": "fermat", "sourceId": "img_401_pert_3.1", "expect": "error", "errorStepIndex": 4, "tag": "algebraic-slip" },
-    { "file": "fermat-img_414_pert_3_1.jpg", "source": "fermat", "sourceId": "img_414_pert_3.1", "expect": "error", "errorStepIndex": 7, "tag": "algebraic-slip" },
-    { "file": "fermat-img_415_pert_3_1.jpg", "source": "fermat", "sourceId": "img_415_pert_3.1", "expect": "error", "errorStepIndex": 5, "tag": "integration-by-parts-error" },
-    { "file": "fermat-img_559_pert_3_1.jpg", "source": "fermat", "sourceId": "img_559_pert_3.1", "expect": "error", "errorStepIndex": 3, "tag": "notation-error" },
-    { "file": "fermat-img_601_pert_3_1.jpg", "source": "fermat", "sourceId": "img_601_pert_3.1", "expect": "error", "errorStepIndex": 1, "tag": "sign-error" },
-    { "file": "fermat-img_468_pert_3_1.jpg", "source": "fermat", "sourceId": "img_468_pert_3.1", "expect": "error", "errorStepIndex": 2, "tag": "formula-misapplied" },
-    { "file": "fermat-img_584_pert_3_2.jpg", "source": "fermat", "sourceId": "img_584_pert_3.2", "expect": "error", "errorStepIndex": 2, "tag": "sign-error" }
+    { "file": "fermat-img_438_pert_3_1.jpg", "source": "fermat", "sourceId": "img_438_pert_3.1", "expect": "error", "errorStepAnchor": { "all": ["x^{-1}"] }, "tag": "notation-error" },
+    { "file": "fermat-img_401_pert_3_1.jpg", "source": "fermat", "sourceId": "img_401_pert_3.1", "expect": "error", "errorStepAnchor": { "all": ["3x+2", "3x^2+4x+5"] }, "tag": "algebraic-slip" },
+    { "file": "fermat-img_414_pert_3_1.jpg", "source": "fermat", "sourceId": "img_414_pert_3.1", "expect": "error", "errorStepAnchor": { "all": ["\\frac{x+3}{x+1}"] }, "tag": "algebraic-slip" },
+    { "file": "fermat-img_415_pert_3_1.jpg", "source": "fermat", "sourceId": "img_415_pert_3.1", "expect": "error", "errorStepAnchor": { "all": ["\\sin x-\\sin x"] }, "tag": "integration-by-parts-error" },
+    { "file": "fermat-img_559_pert_3_1.jpg", "source": "fermat", "sourceId": "img_559_pert_3.1", "expect": "error", "errorStepAnchor": { "all": ["2x-4xy"], "none": ["2x^2-4xy"] }, "tag": "notation-error" },
+    { "file": "fermat-img_601_pert_3_1.jpg", "source": "fermat", "sourceId": "img_601_pert_3.1", "expect": "error", "errorStepAnchor": { "all": ["\\frac{n}{n-1}"] }, "tag": "sign-error" },
+    { "file": "fermat-img_468_pert_3_1.jpg", "source": "fermat", "sourceId": "img_468_pert_3.1", "expect": "error", "errorStepAnchor": { "all": ["-3&4", "2&-1"] }, "tag": "formula-misapplied" },
+    { "file": "fermat-img_584_pert_3_2.jpg", "source": "fermat", "sourceId": "img_584_pert_3.2", "expect": "error", "errorStepAnchor": { "all": ["P(2)=2^2+2\\cdot2"] }, "tag": "sign-error" }
   ]
 }

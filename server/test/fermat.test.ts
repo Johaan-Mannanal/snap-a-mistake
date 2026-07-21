@@ -40,15 +40,37 @@ const provenance = JSON.parse(
 const expectedFermatCases = [
   { file: 'fermat-img_486_pert_5_1.jpg', sourceId: 'img_486_pert_5.1', expect: 'correct' },
   { file: 'fermat-img_400_pert_5_1.jpg', sourceId: 'img_400_pert_5.1', expect: 'correct' },
-  { file: 'fermat-img_438_pert_3_1.jpg', sourceId: 'img_438_pert_3.1', expect: 'error', errorStepIndex: 3, tag: 'notation-error' },
-  { file: 'fermat-img_401_pert_3_1.jpg', sourceId: 'img_401_pert_3.1', expect: 'error', errorStepIndex: 4, tag: 'algebraic-slip' },
-  { file: 'fermat-img_414_pert_3_1.jpg', sourceId: 'img_414_pert_3.1', expect: 'error', errorStepIndex: 7, tag: 'algebraic-slip' },
-  { file: 'fermat-img_415_pert_3_1.jpg', sourceId: 'img_415_pert_3.1', expect: 'error', errorStepIndex: 5, tag: 'integration-by-parts-error' },
-  { file: 'fermat-img_559_pert_3_1.jpg', sourceId: 'img_559_pert_3.1', expect: 'error', errorStepIndex: 3, tag: 'notation-error' },
-  { file: 'fermat-img_601_pert_3_1.jpg', sourceId: 'img_601_pert_3.1', expect: 'error', errorStepIndex: 1, tag: 'sign-error' },
-  { file: 'fermat-img_468_pert_3_1.jpg', sourceId: 'img_468_pert_3.1', expect: 'error', errorStepIndex: 2, tag: 'formula-misapplied' },
-  { file: 'fermat-img_584_pert_3_2.jpg', sourceId: 'img_584_pert_3.2', expect: 'error', errorStepIndex: 2, tag: 'sign-error' },
+  { file: 'fermat-img_438_pert_3_1.jpg', sourceId: 'img_438_pert_3.1', expect: 'error', tag: 'notation-error' },
+  { file: 'fermat-img_401_pert_3_1.jpg', sourceId: 'img_401_pert_3.1', expect: 'error', tag: 'algebraic-slip' },
+  { file: 'fermat-img_414_pert_3_1.jpg', sourceId: 'img_414_pert_3.1', expect: 'error', tag: 'algebraic-slip' },
+  { file: 'fermat-img_415_pert_3_1.jpg', sourceId: 'img_415_pert_3.1', expect: 'error', tag: 'integration-by-parts-error' },
+  { file: 'fermat-img_559_pert_3_1.jpg', sourceId: 'img_559_pert_3.1', expect: 'error', tag: 'notation-error' },
+  { file: 'fermat-img_601_pert_3_1.jpg', sourceId: 'img_601_pert_3.1', expect: 'error', tag: 'sign-error' },
+  { file: 'fermat-img_468_pert_3_1.jpg', sourceId: 'img_468_pert_3.1', expect: 'error', tag: 'formula-misapplied' },
+  { file: 'fermat-img_584_pert_3_2.jpg', sourceId: 'img_584_pert_3.2', expect: 'error', tag: 'sign-error' },
 ]
+
+const expectedAnchors = {
+  'img_438_pert_3.1': { all: ['x^{-1}'] },
+  'img_401_pert_3.1': { all: ['3x+2', '3x^2+4x+5'] },
+  'img_414_pert_3.1': { all: ['\\frac{x+3}{x+1}'] },
+  'img_415_pert_3.1': { all: ['\\sin x-\\sin x'] },
+  'img_559_pert_3.1': { all: ['2x-4xy'], none: ['2x^2-4xy'] },
+  'img_601_pert_3.1': { all: ['\\frac{n}{n-1}'] },
+  'img_468_pert_3.1': { all: ['-3&4', '2&-1'] },
+  'img_584_pert_3.2': { all: ['P(2)=2^2+2\\cdot2'] },
+} as const
+
+const expectedProvenanceErrorIndices = {
+  'img_438_pert_3.1': 3,
+  'img_401_pert_3.1': 4,
+  'img_414_pert_3.1': 7,
+  'img_415_pert_3.1': 5,
+  'img_559_pert_3.1': 3,
+  'img_601_pert_3.1': 1,
+  'img_468_pert_3.1': 2,
+  'img_584_pert_3.2': 2,
+} as const
 
 const rejectedSourceIds = [
   'img_423_pert_3.1',
@@ -76,17 +98,33 @@ describe('FERMAT curated subset', () => {
   })
 
   it('uses the exact audited source records and excludes every rejected record', async () => {
-    expect(cases).toEqual(expectedFermatCases.map((c) => ({ ...c, source: 'fermat' })))
-    expect(provenance.cases.map(({ file, sourceId, expected }) => ({
-      file,
-      sourceId,
-      expect: expected.kind,
-      ...(expected.kind === 'error' ? {
-        errorStepIndex: expected.errorStepIndex,
-        tag: expected.tag,
+    expect(cases).toEqual(expectedFermatCases.map((c) => ({
+      ...c,
+      source: 'fermat',
+      ...(c.expect === 'error' ? {
+        errorStepAnchor: expectedAnchors[c.sourceId as keyof typeof expectedAnchors],
       } : {}),
     })))
-      .toEqual(expectedFermatCases)
+    expect(cases.filter((c) => c.expect === 'error').map((c) => ({
+      sourceId: c.sourceId,
+      errorStepIndex: c.errorStepIndex,
+      errorStepAnchor: c.errorStepAnchor,
+      tag: c.tag,
+    }))).toEqual(Object.entries(expectedAnchors).map(([sourceId, errorStepAnchor]) => ({
+      sourceId,
+      errorStepIndex: undefined,
+      errorStepAnchor,
+      tag: expectedFermatCases.find((c) => c.sourceId === sourceId)?.tag,
+    })))
+    expect(provenance.cases.filter((c) => c.expected.kind === 'error').map((c) => ({
+      sourceId: c.sourceId,
+      errorStepIndex: c.expected.kind === 'error' ? c.expected.errorStepIndex : undefined,
+      tag: c.expected.kind === 'error' ? c.expected.tag : undefined,
+    }))).toEqual(Object.entries(expectedProvenanceErrorIndices).map(([sourceId, errorStepIndex]) => ({
+      sourceId,
+      errorStepIndex,
+      tag: expectedFermatCases.find((c) => c.sourceId === sourceId)?.tag,
+    })))
     expect(cases.map((c) => c.sourceId)).not.toEqual(expect.arrayContaining(rejectedSourceIds))
     expect(provenance.cases.map((c) => c.sourceId)).not.toEqual(expect.arrayContaining(rejectedSourceIds))
     const committedPhotos = await readdir(path.join(goldenDir, 'photos'))
@@ -117,7 +155,9 @@ describe('FERMAT curated subset', () => {
       if (manifestCase.expect === 'error') {
         expect(record?.expected).toEqual({
           kind: 'error',
-          errorStepIndex: manifestCase.errorStepIndex,
+          errorStepIndex: expectedProvenanceErrorIndices[
+            manifestCase.sourceId as keyof typeof expectedProvenanceErrorIndices
+          ],
           tag: manifestCase.tag,
         })
       } else {
