@@ -117,4 +117,3 @@ Tests use it to prove:
 3. Root typecheck, diff check, manifest/provenance integrity, and secret/artifact scans.
 4. Independent task reviews and a final whole-branch review.
 5. A new paid FERMAT run only after no-cost gates pass and the user separately authorizes the spend.
-

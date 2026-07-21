@@ -42,4 +42,3 @@ Audit-write failures are fatal because continuing would spend money without pres
 ## Scope
 
 This change adds diagnostics and evidence-backed calibration only. It does not change production API responses, prompts, models, timeouts, retry policy, curated images, tags, or provenance.
-

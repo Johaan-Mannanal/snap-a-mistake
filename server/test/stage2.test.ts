@@ -36,12 +36,14 @@ describe('analyzeSteps', () => {
     const text = JSON.stringify(call.messages)
 
     const decisionOrder = [
-      '1. method-specific rule',
+      '1. method-specific rule: chain-rule-missed, product-rule-misapplied, integration-by-parts-error, u-sub-bounds-error, distribution-error, or exponent-rule-error',
       '2. formula-misapplied',
       '3. sign-error',
       '4. notation-error',
       '5. equals-abuse',
       '6. algebraic-slip',
+      '7. dropped-term',
+      '8. other (last resort only)',
     ]
     let previousIndex = -1
     for (const category of decisionOrder) {
@@ -51,7 +53,20 @@ describe('analyzeSteps', () => {
     }
 
     expect(text).toContain('choose the FIRST applicable category')
-    expect(text).toContain('10. other (last resort only)')
+    const decisionGuide = text.slice(
+      text.indexOf('When more than one tag could describe an error'),
+      text.indexOf('Classification boundaries:'),
+    )
+    for (const tag of [
+      'chain-rule-missed',
+      'product-rule-misapplied',
+      'integration-by-parts-error',
+      'u-sub-bounds-error',
+      'distribution-error',
+      'exponent-rule-error',
+    ]) {
+      expect(decisionGuide.match(new RegExp(tag, 'g'))).toHaveLength(1)
+    }
     expect(text).toMatch(/inverse-function notation.*reciprocal.*notation-error/i)
     expect(text).toMatch(/incorrect log-ratio recombination.*correct integration.*algebraic-slip/i)
     expect(text).toMatch(/replacing the established cosine term.*final integration-by-parts answer.*integration-by-parts-error/i)

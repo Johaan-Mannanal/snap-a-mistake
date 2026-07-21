@@ -60,7 +60,7 @@ needed for the importer tests.
 
 **Conventions that will bite you if you don't know them:** the `app` workspace uses extensionless relative imports (Metro can't resolve `.js`→`.ts`); `server`/`shared` use `.js`-suffixed imports (Node ESM requires them). Model IDs and the legibility threshold live in `server/src/config.ts`. OpenAI JSON mode requires the literal word "JSON" in prompts. Copy strings in the app are tuned demo copy — don't reword casually.
 
-## Current status (as of July 20)
+## Current status (as of July 21)
 
 - Backend + app both complete, reviewed, merged to `main`. Root `npm test` runs all workspace Vitest suites plus four stock-Python importer tests; typecheck is clean.
 - Live smoke test passed against the real OpenAI pipeline (~9.5s/analysis).

@@ -29,16 +29,14 @@ const TAG_GUIDE = MISCONCEPTION_TAGS
   .join('\n')
 
 const TAG_DECISION_GUIDE = `When more than one tag could describe an error, choose the FIRST applicable category in this decision order:
-  1. method-specific rule: chain-rule-missed, product-rule-misapplied, integration-by-parts-error, or u-sub-bounds-error
+  1. method-specific rule: chain-rule-missed, product-rule-misapplied, integration-by-parts-error, u-sub-bounds-error, distribution-error, or exponent-rule-error
   2. formula-misapplied
   3. sign-error
   4. notation-error
   5. equals-abuse
   6. algebraic-slip
   7. dropped-term
-  8. distribution-error
-  9. exponent-rule-error
-  10. other (last resort only)
+  8. other (last resort only)
 
 Classification boundaries:
   - Confusing inverse-function notation with a reciprocal is notation-error.

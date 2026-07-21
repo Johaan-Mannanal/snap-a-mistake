@@ -13,7 +13,7 @@ type ReplayRecord = {
   plain: string
   actualTag: NonNullable<Extract<AnalyzeResponse, { kind: 'analysis' }>['misconceptionTag']>
   verifierAgreed: boolean
-  verdict: 'wrong'
+  verdict: 'wrong' | 'suspect'
 }
 
 const serverDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -30,7 +30,7 @@ const fermatErrors = manifest.cases.filter((candidate) =>
 const analysisFor = (
   record: ReplayRecord,
   misconceptionTag: ReplayRecord['actualTag'],
-): AnalyzeResponse => ({
+): Extract<AnalyzeResponse, { kind: 'analysis' }> => ({
   kind: 'analysis',
   steps: [{
     index: record.actualIndex,
@@ -81,6 +81,39 @@ describe('FERMAT audit run 2 replay', () => {
         detail: expect.stringContaining('tag mismatch'),
       })
     }
+  })
+
+  it.each([
+    [
+      'verifier disagreement',
+      (record: ReplayRecord, expected: typeof fermatErrors[number]) => judge(expected, analysisFor({
+        ...record, verifierAgreed: false,
+      }, expected.tag!)),
+      'verifier disagreed',
+    ],
+    [
+      'an absent selected runtime step',
+      (record: ReplayRecord, expected: typeof fermatErrors[number]) => judge(expected, {
+        ...analysisFor(record, expected.tag!),
+        steps: [],
+      }),
+      'is absent from returned steps',
+    ],
+    [
+      'a suspect selected runtime step',
+      (record: ReplayRecord, expected: typeof fermatErrors[number]) => judge(expected, analysisFor({
+        ...record, verdict: 'suspect',
+      }, expected.tag!)),
+      'has verdict suspect',
+    ],
+  ])('rejects an anchored replay response with %s', (_caseName, mutate, detail) => {
+    const record = replay.find((candidate) => candidate.sourceId !== 'img_559_pert_3.1')!
+    const expected = fermatErrors.find((candidate) => candidate.sourceId === record.sourceId)!
+
+    expect(mutate(record, expected)).toMatchObject({
+      pass: false,
+      detail: expect.stringContaining(detail),
+    })
   })
 
   it('keeps the replay fixture compact and free of sensitive audit material', () => {
