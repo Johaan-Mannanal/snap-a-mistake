@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { appendGoldenAudit, type GoldenAuditEntry } from './golden-audit.js'
+import { appendGoldenAudit, buildGoldenAuditEntry, type GoldenAuditEntry } from './golden-audit.js'
 import { GOLDEN_DIR, preflightGoldenCases } from './golden-fixtures.js'
 import { GoldenManifestSchema, GoldenSourceSchema, judge, selectCases } from './judge.js'
 
@@ -30,32 +30,16 @@ for (const { goldenCase: c, base64 } of fixtures) {
     const { pass, detail } = judgment
     if (!pass) failures++
     console.log(`${pass ? 'PASS' : 'FAIL'}  ${c.file} — ${detail}`)
-    auditEntry = {
-      kind: 'response',
-      file: c.file,
-      ...(c.sourceId === undefined ? {} : { sourceId: c.sourceId }),
-      expected: {
-        expect: c.expect,
-        ...(c.errorStepIndex === undefined ? {} : { errorStepIndex: c.errorStepIndex }),
-        ...(c.tag === undefined ? {} : { tag: c.tag }),
-      },
+    auditEntry = buildGoldenAuditEntry(c, {
       actual,
       judgment,
-    }
+    })
   } catch (err) {
     failures++
     console.log(`FAIL  ${c.file} — pipeline threw: ${err}`)
-    auditEntry = {
-      kind: 'pipeline-error',
-      file: c.file,
-      ...(c.sourceId === undefined ? {} : { sourceId: c.sourceId }),
-      expected: {
-        expect: c.expect,
-        ...(c.errorStepIndex === undefined ? {} : { errorStepIndex: c.errorStepIndex }),
-        ...(c.tag === undefined ? {} : { tag: c.tag }),
-      },
+    auditEntry = buildGoldenAuditEntry(c, {
       pipelineError: String(err),
-    }
+    })
   }
   if (auditPath) {
     auditEntries.push(auditEntry)

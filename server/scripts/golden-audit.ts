@@ -5,6 +5,9 @@ import type { GoldenCase, judge } from './judge.js'
 
 type GoldenAuditExpected = Pick<GoldenCase, 'expect' | 'errorStepIndex' | 'errorStepAnchor' | 'tag'>
 type GoldenJudgment = ReturnType<typeof judge>
+type GoldenAuditResult =
+  | { actual: AnalyzeResponse; judgment: GoldenJudgment }
+  | { pipelineError: string }
 
 type GoldenAuditCommon = {
   file: string
@@ -23,6 +26,37 @@ export type GoldenAuditEntry = GoldenAuditCommon & (
     pipelineError: string
   }
 )
+
+export function buildGoldenAuditEntry(
+  goldenCase: GoldenCase,
+  result: GoldenAuditResult,
+): GoldenAuditEntry {
+  const common: GoldenAuditCommon = {
+    file: goldenCase.file,
+    ...(goldenCase.sourceId === undefined ? {} : { sourceId: goldenCase.sourceId }),
+    expected: {
+      expect: goldenCase.expect,
+      ...(goldenCase.errorStepIndex === undefined ? {} : { errorStepIndex: goldenCase.errorStepIndex }),
+      ...(goldenCase.errorStepAnchor === undefined ? {} : { errorStepAnchor: goldenCase.errorStepAnchor }),
+      ...(goldenCase.tag === undefined ? {} : { tag: goldenCase.tag }),
+    },
+  }
+
+  if ('pipelineError' in result) {
+    return {
+      ...common,
+      kind: 'pipeline-error',
+      pipelineError: result.pipelineError,
+    }
+  }
+
+  return {
+    ...common,
+    kind: 'response',
+    actual: result.actual,
+    judgment: result.judgment,
+  }
+}
 
 function safePipelineError(message: string): string {
   return /timed?\s*out|timeout/i.test(message) ? 'timeout' : 'pipeline-error'

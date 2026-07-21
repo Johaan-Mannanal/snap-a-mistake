@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { AnalyzeResponse } from '@snap/shared'
 import {
   appendGoldenAudit,
+  buildGoldenAuditEntry,
   type GoldenAuditEntry,
 } from '../scripts/golden-audit.js'
+import type { GoldenCase } from '../scripts/judge.js'
 
 const temporaryDirectories: string[] = []
 
@@ -53,11 +55,47 @@ const pipelineErrorEntry: GoldenAuditEntry = {
   pipelineError: 'request timed out; Authorization: Bearer secret-authorization; apiKey=secret-api-key; base64=secret-image-data',
 }
 
+const anchoredFermatCase: GoldenCase = {
+  file: 'fermat.jpg',
+  source: 'fermat',
+  sourceId: 'img_123_pert_3.1',
+  expect: 'error',
+  errorStepAnchor: { all: ['x^{-1}'] },
+  tag: 'sign-error',
+}
+
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true })))
 })
 
 describe('appendGoldenAudit', () => {
+  it('emits golden-runner response and pipeline entries with FERMAT semantic locators', async () => {
+    const response = buildGoldenAuditEntry(anchoredFermatCase, {
+      actual,
+      judgment: { pass: false, detail: 'missed the error entirely' },
+    })
+    const pipelineError = buildGoldenAuditEntry(anchoredFermatCase, {
+      pipelineError: 'request timed out',
+    })
+
+    expect(response).toMatchObject({
+      kind: 'response',
+      sourceId: 'img_123_pert_3.1',
+      expected: { errorStepAnchor: { all: ['x^{-1}'] } },
+    })
+    expect(pipelineError).toMatchObject({
+      kind: 'pipeline-error',
+      sourceId: 'img_123_pert_3.1',
+      expected: { errorStepAnchor: { all: ['x^{-1}'] } },
+    })
+
+    const auditPath = await temporaryAuditPath()
+    await appendGoldenAudit(auditPath, [response, pipelineError])
+    const document = JSON.parse(await readFile(auditPath, 'utf8'))
+    expect(document.entries.map((entry: GoldenAuditEntry) => entry.expected.errorStepAnchor))
+      .toEqual([{ all: ['x^{-1}'] }, { all: ['x^{-1}'] }])
+  })
+
   it('writes response and pipeline-error entries as sanitized version-1 JSON while preserving steps', async () => {
     const auditPath = await temporaryAuditPath()
 

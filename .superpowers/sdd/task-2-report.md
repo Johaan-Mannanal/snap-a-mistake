@@ -41,3 +41,11 @@ No golden, paid, or networked calls were run.
 ## Concerns
 
 None. The img_559_pert_3.1 audit response intentionally remains a negative replay case: its selected runtime step does not match the canonical manifest anchor, so both anchor matching and judge() reject it.
+
+## Review follow-up — audit locator preservation
+
+The review found that golden.ts omitted errorStepAnchor when it constructed future audit entries. The runner now delegates both response and pipeline-error construction to buildGoldenAuditEntry(), which preserves errorStepAnchor alongside the existing index and tag fields. The audit serializer continues to sanitize all output.
+
+RED: golden-audit.test.ts failed because buildGoldenAuditEntry did not exist.
+
+GREEN: the no-cost unit test now constructs both FERMAT response and pipeline-error entries through the same helper used by the runner, writes them through the sanitizer, and confirms each emitted audit record retains the semantic anchor.
