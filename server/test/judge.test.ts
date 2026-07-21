@@ -70,11 +70,28 @@ describe('GoldenCaseSchema', () => {
   })
 
   it.each(['correct', 'unreadable', 'not-math'] as const)(
-    'forbids error-only fields on %s cases',
+    'forbids numeric error locators on %s cases',
     (outcome) => {
       expect(() => GoldenCaseSchema.parse({
-        file: 'a.jpg', source: 'synthetic', expect: outcome,
-        errorStepIndex: 1, errorStepAnchor: { all: ['x'] }, tag: 'sign-error',
+        file: 'a.jpg', source: 'synthetic', expect: outcome, errorStepIndex: 1,
+      })).toThrow()
+    },
+  )
+
+  it.each(['correct', 'unreadable', 'not-math'] as const)(
+    'forbids semantic error locators on %s cases',
+    (outcome) => {
+      expect(() => GoldenCaseSchema.parse({
+        file: 'a.jpg', source: 'synthetic', expect: outcome, errorStepAnchor: { all: ['x'] },
+      })).toThrow()
+    },
+  )
+
+  it.each(['correct', 'unreadable', 'not-math'] as const)(
+    'forbids error tags on %s cases',
+    (outcome) => {
+      expect(() => GoldenCaseSchema.parse({
+        file: 'a.jpg', source: 'synthetic', expect: outcome, tag: 'sign-error',
       })).toThrow()
     },
   )
