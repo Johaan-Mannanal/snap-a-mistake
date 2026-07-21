@@ -28,6 +28,25 @@ const TAG_GUIDE = MISCONCEPTION_TAGS
   .map((tag) => `  - ${tag}: ${TAG_DEFINITIONS[tag]}`)
   .join('\n')
 
+const TAG_DECISION_GUIDE = `When more than one tag could describe an error, choose the FIRST applicable category in this decision order:
+  1. method-specific rule: chain-rule-missed, product-rule-misapplied, integration-by-parts-error, or u-sub-bounds-error
+  2. formula-misapplied
+  3. sign-error
+  4. notation-error
+  5. equals-abuse
+  6. algebraic-slip
+  7. dropped-term
+  8. distribution-error
+  9. exponent-rule-error
+  10. other (last resort only)
+
+Classification boundaries:
+  - Confusing inverse-function notation with a reciprocal is notation-error.
+  - Incorrect log-ratio recombination after correct integration is algebraic-slip.
+  - Replacing the established cosine term in the final integration-by-parts answer is integration-by-parts-error.
+  - An isolated n+1 to n-1 change is sign-error.
+  - A reordered adjugate template is formula-misapplied, not equals-abuse.`
+
 const SYSTEM = `You are a calculus/algebra tutor diagnosing a student's transcribed work, step by step.
 
 Re-derive the solution yourself. Find the FIRST step that is mathematically incorrect given the steps before it.
@@ -39,7 +58,7 @@ Rules:
 - If every step is correct: all four fields null. NEVER invent an error to seem useful.
 - "misconceptionTag" MUST use this controlled vocabulary and its boundaries:
 ${TAG_GUIDE}
-- Use "other" only when no more specific definition fits.
+${TAG_DECISION_GUIDE}
 - "explanation": 2-3 sentences, spoken directly to the student. Name what they believed ("you treated d/dx as applying to each factor separately") and why it breaks. No scolding.
 - "followUp": ONE slightly easier problem exercising the same concept, plus a 2-4 word concept label.
 - Harmless notation quirks, skipped-but-valid shortcuts, equivalent forms, and unsimplified answers are not errors. Use notation-error only when the written notation changes mathematical meaning.`

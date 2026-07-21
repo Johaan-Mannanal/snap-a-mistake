@@ -28,4 +28,32 @@ describe('analyzeSteps', () => {
     expect(text).toMatch(/formula-misapplied:.*known formula.*not.*algebraic-slip/i)
     expect(text).toMatch(/algebraic-slip:.*routine arithmetic or algebraic manipulation/i)
   })
+
+  it('orders overlapping tags and documents their classification boundaries', async () => {
+    const client = fakeClient(diagnosis)
+    await analyzeSteps(client, 'gpt-5.6-sol', steps)
+    const call = (client.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as OpenAI.Chat.Completions.ChatCompletionCreateParams
+    const text = JSON.stringify(call.messages)
+
+    const decisionOrder = [
+      '1. method-specific rule',
+      '2. formula-misapplied',
+      '3. sign-error',
+      '4. notation-error',
+      '5. equals-abuse',
+      '6. algebraic-slip',
+    ]
+    let previousIndex = -1
+    for (const category of decisionOrder) {
+      const index = text.toLowerCase().indexOf(category)
+      expect(index).toBeGreaterThan(previousIndex)
+      previousIndex = index
+    }
+
+    expect(text).toMatch(/inverse-function notation.*reciprocal.*notation-error/i)
+    expect(text).toMatch(/incorrect log-ratio recombination.*correct integration.*algebraic-slip/i)
+    expect(text).toMatch(/replacing the established cosine term.*final integration-by-parts answer.*integration-by-parts-error/i)
+    expect(text).toMatch(/isolated n\+1 to n-1.*sign-error/i)
+    expect(text).toMatch(/reordered adjugate template.*formula-misapplied.*not equals-abuse/i)
+  })
 })
