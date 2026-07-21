@@ -114,7 +114,7 @@ GoldenCaseSchema.parse({
 })
 ```
 
-parses, while FERMAT numeric locators, synthetic anchors, both locators, neither locator, empty anchors, and locators on non-error outcomes throw.
+parses, while both locators, neither locator, empty anchors, and locators on non-error outcomes throw. During Task 1 only, either source may use either single locator so the existing manifest remains valid between task commits; Task 2 tightens the final source-specific rule immediately after migration.
 
 Add judge tests where the same anchored step passes at indices 8 and 9; a selected line without the anchor fails; a forbidden fragment fails; and existing synthetic exact-index behavior still passes/fails as before.
 
@@ -126,7 +126,7 @@ Expected: FAIL because `GoldenCaseSchema` does not accept `errorStepAnchor` and 
 
 - [ ] **Step 6: Implement the strict locator union and judge order**
 
-Import `StepAnchorSchema` and `matchStepAnchor` into `judge.ts`. Add `errorStepAnchor: StepAnchorSchema.optional()` to the object. In `superRefine`, require exactly one locator for errors, then enforce anchor for FERMAT and index for synthetic. For non-errors, forbid both locators.
+Import `StepAnchorSchema` and `matchStepAnchor` into `judge.ts`. Add `errorStepAnchor: StepAnchorSchema.optional()` to the object. In `superRefine`, require exactly one locator for errors. For non-errors, forbid both locators. Defer the FERMAT-anchor/synthetic-index source restriction to Task 2 so the committed numeric FERMAT manifest continues to parse and the root suite stays green after Task 1.
 
 After `actual.errorStepIndex !== null`, locate the runtime step before checking the configured locator:
 
@@ -186,7 +186,7 @@ Commit message: `feat(server): judge golden steps semantically`
 
 - [ ] **Step 1: Add failing manifest-contract tests**
 
-In `fermat.test.ts`, assert every FERMAT error has no `errorStepIndex` and exactly the spec-approved anchor/tag mapping:
+In `judge.test.ts`, first add RED cases proving FERMAT numeric locators and synthetic anchors are rejected. In `fermat.test.ts`, assert every FERMAT error has no `errorStepIndex` and exactly the spec-approved anchor/tag mapping:
 
 ```ts
 const expectedAnchors = {
@@ -211,7 +211,7 @@ Expected: FAIL because FERMAT manifest cases still use numeric locators.
 
 - [ ] **Step 3: Convert only the eight FERMAT error locators**
 
-Replace `errorStepIndex` with the exact `errorStepAnchor` objects above. Do not change files, sources, source IDs, outcomes, tags, order, images, or provenance.
+Replace `errorStepIndex` with the exact `errorStepAnchor` objects above. Then tighten `GoldenCaseSchema` so FERMAT errors require anchors and synthetic errors require numeric indices, making the new `judge.test.ts` source-restriction cases green. Do not change files, sources, source IDs, outcomes, tags, order, images, or provenance.
 
 - [ ] **Step 4: Create the compact replay fixture**
 
