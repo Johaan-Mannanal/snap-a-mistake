@@ -70,8 +70,16 @@ submission.
 ```bash
 npm install
 npm run mock -w server
-# In a second terminal:
+# In a second terminal, use localhost only for an iOS simulator or web target:
 cd app && EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start
+```
+
+Press `i` for the iOS simulator or `w` for web. A physical phone must be on the
+same network as the Mac and use the Mac's LAN address instead—its `localhost`
+points to the phone, not this server:
+
+```bash
+cd app && EXPO_PUBLIC_API_URL=http://<Mac-LAN-IP>:3000 npx expo start
 ```
 
 Use `MOCK=correct npm run mock -w server` or replace `correct` with `error`,

@@ -1,8 +1,11 @@
 # Snap-a-Mistake Demo Script — 2:30 Target
 
-Record vertically from the phone when showing the app. Use the mock server for
-the primary take so every state is deterministic; show the real-handwriting
-8/10 result as an evidence card or repository cutaway.
+Record vertically from the phone when showing the app. The primary app take uses
+the deterministic mock server, so it must carry a persistent, unmistakable
+on-screen label: **“DETERMINISTIC MOCK MODE — CANNED RESPONSE (NOT LIVE GPT-5.6).”**
+Show separately labeled **“REAL GPT-5.6 RUN EVIDENCE — PAID FERMAT
+GATE: 8/10”** in the repository cutaway; this is evidence, not part of the mock
+take.
 
 ## 0:00–0:15 — Problem
 
@@ -14,12 +17,14 @@ misconception, and gives the student a smaller problem to try next.”
 
 ## 0:15–0:45 — Capture and analysis
 
-**On screen:** Capture an intentionally incorrect problem; show Reading,
-Checking, and Verifying progress stages.
+**On screen:** Keep the persistent **“DETERMINISTIC MOCK MODE — CANNED RESPONSE
+(NOT LIVE GPT-5.6)”** banner visible while capturing an intentionally
+incorrect problem; show Reading, Checking, and Verifying progress stages.
 
-**Say:** “I take one photo. GPT-5.6 vision transcribes the page into positioned
-steps, a reasoning pass finds the earliest error, and a separate verifier checks
-the diagnosis before the app displays it.”
+**Say:** “This primary take is deterministic mock mode, so the displayed
+response is canned—not a live model call. In the live pipeline, GPT-5.6 vision
+transcribes the page into positioned steps, a reasoning pass finds the earliest
+error, and a separate verifier checks the diagnosis before the app displays it.”
 
 ## 0:45–1:15 — Exact-step feedback
 
@@ -45,14 +50,15 @@ student can see whether sign errors or rule mistakes are improving over time.”
 
 ## 1:55–2:20 — Codex build story
 
-**On screen:** Repository architecture, tests, semantic-anchor test, 8/10 result.
+**On screen:** Repository architecture, tests, semantic-anchor test, and a
+separate card labeled **“REAL GPT-5.6 RUN EVIDENCE — PAID FERMAT GATE: 8/10.”**
 
 **Say:** “I built this with Codex as an engineering partner. It helped turn the
 idea into design specs, drive test-first implementation and independent reviews,
 curate a licensed handwriting set, and diagnose paid evaluations. When model
 segmentation shifted, Codex replaced brittle line numbers with semantic math
-anchors. The repository now has over one hundred automated checks, and eight of
-ten real-handwriting cases pass the strict end-to-end gate.”
+anchors. Separately, the paid real GPT-5.6 FERMAT gate is eight of ten: one
+canonical-tag mismatch and one truncated-JSON failure.”
 
 ## 2:20–2:30 — Close
 
