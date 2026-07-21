@@ -131,9 +131,9 @@ State that the reviewed branch is ready for publication, not already merged. Rec
 
 Keep on-device verification, stable demo hosting, video recording, and form submission as remaining work. Describe the video as public, narrated, and under three minutes.
 
-- [ ] **Step 7: Add submission and license links**
+- [ ] **Step 7: Add the license and attribution boundary**
 
-Add links to `docs/submission/DEVPOST.md` and `docs/submission/DEMO-SCRIPT.md`, which Task 2 creates. End with:
+End with:
 
 ```markdown
 ## License and data attribution
@@ -176,6 +176,7 @@ git commit -m "docs: make README judge-ready"
 **Files:**
 - Create: `docs/submission/DEVPOST.md`
 - Create: `docs/submission/DEMO-SCRIPT.md`
+- Modify: `README.md`
 
 **Interfaces:**
 - Consumes: the READMEâ€™s verified product, architecture, testing, and licensing claims.
@@ -354,7 +355,14 @@ then gives them the next achievable step. That is feedback built for learning.â€
 - Upload publicly to YouTube and verify playback in a signed-out browser.
 ```
 
-- [ ] **Step 4: Verify submission-copy claims and timing**
+- [ ] **Step 4: Link the completed submission kit from the README**
+
+Add a short `Submission kit` paragraph that links
+`docs/submission/DEVPOST.md` as ready-to-paste form copy and
+`docs/submission/DEMO-SCRIPT.md` as the timed recording plan. Do this only after
+both target files exist so every committed README link resolves.
+
+- [ ] **Step 5: Verify submission-copy claims and timing**
 
 Run:
 
@@ -373,10 +381,10 @@ git diff --check
 
 Expected: all positive checks pass and the unsupported-claim scan has no output.
 
-- [ ] **Step 5: Commit Task 2**
+- [ ] **Step 6: Commit Task 2**
 
 ```bash
-git add docs/submission/DEVPOST.md docs/submission/DEMO-SCRIPT.md
+git add README.md docs/submission/DEVPOST.md docs/submission/DEMO-SCRIPT.md
 git commit -m "docs: prepare Devpost submission kit"
 ```
 
