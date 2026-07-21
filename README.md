@@ -37,7 +37,7 @@ Every task was implemented via fresh-agent TDD with a two-stage review (spec com
 
 ```bash
 npm install                  # root — installs all three workspaces
-npm test                     # 74 Vitest tests (shared 9, server 45, app 20) + 4 Python importer tests
+npm test                     # all workspace Vitest suites + 4 stock-Python importer tests
 npm run typecheck            # all workspaces
 
 # Server (needs server/.env — copy server/.env.example, add OPENAI_API_KEY)
@@ -62,9 +62,9 @@ needed for the importer tests.
 
 ## Current status (as of July 20)
 
-- Backend + app both complete, reviewed, merged to `main`. `npm test` passes 74/74 Vitest tests (shared 9, server 45, app 20) plus 4/4 stock-Python importer tests; typecheck clean.
+- Backend + app both complete, reviewed, merged to `main`. Root `npm test` runs all workspace Vitest suites plus four stock-Python importer tests; typecheck is clean.
 - Live smoke test passed against the real OpenAI pipeline (~9.5s/analysis).
-- Golden manifest: **25 cases** — 15 generated baseline cases plus 10 curated FERMAT photographs (2 correct, 8 intentional errors across algebra/calculus). The generated baseline last passed 15/15; the FERMAT subset is committed and ready for its first paid pipeline run.
+- Golden manifest: **25 cases** — 15 generated baseline cases plus 10 curated FERMAT photographs (2 correct, 8 intentional errors across algebra/calculus). The generated baseline last passed 15/15. Two paid FERMAT diagnostic runs completed at 2/10 and 4/10; audited segmentation drift disproved fixed numeric FERMAT indices. This branch now judges FERMAT localization by semantic anchors and exact canonical tags. The semantic/canonical prompt has not yet received a paid validation run.
 - API key: in `server/.env` (git-ignored). **It was shared in a chat session — rotate it before the demo.**
 
 ## Steps forward (rough priority order)
