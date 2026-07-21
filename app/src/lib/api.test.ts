@@ -1,6 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, analyzePhoto } from './api'
 
+vi.mock('expo-file-system', () => ({
+  File: class MockFile extends Blob {
+    readonly uri: string
+
+    constructor(uri: string) {
+      super([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' })
+      this.uri = uri
+    }
+  },
+}))
+
 const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body }) as Response
 const bad = (status: number) => ({ ok: false, status, json: async () => ({ error: 'x' }) }) as Response
 
@@ -18,6 +29,15 @@ describe('analyzePhoto', () => {
     expect(url).toContain('/analyze')
     expect(init.method).toBe('POST')
     expect(init.body).toBeInstanceOf(FormData)
+  })
+  it('uploads a byte-backed photo part instead of a legacy URI descriptor', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(ok(analysis))
+    await analyzePhoto('file:///photo.jpg', fetchFn)
+
+    const [, init] = fetchFn.mock.calls[0] as [string, RequestInit]
+    const photo = (init.body as FormData).get('photo')
+    expect(photo).toBeInstanceOf(Blob)
+    expect((photo as File).name).toBe('photo.jpg')
   })
   it('maps non-2xx to ApiError{server,status}', async () => {
     const fetchFn = vi.fn().mockResolvedValue(bad(502))

@@ -1,4 +1,5 @@
 import { AnalyzeResponseSchema, type AnalyzeResponse } from '@snap/shared'
+import { File } from 'expo-file-system'
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000'
 
@@ -12,8 +13,7 @@ export class ApiError extends Error {
 
 export async function analyzePhoto(uri: string, fetchFn: typeof fetch = fetch): Promise<AnalyzeResponse> {
   const form = new FormData()
-  // React Native FormData accepts {uri, name, type} file descriptors; cast for the DOM types.
-  form.append('photo', { uri, name: 'photo.jpg', type: 'image/jpeg' } as unknown as Blob)
+  form.append('photo', new File(uri), 'photo.jpg')
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 35_000)
