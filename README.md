@@ -54,9 +54,8 @@ Key decisions made during that workflow:
 | FERMAT license, citation, and attribution | [`server/golden/FERMAT-ATTRIBUTION.md`](server/golden/FERMAT-ATTRIBUTION.md) |
 | FERMAT source records, labels, pinned revision, and shard checksums | [`server/golden/fermat-provenance.json`](server/golden/fermat-provenance.json) |
 | Optional FERMAT subset importer (requires accepted FERMAT access and `HF_TOKEN`) | [`server/scripts/import-fermat.py`](server/scripts/import-fermat.py) |
-| Execution ledger: what was built, reviewed, fixed, deferred | `.superpowers/sdd/progress.md` (git-ignored scratch — read it before assuming anything is undone) |
 
-Every task was implemented via fresh-agent TDD with a two-stage review (spec compliance + code quality) and a final whole-branch review per plan. Deferred minor findings are listed at the bottom of the ledger.
+Every task was implemented via fresh-agent TDD with a two-stage review (spec compliance + code quality) and a final whole-branch review per plan.
 
 ## Submission kit
 
@@ -118,7 +117,7 @@ needed for the importer tests.
 3. **Public, narrated demo video (under three minutes)** — the planned emotional arc: snap wrong work → error circled + explanation → follow-up problem → snap retry → green "All steps check out ✓" → insights screen. Record via device screen-capture.
 4. **Submission form** — submit the public, narrated demo video and project details before the deadline.
 5. **Optional stretch:** wire the parked video-lesson feature into the reserved Result-screen slot.
-6. Deferred code minors (see ledger bottom): PhotoOverlay `Image.getSize` fallback → migrate to `expo-image`; `history.ts` init-race memoization; 413 status passthrough on oversized uploads; misc polish.
+6. Deferred code minors: PhotoOverlay `Image.getSize` fallback → migrate to `expo-image`; `history.ts` init-race memoization; 413 status passthrough on oversized uploads; misc polish.
 
 ## Things intentionally NOT done
 
