@@ -124,7 +124,7 @@ needed for the importer tests.
 
 ## Current status (as of July 22)
 
-- Backend + app are complete and reviewed. All **148 automated tests** pass, workspace typechecking is clean, and Expo Doctor reports **20/20 checks passed**.
+- Backend + app are complete and reviewed. All **149 automated tests** pass, workspace typechecking is clean, and Expo Doctor reports **20/20 checks passed**.
 - Physical-device verification is complete on an iPhone development build: camera and gallery input, staged analysis, result overlays, follow-up practice, local Insights, non-math/unreadable responses, and network recovery were exercised. The live pipeline correctly rejected a non-math photo and processed real handwritten math after the long-running request path was hardened.
 - Live smoke test passed against the real OpenAI pipeline (~9.5s/analysis).
 - Golden manifest: **25 cases** — 15 generated baseline cases plus 10 curated FERMAT photographs (2 correct, 8 intentional errors across algebra/calculus). The generated baseline last passed 15/15. Audited segmentation drift disproved fixed numeric FERMAT indices, so this branch now judges FERMAT localization by semantic anchors and exact canonical tags.

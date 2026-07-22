@@ -47,6 +47,7 @@
       [
         "expo-image-picker",
         {
+          "microphonePermission": false,
           "photosPermission": "Snap-a-Mistake reads photos you choose of your handwritten math work."
         }
       ]

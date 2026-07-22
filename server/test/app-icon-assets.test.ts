@@ -68,3 +68,24 @@ describe('Focus Lens icon assets', () => {
     expect(composer).not.toMatch(/expo-symbol|grid\.png/i)
   })
 })
+
+describe('mobile release configuration', () => {
+  test('does not request microphone access for the image-only picker', async () => {
+    const sourceRoot = fileURLToPath(new URL('../../', import.meta.url))
+    const config = JSON.parse(
+      await readFile(path.join(sourceRoot, 'app/app.json'), 'utf8'),
+    ) as {
+      expo: {
+        plugins: Array<string | [string, Record<string, unknown>]>
+      }
+    }
+    const imagePicker = config.expo.plugins.find(
+      (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-image-picker',
+    )
+
+    expect(imagePicker).toEqual([
+      'expo-image-picker',
+      expect.objectContaining({ microphonePermission: false }),
+    ])
+  })
+})
