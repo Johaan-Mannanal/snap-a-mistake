@@ -1,10 +1,15 @@
 import { useEffect } from 'react'
 import { Stack } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import { initDb } from '../src/lib/history'
+import { colors } from '../src/ui/theme'
 
 export default function RootLayout() {
   useEffect(() => { initDb().catch(() => {}) }, [])
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0f172a' } }} />
+    <>
+      <StatusBar style="light" />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.ink } }} />
+    </>
   )
 }
