@@ -687,14 +687,13 @@ For each server command, restart the mock, choose any gallery photo, and verify 
 
 Take simulator screenshots of camera, analyzing, error result, correct result, follow-up, Insights, and failure states. Inspect each for clipping, safe-area collisions, old palette residue, emoji navigation, and unreadable contrast.
 
-- [ ] **Step 6: Final status and publish**
+- [ ] **Step 6: Final status and hand off for whole-branch review**
 
 Run:
 
 ```bash
 git status --short
 git log --oneline -6
-git push origin HEAD:main
 ```
 
-Expected: clean status before push and remote `main` updated to the final UI commit. Remind the user that the demo recording must retain the on-screen disclosure `DETERMINISTIC MOCK MODE — CANNED RESPONSE (NOT LIVE GPT-5.6).`
+Expected: clean status and the Night Gallery task commits at the top of the log. Do not push from this task. After the required whole-branch review passes, the controller publishes `HEAD` to remote `main` and reminds the user that the demo recording must retain the on-screen disclosure `DETERMINISTIC MOCK MODE — CANNED RESPONSE (NOT LIVE GPT-5.6).`
