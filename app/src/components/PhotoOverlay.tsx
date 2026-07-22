@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Image, View } from 'react-native'
+import { Image, Text, View } from 'react-native'
 import type { Step } from '@snap/shared'
 import { bandStyle } from '../lib/overlay'
+import { colors } from '../ui/theme'
 
 export function PhotoOverlay(props: { uri: string; steps: Step[] }) {
   const [aspect, setAspect] = useState(4 / 3)
@@ -21,16 +22,19 @@ export function PhotoOverlay(props: { uri: string; steps: Step[] }) {
       {height > 0 &&
         flagged.map((s) => {
           const b = bandStyle(s, height)
-          const color = s.verdict === 'wrong' ? '#ef4444' : '#f59e0b'
+          const color = s.verdict === 'wrong' ? colors.error : colors.chalk
           return (
             <View
               key={s.index}
               pointerEvents="none"
               style={{
                 position: 'absolute', left: 0, right: 0, top: b.top, height: b.height,
-                borderColor: color, borderWidth: 3, borderRadius: 8, backgroundColor: `${color}22`,
+                borderTopWidth: 1.5, borderBottomWidth: 1.5, borderColor: color,
+                backgroundColor: s.verdict === 'wrong' ? 'rgba(255,92,103,0.06)' : 'rgba(245,245,243,0.05)',
               }}
-            />
+            >
+              <Text style={{ alignSelf: 'flex-end', margin: 8, color, fontSize: 11, fontWeight: '700' }}>STEP {s.index + 1}</Text>
+            </View>
           )
         })}
     </View>

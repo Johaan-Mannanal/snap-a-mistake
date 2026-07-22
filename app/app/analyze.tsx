@@ -1,31 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Pressable, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import type { AnalyzeResponse } from '@snap/shared'
 import { analyzePhoto } from '../src/lib/api'
 import { getSession, setAnalysis, resetSession } from '../src/lib/session'
 import { recordAnalysis } from '../src/lib/history'
 import { tagLabel } from '../src/lib/labels'
-import { Screen } from '../src/components/Screen'
+import { AppButton } from '../src/components/AppButton'
+import { AppIcon } from '../src/components/AppIcon'
+import { AppScreen } from '../src/components/AppScreen'
+import { AnalysisProgress } from '../src/components/AnalysisProgress'
 import { StepCard } from '../src/components/StepCard'
 import { PhotoOverlay } from '../src/components/PhotoOverlay'
+import { analysisPresentation } from '../src/ui/presentation'
+import { colors, spacing } from '../src/ui/theme'
 
 const STAGES = ['Reading your handwriting…', 'Checking each step…', 'Verifying the diagnosis…']
-
-function Button(props: { label: string; onPress?: () => void; disabled?: boolean; primary?: boolean }) {
-  return (
-    <Pressable
-      onPress={props.onPress}
-      disabled={props.disabled}
-      style={{
-        backgroundColor: props.disabled ? '#334155' : props.primary ? '#6366f1' : '#1e293b',
-        borderRadius: 12, paddingVertical: 14, alignItems: 'center', opacity: props.disabled ? 0.6 : 1,
-      }}
-    >
-      <Text style={{ color: props.disabled ? '#94a3b8' : 'white', fontWeight: '700', fontSize: 15 }}>{props.label}</Text>
-    </Pressable>
-  )
-}
 
 export default function Analyze() {
   const [result, setResult] = useState<AnalyzeResponse | null>(null)
@@ -63,80 +53,121 @@ export default function Analyze() {
 
   if (failed) {
     return (
-      <Screen>
-        <Text style={{ color: '#e2e8f0', fontSize: 20, fontWeight: '700' }}>Couldn't reach the tutor 😕</Text>
-        <Text style={{ color: '#94a3b8' }}>Your photo is saved — check your connection and try again.</Text>
-        <Button label="Try again" onPress={run} primary />
-        <Button label="Snap another" onPress={snapAnother} />
-      </Screen>
+      <AppScreen contentStyle={styles.stateContent}>
+        <View style={styles.stateCopy}>
+          <Text style={styles.stateEyebrow}>ANALYSIS PAUSED</Text>
+          <Text style={styles.stateTitle}>We couldn't reach the tutor.</Text>
+          <Text style={styles.stateDetail}>Your photo is saved. Check your connection and try again.</Text>
+        </View>
+        <AppButton label="Try again" onPress={run} />
+        <AppButton label="Use another photo" onPress={snapAnother} variant="secondary" />
+      </AppScreen>
     )
   }
 
   if (!result) {
-    return (
-      <Screen>
-        <View style={{ alignItems: 'center', marginTop: 120, gap: 20 }}>
-          <ActivityIndicator size="large" color="#6366f1" />
-          <Text style={{ color: '#e2e8f0', fontSize: 17 }}>{STAGES[stage]}</Text>
-        </View>
-      </Screen>
-    )
+    return uri ? <AnalysisProgress uri={uri} stage={stage} stages={STAGES} /> : null
   }
 
   if (result.kind === 'not-math') {
     return (
-      <Screen>
-        <Text style={{ color: '#e2e8f0', fontSize: 20, fontWeight: '700' }}>I only speak math for now 📐</Text>
-        <Text style={{ color: '#94a3b8' }}>Snap a photo of handwritten algebra or calculus work.</Text>
-        <Button label="Retake" onPress={snapAnother} primary />
-      </Screen>
+      <AppScreen contentStyle={styles.stateContent}>
+        <View style={styles.stateCopy}>
+          <Text style={styles.stateEyebrow}>NOT MATH</Text>
+          <Text style={styles.stateTitle}>This photo doesn't look like math.</Text>
+          <Text style={styles.stateDetail}>Snap a photo of handwritten algebra or calculus work.</Text>
+        </View>
+        <AppButton label="Retake" onPress={snapAnother} />
+      </AppScreen>
     )
   }
 
   if (result.kind === 'unreadable') {
     return (
-      <Screen>
-        <Text style={{ color: '#e2e8f0', fontSize: 20, fontWeight: '700' }}>I couldn't read that clearly</Text>
-        {result.tips.map((tip) => (
-          <Text key={tip} style={{ color: '#94a3b8', fontSize: 15 }}>• {tip}</Text>
-        ))}
-        <Button label="Retake" onPress={snapAnother} primary />
-      </Screen>
+      <AppScreen contentStyle={styles.stateContent}>
+        <View style={styles.stateCopy}>
+          <Text style={styles.stateEyebrow}>UNREADABLE</Text>
+          <Text style={styles.stateTitle}>This photo is too hard to read.</Text>
+          <View style={styles.tips}>
+            {result.tips.map((tip) => <Text key={tip} style={styles.tip}>— {tip}</Text>)}
+          </View>
+        </View>
+        <AppButton label="Retake" onPress={snapAnother} />
+      </AppScreen>
     )
   }
 
   const correct = result.errorStepIndex === null
-  const suspect = !correct && !result.verifierAgreed
   const label = result.misconceptionTag ? tagLabel(result.misconceptionTag) : null
+  const presentation = analysisPresentation(result)
 
   return (
-    <Screen>
-      {correct ? (
-        <View style={{ backgroundColor: '#14532d', borderRadius: 12, padding: 16 }}>
-          <Text style={{ color: '#86efac', fontSize: 20, fontWeight: '800' }}>All steps check out ✓</Text>
-          <Text style={{ color: '#bbf7d0', marginTop: 4 }}>Every step follows from the last — clean work.</Text>
-        </View>
-      ) : suspect ? (
-        <View style={{ backgroundColor: '#451a03', borderRadius: 12, padding: 16 }}>
-          <Text style={{ color: '#fbbf24', fontSize: 17, fontWeight: '700' }}>
-            I'm not fully sure about step {result.errorStepIndex! + 1} — want to walk through it?
-          </Text>
-        </View>
-      ) : null}
+    <AppScreen contentStyle={styles.resultContent}>
+      <View style={styles.topBar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Return to camera"
+          hitSlop={8}
+          onPress={snapAnother}
+          style={({ pressed }) => [styles.topAction, { opacity: pressed ? 0.5 : 1 }]}
+        >
+          <AppIcon name="camera" fallback="Camera" size={18} />
+        </Pressable>
+        <Text style={styles.topTitle}>Analysis</Text>
+        <View style={styles.topAction} />
+      </View>
       {uri && <PhotoOverlay uri={uri} steps={result.steps} />}
-      {result.steps.map((s) => (
-        <StepCard
-          key={s.index}
-          step={s}
-          misconceptionLabel={s.index === result.errorStepIndex ? label : null}
-          explanation={s.index === result.errorStepIndex ? result.explanation : null}
-        />
-      ))}
-      {result.followUp && !correct && (
-        <Button label="Try a follow-up" onPress={() => router.push('/followup')} primary />
-      )}
-      <Button label="🎬 Video lesson — coming soon" disabled />
-      <Button label="Snap another" onPress={snapAnother} />
-    </Screen>
+      <View style={styles.diagnosis}>
+        {presentation.tone === 'success' ? (
+          <View style={styles.verifiedLine}>
+            <Text style={styles.verifiedMark}>✓</Text>
+            <Text style={styles.headline}>{presentation.headline}</Text>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.diagnosisEyebrow}>{presentation.eyebrow}</Text>
+            <Text style={styles.headline}>{presentation.headline}</Text>
+          </>
+        )}
+        <Text style={styles.diagnosisDetail}>{presentation.detail}</Text>
+      </View>
+      <View style={styles.timeline}>
+        {result.steps.map((s) => (
+          <StepCard
+            key={s.index}
+            step={s}
+            misconceptionLabel={s.index === result.errorStepIndex ? label : null}
+            explanation={s.index === result.errorStepIndex ? result.explanation : null}
+          />
+        ))}
+      </View>
+      <View style={styles.actions}>
+        {result.followUp && !correct ? <AppButton label="Try a simpler problem" onPress={() => router.push('/followup')} /> : null}
+        <AppButton label="Video lesson — coming soon" disabled variant="secondary" />
+        <AppButton label="Snap another" onPress={snapAnother} variant="tertiary" />
+      </View>
+    </AppScreen>
   )
 }
+
+const styles = StyleSheet.create({
+  stateContent: { flexGrow: 1, justifyContent: 'center' },
+  stateCopy: { gap: spacing.md, marginBottom: spacing.lg },
+  stateEyebrow: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1.6 },
+  stateTitle: { color: colors.chalk, fontSize: 28, fontWeight: '700', letterSpacing: -0.7, lineHeight: 34 },
+  stateDetail: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  tips: { gap: spacing.sm, marginTop: spacing.xs },
+  tip: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  resultContent: { paddingTop: spacing.xs },
+  topBar: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  topAction: { width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' },
+  topTitle: { color: colors.chalk, fontSize: 15, fontWeight: '700' },
+  diagnosis: { gap: spacing.sm, paddingVertical: spacing.md },
+  diagnosisEyebrow: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1.4 },
+  verifiedLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  verifiedMark: { color: colors.success, fontSize: 15, fontWeight: '800' },
+  headline: { flexShrink: 1, color: colors.chalk, fontSize: 24, fontWeight: '700', letterSpacing: -0.5, lineHeight: 30 },
+  diagnosisDetail: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  timeline: { marginTop: spacing.xs },
+  actions: { gap: spacing.md, marginTop: spacing.sm },
+})
