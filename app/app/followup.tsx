@@ -1,33 +1,47 @@
-import { Pressable, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
+import { AppButton } from '../src/components/AppButton'
+import { AppScreen } from '../src/components/AppScreen'
 import { getSession, startFollowUp } from '../src/lib/session'
-import { Screen } from '../src/components/Screen'
+import { colors, spacing, typeScale } from '../src/ui/theme'
 
 export default function FollowUp() {
   const followUp = getSession().followUp
+
   if (!followUp) {
     return (
-      <Screen>
-        <Text style={{ color: '#94a3b8' }}>No follow-up problem yet — analyze some work first.</Text>
-        <Pressable onPress={() => router.replace('/')}><Text style={{ color: '#6366f1', fontWeight: '700' }}>Back to camera</Text></Pressable>
-      </Screen>
+      <AppScreen contentStyle={styles.emptyContent}>
+        <View style={styles.copy}>
+          <Text style={styles.eyebrow}>FOLLOW-UP</Text>
+          <Text style={styles.title}>No follow-up yet</Text>
+          <Text style={styles.detail}>Analyze some work to get a tailored practice problem.</Text>
+        </View>
+        <AppButton label="Back to camera" onPress={() => router.dismissTo('/')} variant="secondary" />
+      </AppScreen>
     )
   }
+
   return (
-    <Screen>
-      <View style={{ backgroundColor: '#312e81', alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 }}>
-        <Text style={{ color: '#c7d2fe', fontSize: 13, fontWeight: '600' }}>{followUp.concept}</Text>
+    <AppScreen contentStyle={styles.content}>
+      <View style={styles.copy}>
+        <Text style={styles.eyebrow}>{followUp.concept.toUpperCase()}</Text>
+        <Text style={styles.problem}>{followUp.problem}</Text>
+        <Text style={styles.detail}>Work it out on paper, then snap your solution.</Text>
       </View>
-      <Text style={{ color: '#e2e8f0', fontSize: 24, lineHeight: 34, fontWeight: '600', marginTop: 8 }}>
-        {followUp.problem}
-      </Text>
-      <Text style={{ color: '#94a3b8', marginTop: 8 }}>Work it out on paper, then snap your solution.</Text>
-      <Pressable
+      <AppButton
+        label="Check my work"
         onPress={() => { startFollowUp(); router.dismissTo('/') }}
-        style={{ backgroundColor: '#6366f1', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 16 }}
-      >
-        <Text style={{ color: 'white', fontWeight: '700', fontSize: 15 }}>I'm done — check it</Text>
-      </Pressable>
-    </Screen>
+      />
+    </AppScreen>
   )
 }
+
+const styles = StyleSheet.create({
+  content: { flexGrow: 1, justifyContent: 'space-between', paddingVertical: spacing.xxl },
+  emptyContent: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xxl },
+  copy: { gap: spacing.md },
+  eyebrow: { color: colors.muted, fontSize: typeScale.caption, fontWeight: '700', letterSpacing: 1.6 },
+  title: { color: colors.chalk, fontSize: typeScale.display, fontWeight: '700', letterSpacing: -0.8, lineHeight: 38 },
+  problem: { color: colors.chalk, fontSize: typeScale.display, fontWeight: '700', letterSpacing: -0.8, lineHeight: 40 },
+  detail: { color: colors.muted, fontSize: typeScale.body, lineHeight: 22 },
+})

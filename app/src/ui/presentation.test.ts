@@ -5,7 +5,9 @@ import {
   analysisStagePresentation,
   cameraPresentation,
   stepAccessibilityLabel,
+  trendPresentation,
 } from './presentation'
+import { colors } from './theme'
 
 describe('cameraPresentation', () => {
   it('uses direct capture guidance', () => {
@@ -75,5 +77,15 @@ describe('analysis accessibility presentation', () => {
     expect(stepAccessibilityLabel(step, 'Integration by parts error', 'The extra x stays inside the integral.')).toBe(
       'Step 2, incorrect. Work: x e to the x minus x times the integral. LaTeX: x e^x - x \\int e^x dx. Misconception: Integration by parts error. Explanation: The extra x stays inside the integral.',
     )
+  })
+})
+
+describe('trendPresentation', () => {
+  it.each([
+    ['fewer', { label: 'Improving', color: colors.success, symbol: '↗' }],
+    ['more', { label: 'Needs attention', color: colors.error, symbol: '↘' }],
+    ['same', { label: 'Steady', color: colors.muted, symbol: '→' }],
+  ] as const)('maps %s without decorative color', (trend, expected) => {
+    expect(trendPresentation(trend)).toEqual(expected)
   })
 })

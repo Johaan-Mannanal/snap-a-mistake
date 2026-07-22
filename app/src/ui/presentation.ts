@@ -1,10 +1,17 @@
 import type { AnalyzeResponse, Step } from '@snap/shared'
 import { tagLabel } from '../lib/labels'
+import { colors } from './theme'
 
 const ORDINAL = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'] as const
 
 export function cameraPresentation(isRetry: boolean) {
   return { eyebrow: isRetry ? 'FOLLOW-UP' : 'SNAP', instruction: 'Keep one problem inside the frame' } as const
+}
+
+export function trendPresentation(trend: 'fewer' | 'more' | 'same') {
+  if (trend === 'fewer') return { label: 'Improving', color: colors.success, symbol: '↗' } as const
+  if (trend === 'more') return { label: 'Needs attention', color: colors.error, symbol: '↘' } as const
+  return { label: 'Steady', color: colors.muted, symbol: '→' } as const
 }
 
 export function analysisPresentation(response: Extract<AnalyzeResponse, { kind: 'analysis' }>) {
