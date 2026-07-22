@@ -15,6 +15,13 @@ describe('Stage1Schema', () => {
   it('rejects legibility outside 0..1', () => {
     expect(() => Stage1Schema.parse({ isMath: true, legibility: 1.5, steps: [] })).toThrow()
   })
+  it('rejects an inverted vertical band', () => {
+    expect(() => Stage1Schema.parse({
+      isMath: true,
+      legibility: 0.9,
+      steps: [{ ...step(0), yBandTopPct: 80, yBandBottomPct: 20 }],
+    })).toThrow('yBandTopPct must not exceed yBandBottomPct')
+  })
 })
 
 describe('Stage2Schema', () => {
@@ -48,6 +55,19 @@ describe('AnalyzeResponseSchema', () => {
       misconceptionTag: null, explanation: null, followUp: null, verifierAgreed: true,
     })
     expect(a.kind).toBe('analysis')
+  })
+  it('rejects an incomplete analysis diagnosis', () => {
+    expect(() => AnalyzeResponseSchema.parse({
+      kind: 'analysis', steps: [{ ...step(0), verdict: 'wrong' }], errorStepIndex: 0,
+      misconceptionTag: null, explanation: null, followUp: null, verifierAgreed: true,
+    })).toThrow('error diagnosis requires tag, explanation, and followUp')
+  })
+  it('rejects diagnosis fields when the work is correct', () => {
+    expect(() => AnalyzeResponseSchema.parse({
+      kind: 'analysis', steps: [{ ...step(0), verdict: 'ok' }], errorStepIndex: null,
+      misconceptionTag: 'sign-error', explanation: 'A diagnosis should not be present.',
+      followUp: { problem: 'x', concept: 'signs' }, verifierAgreed: true,
+    })).toThrow('correct work must have all-null diagnosis fields')
   })
 })
 

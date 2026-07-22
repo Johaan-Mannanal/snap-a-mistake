@@ -8,18 +8,31 @@ export const MISCONCEPTION_TAGS = [
 ] as const
 export type MisconceptionTag = (typeof MISCONCEPTION_TAGS)[number]
 
-export const TranscribedStepSchema = z.object({
+const StepFieldsSchema = z.object({
   index: z.number().int().min(0),
   latex: z.string(),
   plain: z.string(),
   yBandTopPct: z.number().min(0).max(100),
   yBandBottomPct: z.number().min(0).max(100),
 })
+function validateVerticalBand(
+  value: { yBandTopPct: number; yBandBottomPct: number },
+  ctx: z.RefinementCtx,
+) {
+  if (value.yBandTopPct > value.yBandBottomPct)
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['yBandTopPct'],
+      message: 'yBandTopPct must not exceed yBandBottomPct',
+    })
+}
+
+export const TranscribedStepSchema = StepFieldsSchema.superRefine(validateVerticalBand)
 export type TranscribedStep = z.infer<typeof TranscribedStepSchema>
 
-export const StepSchema = TranscribedStepSchema.extend({
+export const StepSchema = StepFieldsSchema.extend({
   verdict: z.enum(['ok', 'suspect', 'wrong', 'downstream']),
-})
+}).superRefine(validateVerticalBand)
 export type Step = z.infer<typeof StepSchema>
 
 export const Stage1Schema = z.object({
@@ -60,5 +73,12 @@ export const AnalyzeResponseSchema = z.discriminatedUnion('kind', [
   }),
   z.object({ kind: z.literal('unreadable'), tips: z.array(z.string()) }),
   z.object({ kind: z.literal('not-math') }),
-])
+]).superRefine((value, ctx) => {
+  if (value.kind !== 'analysis') return
+  const hasError = value.errorStepIndex !== null
+  if (hasError && (value.misconceptionTag === null || value.explanation === null || value.followUp === null))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'error diagnosis requires tag, explanation, and followUp' })
+  if (!hasError && (value.misconceptionTag !== null || value.explanation !== null || value.followUp !== null))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'correct work must have all-null diagnosis fields' })
+})
 export type AnalyzeResponse = z.infer<typeof AnalyzeResponseSchema>
