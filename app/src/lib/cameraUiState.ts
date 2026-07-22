@@ -1,10 +1,14 @@
 export const CAMERA_MOUNT_ERROR = 'Camera could not start. Tap Retry camera or choose from your library.'
 
+type CameraUiError =
+  | { kind: 'mount'; message: string }
+  | { kind: 'capture'; message: string }
+
 export type CameraUiState = {
   cameraMountKey: number
   cameraReady: boolean
   isCapturing: boolean
-  captureError: string | null
+  cameraError: CameraUiError | null
 }
 
 export type CameraUiEvent =
@@ -18,26 +22,35 @@ export const initialCameraUiState: CameraUiState = {
   cameraMountKey: 0,
   cameraReady: false,
   isCapturing: false,
-  captureError: null,
+  cameraError: null,
 }
 
 export function cameraUiReducer(state: CameraUiState, event: CameraUiEvent): CameraUiState {
   switch (event.type) {
     case 'cameraReady':
-      return { ...state, cameraReady: true, captureError: null }
+      return { ...state, cameraReady: true, cameraError: null }
     case 'cameraMountFailed':
-      return { ...state, cameraReady: false, captureError: CAMERA_MOUNT_ERROR }
+      return {
+        ...state,
+        cameraReady: false,
+        cameraError: { kind: 'mount', message: CAMERA_MOUNT_ERROR },
+      }
     case 'retryCameraMount':
       if (state.isCapturing) return state
       return {
         cameraMountKey: state.cameraMountKey + 1,
         cameraReady: false,
         isCapturing: false,
-        captureError: null,
+        cameraError: null,
       }
     case 'captureBusyChanged':
-      return { ...state, isCapturing: event.busy, captureError: event.busy ? null : state.captureError }
+      return {
+        ...state,
+        isCapturing: event.busy,
+        cameraError: event.busy && state.cameraError?.kind === 'capture' ? null : state.cameraError,
+      }
     case 'captureFailed':
-      return { ...state, captureError: event.message }
+      if (state.cameraError?.kind === 'mount') return state
+      return { ...state, cameraError: { kind: 'capture', message: event.message } }
   }
 }

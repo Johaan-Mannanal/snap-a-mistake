@@ -8,7 +8,7 @@ import { AppButton } from '../src/components/AppButton'
 import { CameraCorners } from '../src/components/CameraCorners'
 import { AppIcon } from '../src/components/AppIcon'
 import { capturePhoto, runIfCaptureIdle, type CaptureLock } from '../src/lib/cameraCapture'
-import { CAMERA_MOUNT_ERROR, cameraUiReducer, initialCameraUiState } from '../src/lib/cameraUiState'
+import { cameraUiReducer, initialCameraUiState } from '../src/lib/cameraUiState'
 import { getSession, setPhoto } from '../src/lib/session'
 import { cameraPermissionPresentation, cameraPresentation } from '../src/ui/presentation'
 import { colors, spacing, typeScale } from '../src/ui/theme'
@@ -17,7 +17,7 @@ export default function Home() {
   const camera = useRef<CameraView>(null)
   const captureLock = useRef<CaptureLock>({ current: false })
   const [permission, requestPermission] = useCameraPermissions()
-  const [{ cameraMountKey, cameraReady, isCapturing, captureError }, dispatchCamera] = useReducer(cameraUiReducer, initialCameraUiState)
+  const [{ cameraMountKey, cameraReady, isCapturing, cameraError }, dispatchCamera] = useReducer(cameraUiReducer, initialCameraUiState)
   const isRetry = getSession().isRetry
   const presentation = cameraPresentation(isRetry)
 
@@ -107,10 +107,10 @@ export default function Home() {
 
       <View pointerEvents="box-none" style={styles.instructionWrap}>
         <Text style={styles.instruction}>{presentation.instruction}</Text>
-        {captureError ? (
+        {cameraError ? (
           <View style={styles.captureErrorPanel}>
-            <Text accessibilityRole="alert" style={styles.captureError}>{captureError}</Text>
-            {captureError === CAMERA_MOUNT_ERROR ? (
+            <Text accessibilityRole="alert" style={styles.captureError}>{cameraError.message}</Text>
+            {cameraError.kind === 'mount' ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{ disabled: isCapturing }}
