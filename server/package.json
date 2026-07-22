@@ -12,6 +12,7 @@
     "golden": "tsx scripts/golden.ts",
     "golden:fermat": "GOLDEN_SOURCE=fermat tsx scripts/golden.ts",
     "gen-synthetic": "tsx scripts/gen-synthetic.ts",
+    "gen-app-icons": "tsx scripts/gen-app-icons.ts",
     "mock": "tsx scripts/mock.ts"
   },
   "dependencies": {
