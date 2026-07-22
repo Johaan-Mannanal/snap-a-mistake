@@ -46,6 +46,17 @@ describe('POST /analyze', () => {
     expect(res.statusCode).toBe(400)
     expect(res.json()).toEqual({ error: 'no file' })
   })
+  it('returns the API error contract for multipart data without a boundary', async () => {
+    const app = buildApp({ runAnalysis: async () => ({ kind: 'not-math' }) })
+    const res = await app.inject({
+      method: 'POST',
+      url: '/analyze',
+      payload: 'malformed multipart',
+      headers: { 'content-type': 'multipart/form-data' },
+    })
+    expect(res.statusCode).toBe(400)
+    expect(res.json()).toEqual({ error: 'no file' })
+  })
   it('502s on ModelJsonError', async () => {
     const app = buildApp({ runAnalysis: async () => { throw new ModelJsonError('bad') } })
     const form = formAutoContent({ photo: await tinyJpeg() })

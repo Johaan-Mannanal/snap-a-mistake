@@ -6,6 +6,10 @@ import { ModelJsonError } from './llm/client.js'
 
 export type RunAnalysisFn = (image: { base64: string; mediaType: 'image/jpeg' }) => Promise<AnalyzeResponse>
 
+function hasMultipartBoundary(contentType: string | undefined): boolean {
+  return typeof contentType === 'string' && /;\s*boundary=(?:"[^"]+"|[^;\s]+)/i.test(contentType)
+}
+
 export function buildApp(deps: { runAnalysis: RunAnalysisFn; logger?: boolean }): FastifyInstance {
   const app = Fastify({ logger: deps.logger ?? false, bodyLimit: 15 * 1024 * 1024 })
   app.register(multipart, { limits: { fileSize: 15 * 1024 * 1024, files: 1 } })
@@ -14,7 +18,9 @@ export function buildApp(deps: { runAnalysis: RunAnalysisFn; logger?: boolean })
 
   app.post('/analyze', async (req, reply) => {
     try {
-      if (!req.isMultipart()) return reply.code(400).send({ error: 'no file' })
+      if (!req.isMultipart() || !hasMultipartBoundary(req.headers['content-type'])) {
+        return reply.code(400).send({ error: 'no file' })
+      }
       const file = await req.file()
       if (!file) return reply.code(400).send({ error: 'no file' })
       const raw = await file.toBuffer()
