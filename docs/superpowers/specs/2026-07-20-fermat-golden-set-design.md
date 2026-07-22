@@ -1,8 +1,8 @@
 # FERMAT Handwriting Golden-Set Expansion
 
-**Date:** 2026-07-20
-**Status:** Approved design
-**Source dataset:** [AI4Bharat FERMAT](https://huggingface.co/datasets/ai4bharat/FERMAT)
+**Date:** 2026-07-20  
+**Status:** Approved design  
+**Source dataset:** [AI4Bharat FERMAT](https://huggingface.co/datasets/ai4bharat/FERMAT)  
 **License:** Creative Commons Attribution 4.0 International (CC BY 4.0)
 
 ## Goal
@@ -144,3 +144,4 @@ the synthetic baseline while improving the handwritten subset.
 - Broadening the product beyond algebra and calculus.
 - Replacing the later physical-device camera pass.
 - Tuning prompts without rerunning the existing synthetic regression baseline.
+
