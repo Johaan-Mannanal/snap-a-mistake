@@ -2,6 +2,7 @@ import { AnalyzeResponseSchema, type AnalyzeResponse } from '@snap/shared'
 import { File } from 'expo-file-system'
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000'
+export const ANALYSIS_TIMEOUT_MS = 180_000
 
 export type ApiFailure = { kind: 'network' } | { kind: 'server'; status: number }
 
@@ -16,7 +17,7 @@ export async function analyzePhoto(uri: string, fetchFn: typeof fetch = fetch): 
   form.append('photo', new File(uri), 'photo.jpg')
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 35_000)
+  const timer = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS)
   let body: unknown
   let status: number
   try {

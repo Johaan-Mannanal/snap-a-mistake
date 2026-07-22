@@ -51,4 +51,25 @@ describe('analyzePhoto', () => {
     const fetchFn = vi.fn().mockRejectedValue(new TypeError('Network request failed'))
     await expect(analyzePhoto('file:///p.jpg', fetchFn)).rejects.toMatchObject({ failure: { kind: 'network' } })
   })
+  it('allows multi-stage analysis past 35 seconds, then aborts at 180 seconds', async () => {
+    vi.useFakeTimers()
+    try {
+      const fetchMock = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+        const requestSignal = init?.signal as AbortSignal
+        return new Promise<Response>((_resolve, reject) => {
+          requestSignal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+        })
+      })
+      const pending = analyzePhoto('file:///slow-math.jpg', fetchMock as typeof fetch).catch((error) => error)
+      const signal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal
+
+      await vi.advanceTimersByTimeAsync(35_000)
+      expect(signal.aborted).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(145_000)
+      await expect(pending).resolves.toMatchObject({ failure: { kind: 'network' } })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

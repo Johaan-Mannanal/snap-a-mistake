@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Stage1Result, Stage2Result, VerifierResult } from '@snap/shared'
 import type OpenAI from 'openai'
 import { ModelJsonError } from '../src/llm/client.js'
-import { makeRunAnalysis } from '../src/pipeline/run.js'
+import { makeRunAnalysis, type StageTiming } from '../src/pipeline/run.js'
 import type { Config } from '../src/config.js'
 
 const client = {} as OpenAI
@@ -64,5 +64,36 @@ describe('runAnalysis', () => {
   })
   it('throws ModelJsonError on out-of-range error index', async () => {
     await expect(run({ s2: { ...errorDiag, errorStepIndex: 99 } })).rejects.toThrow(ModelJsonError)
+  })
+  it('reports completed timings for all three model stages', async () => {
+    const timings: StageTiming[] = []
+    const analyze = makeRunAnalysis(client, config, {
+      transcribe: async () => s1(),
+      analyzeSteps: async () => errorDiag,
+      verifyDiagnosis: async () => ({ agrees: true, note: '' }),
+    }, (timing) => timings.push(timing))
+
+    await analyze(image)
+
+    expect(timings.map(({ stage, status }) => ({ stage, status }))).toEqual([
+      { stage: 'transcription', status: 'completed' },
+      { stage: 'analysis', status: 'completed' },
+      { stage: 'verification', status: 'completed' },
+    ])
+    expect(timings.every(({ durationMs }) => durationMs >= 0)).toBe(true)
+  })
+  it('reports the model stage that failed', async () => {
+    const timings: StageTiming[] = []
+    const analyze = makeRunAnalysis(client, config, {
+      transcribe: async () => s1(),
+      analyzeSteps: async () => { throw new Error('Request timed out.') },
+      verifyDiagnosis: async () => ({ agrees: true, note: '' }),
+    }, (timing) => timings.push(timing))
+
+    await expect(analyze(image)).rejects.toThrow('Request timed out.')
+    expect(timings.map(({ stage, status }) => ({ stage, status }))).toEqual([
+      { stage: 'transcription', status: 'completed' },
+      { stage: 'analysis', status: 'failed' },
+    ])
   })
 })

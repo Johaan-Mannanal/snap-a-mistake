@@ -19,6 +19,28 @@ type Deps = {
   verifyDiagnosis: typeof verifyDiagnosis
 }
 
+export type StageTiming = {
+  stage: 'transcription' | 'analysis' | 'verification'
+  status: 'completed' | 'failed'
+  durationMs: number
+}
+
+async function timeStage<T>(
+  stage: StageTiming['stage'],
+  work: () => Promise<T>,
+  onTiming: (timing: StageTiming) => void,
+): Promise<T> {
+  const startedAt = Date.now()
+  try {
+    const result = await work()
+    onTiming({ stage, status: 'completed', durationMs: Date.now() - startedAt })
+    return result
+  } catch (error) {
+    onTiming({ stage, status: 'failed', durationMs: Date.now() - startedAt })
+    throw error
+  }
+}
+
 function withVerdicts(steps: TranscribedStep[], errorIndex: number | null, verifierAgreed: boolean): Step[] {
   return steps.map((s) => ({
     ...s,
@@ -34,16 +56,26 @@ export function makeRunAnalysis(
   client: OpenAI,
   config: Config,
   deps: Deps = { transcribe, analyzeSteps, verifyDiagnosis },
+  onStageTiming: (timing: StageTiming) => void = () => {},
 ): RunAnalysisFn {
   return async (image) => {
-    const s1 = await deps.transcribe(client, config.models.vision, image)
+    const s1 = await timeStage(
+      'transcription',
+      () => deps.transcribe(client, config.models.vision, image),
+      onStageTiming,
+    )
     if (!s1.isMath) return { kind: 'not-math' }
     if (s1.legibility < config.legibilityThreshold || s1.steps.length === 0)
       return { kind: 'unreadable', tips: RETAKE_TIPS }
 
-    const s2 = await deps.analyzeSteps(client, config.models.analysis, s1.steps)
+    const s2 = await timeStage(
+      'analysis',
+      () => deps.analyzeSteps(client, config.models.analysis, s1.steps),
+      onStageTiming,
+    )
 
-    if (s2.errorStepIndex === null) {
+    const errorStepIndex = s2.errorStepIndex
+    if (errorStepIndex === null) {
       return {
         kind: 'analysis', steps: withVerdicts(s1.steps, null, true),
         errorStepIndex: null, misconceptionTag: null, explanation: null,
@@ -51,17 +83,21 @@ export function makeRunAnalysis(
       } satisfies AnalyzeResponse
     }
 
-    if (!s1.steps.some((s) => s.index === s2.errorStepIndex))
-      throw new ModelJsonError(`stage 2 flagged nonexistent step ${s2.errorStepIndex}`)
+    if (!s1.steps.some((s) => s.index === errorStepIndex))
+      throw new ModelJsonError(`stage 2 flagged nonexistent step ${errorStepIndex}`)
 
-    const v = await deps.verifyDiagnosis(client, config.models.verifier, s1.steps, {
-      errorStepIndex: s2.errorStepIndex,
-      explanation: s2.explanation ?? '',
-    })
+    const v = await timeStage(
+      'verification',
+      () => deps.verifyDiagnosis(client, config.models.verifier, s1.steps, {
+        errorStepIndex,
+        explanation: s2.explanation ?? '',
+      }),
+      onStageTiming,
+    )
 
     return {
-      kind: 'analysis', steps: withVerdicts(s1.steps, s2.errorStepIndex, v.agrees),
-      errorStepIndex: s2.errorStepIndex, misconceptionTag: s2.misconceptionTag,
+      kind: 'analysis', steps: withVerdicts(s1.steps, errorStepIndex, v.agrees),
+      errorStepIndex, misconceptionTag: s2.misconceptionTag,
       explanation: s2.explanation, followUp: s2.followUp, verifierAgreed: v.agrees,
     } satisfies AnalyzeResponse
   }
