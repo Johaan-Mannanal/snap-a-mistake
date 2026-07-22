@@ -29,7 +29,10 @@ async function opaqueIcon(mark: Buffer, width: number, height: number, file: str
 }
 
 async function transparentMark(mark: Buffer, width: number, height: number, file: string) {
-  await sharp(mark).resize({ width, height, fit: 'contain' }).png().toFile(file)
+  await sharp(mark)
+    .resize({ width, height, fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toFile(file)
 }
 
 export async function renderFocusLensAssets(targetRoot: string, sourceRoot = targetRoot) {

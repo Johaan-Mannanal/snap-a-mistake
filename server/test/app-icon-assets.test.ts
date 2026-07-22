@@ -15,6 +15,15 @@ async function pixel(file: string, left: number, top: number) {
   return [...data.subarray(0, 3)]
 }
 
+async function alpha(file: string, left: number, top: number) {
+  const { data } = await sharp(file)
+    .extract({ left, top, width: 1, height: 1 })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  return data[3]
+}
+
 describe('Focus Lens icon assets', () => {
   test('renders every platform asset from the canonical mark', async () => {
     const sourceRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -48,6 +57,11 @@ describe('Focus Lens icon assets', () => {
 
     expect(await pixel(path.join(tempRoot, 'app/assets/images/icon.png'), 0, 0)).toEqual([5, 5, 5])
     expect(await pixel(path.join(tempRoot, 'app/assets/images/icon.png'), 512, 512)).toEqual([20, 115, 230])
+
+    const splash = path.join(tempRoot, 'app/assets/images/splash-icon.png')
+    expect(await alpha(splash, 0, 0)).toBe(0)
+    expect(await alpha(splash, 0, 106)).toBe(0)
+    expect(await alpha(splash, 114, 106)).toBe(255)
 
     const composer = await readFile(path.join(tempRoot, 'app/assets/expo.icon/icon.json'), 'utf8')
     expect(composer).toContain('focus-lens-mark.svg')
