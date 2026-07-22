@@ -35,11 +35,16 @@ describe('POST /analyze', () => {
     expect(res.json().kind).toBe('unreadable')
     expect(received).toBe('image/jpeg')
   })
-  it('400s with no file', async () => {
+  it('returns the API error contract for a non-multipart request', async () => {
     const app = buildApp({ runAnalysis: async () => ({ kind: 'not-math' }) })
-    const res = await app.inject({ method: 'POST', url: '/analyze', payload: {} })
-    expect(res.statusCode).toBeGreaterThanOrEqual(400)
-    expect(res.statusCode).toBeLessThan(500)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/analyze',
+      payload: 'not multipart',
+      headers: { 'content-type': 'text/plain' },
+    })
+    expect(res.statusCode).toBe(400)
+    expect(res.json()).toEqual({ error: 'no file' })
   })
   it('502s on ModelJsonError', async () => {
     const app = buildApp({ runAnalysis: async () => { throw new ModelJsonError('bad') } })

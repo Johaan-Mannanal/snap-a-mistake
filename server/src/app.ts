@@ -13,9 +13,10 @@ export function buildApp(deps: { runAnalysis: RunAnalysisFn; logger?: boolean })
   app.get('/health', async () => ({ ok: true }))
 
   app.post('/analyze', async (req, reply) => {
-    const file = typeof req.file === 'function' ? await req.file() : undefined
-    if (!file) return reply.code(400).send({ error: 'no file' })
     try {
+      if (!req.isMultipart()) return reply.code(400).send({ error: 'no file' })
+      const file = await req.file()
+      if (!file) return reply.code(400).send({ error: 'no file' })
       const raw = await file.toBuffer()
       const jpeg = await sharp(raw)
         .rotate() // honor EXIF orientation from phone cameras
