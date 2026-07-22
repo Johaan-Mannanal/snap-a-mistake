@@ -88,8 +88,16 @@ const rejectedFiles = [
   'fermat-img_459_pert_3_1.jpg',
 ]
 
+function rejectedEntries(actual: readonly string[], rejected: readonly string[]) {
+  return actual.filter((entry) => rejected.includes(entry))
+}
+
 describe('FERMAT curated subset', () => {
   const cases = manifest.cases.filter((c) => c.source === 'fermat')
+
+  it('detects a partially reintroduced rejected record', () => {
+    expect(rejectedEntries([rejectedSourceIds[0]!], rejectedSourceIds)).toEqual([rejectedSourceIds[0]!])
+  })
 
   it('contains exactly two correct and eight error cases', () => {
     expect(cases).toHaveLength(10)
@@ -125,10 +133,10 @@ describe('FERMAT curated subset', () => {
       errorStepIndex,
       tag: expectedFermatCases.find((c) => c.sourceId === sourceId)?.tag,
     })))
-    expect(cases.map((c) => c.sourceId)).not.toEqual(expect.arrayContaining(rejectedSourceIds))
-    expect(provenance.cases.map((c) => c.sourceId)).not.toEqual(expect.arrayContaining(rejectedSourceIds))
+    expect(rejectedEntries(cases.map((c) => c.sourceId!), rejectedSourceIds)).toEqual([])
+    expect(rejectedEntries(provenance.cases.map((c) => c.sourceId), rejectedSourceIds)).toEqual([])
     const committedPhotos = await readdir(path.join(goldenDir, 'photos'))
-    expect(committedPhotos).not.toEqual(expect.arrayContaining(rejectedFiles))
+    expect(rejectedEntries(committedPhotos, rejectedFiles)).toEqual([])
   })
 
   it('pins the licensed upstream revision and aligns provenance one-to-one', () => {
