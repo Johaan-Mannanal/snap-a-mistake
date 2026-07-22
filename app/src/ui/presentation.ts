@@ -1,4 +1,4 @@
-import type { AnalyzeResponse } from '@snap/shared'
+import type { AnalyzeResponse, Step } from '@snap/shared'
 import { tagLabel } from '../lib/labels'
 
 const ORDINAL = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'] as const
@@ -21,4 +21,34 @@ export function analysisPresentation(response: Extract<AnalyzeResponse, { kind: 
     headline: `The first break is in step ${step}.`,
     detail: response.explanation ?? '',
   }
+}
+
+export function analysisStagePresentation(label: string, index: number, currentStage: number) {
+  const status = index < currentStage ? 'completed' : index === currentStage ? 'current' : 'upcoming'
+  const mark = status === 'completed' ? '✓' : status === 'current' ? '●' : '○'
+  return { status, mark, accessibilityLabel: `${label}, ${status}` }
+}
+
+const VERDICT_LABEL: Record<Step['verdict'], string> = {
+  ok: 'correct',
+  wrong: 'incorrect',
+  suspect: 'needs a second look',
+  downstream: 'downstream from the first issue',
+}
+
+function accessibilitySentence(label: string, value: string) {
+  const copy = value.trim()
+  return `${label}: ${copy}${/[.!?]$/.test(copy) ? '' : '.'}`
+}
+
+export function stepAccessibilityLabel(step: Step, misconceptionLabel: string | null, explanation: string | null) {
+  const expanded = step.verdict === 'wrong' || step.verdict === 'suspect'
+  const sentences = [
+    `Step ${step.index + 1}, ${VERDICT_LABEL[step.verdict]}.`,
+    accessibilitySentence('Work', step.plain),
+    accessibilitySentence('LaTeX', step.latex),
+  ]
+  if (expanded && misconceptionLabel) sentences.push(accessibilitySentence('Misconception', misconceptionLabel))
+  if (expanded && explanation) sentences.push(accessibilitySentence('Explanation', explanation))
+  return sentences.join(' ')
 }

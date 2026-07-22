@@ -1,13 +1,14 @@
 import { StyleSheet, Text, View } from 'react-native'
 import type { Step } from '@snap/shared'
 import { colors, spacing } from '../ui/theme'
+import { stepAccessibilityLabel } from '../ui/presentation'
 
 export function StepCard(props: { step: Step; misconceptionLabel: string | null; explanation: string | null }) {
   const expanded = props.step.verdict === 'wrong' || props.step.verdict === 'suspect'
   const mark = props.step.verdict === 'ok' ? '✓' : props.step.verdict === 'wrong' ? '×' : props.step.verdict === 'suspect' ? '?' : '↓'
   const color = props.step.verdict === 'ok' ? colors.success : props.step.verdict === 'wrong' ? colors.error : colors.muted
   return (
-    <View style={styles.row} accessible accessibilityLabel={`Step ${props.step.index + 1}, ${props.step.verdict}`}>
+    <View style={styles.row} accessible accessibilityLabel={stepAccessibilityLabel(props.step, props.misconceptionLabel, props.explanation)}>
       <Text style={styles.index}>{String(props.step.index + 1).padStart(2, '0')}</Text>
       <Text style={[styles.mark, { color }]}>{mark}</Text>
       <View style={styles.copy}>
