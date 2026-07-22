@@ -15,6 +15,6 @@ export function AppScreen(props: PropsWithChildren<{ scroll?: boolean; contentSt
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.ink },
-  fixed: { flex: 1, paddingHorizontal: spacing.xl },
-  content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg },
+  fixed: { flex: 1, paddingHorizontal: 20 },
+  content: { paddingHorizontal: 20, paddingBottom: spacing.xxl, gap: spacing.lg },
 })
