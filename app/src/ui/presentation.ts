@@ -8,6 +8,31 @@ export function cameraPresentation(isRetry: boolean) {
   return { eyebrow: isRetry ? 'FOLLOW-UP' : 'SNAP', instruction: 'Keep one problem inside the frame' } as const
 }
 
+export function cameraPermissionPresentation(permission: { granted: boolean; canAskAgain: boolean } | null) {
+  if (!permission) {
+    return {
+      state: 'loading' as const,
+      title: 'Checking camera access',
+      detail: 'You can still choose a photo from your library.',
+      primaryLabel: null,
+    }
+  }
+  if (permission.canAskAgain) {
+    return {
+      state: 'requestable' as const,
+      title: 'Camera access',
+      detail: 'Use the camera to capture one problem at a time.',
+      primaryLabel: 'Allow camera' as const,
+    }
+  }
+  return {
+    state: 'blocked' as const,
+    title: 'Camera access is off',
+    detail: 'Turn on Camera access in Settings, or choose a photo from your library.',
+    primaryLabel: 'Open Settings' as const,
+  }
+}
+
 export function trendPresentation(trend: 'fewer' | 'more' | 'same') {
   if (trend === 'fewer') return { label: 'Improving', color: colors.success, symbol: '↗' } as const
   if (trend === 'more') return { label: 'Needs attention', color: colors.error, symbol: '↘' } as const

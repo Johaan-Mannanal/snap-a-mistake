@@ -4,6 +4,7 @@ import {
   analysisPresentation,
   analysisStagePresentation,
   cameraPresentation,
+  cameraPermissionPresentation,
   stepAccessibilityLabel,
   trendPresentation,
 } from './presentation'
@@ -16,6 +17,35 @@ describe('cameraPresentation', () => {
 
   it('labels a follow-up attempt without changing the instruction', () => {
     expect(cameraPresentation(true)).toEqual({ eyebrow: 'FOLLOW-UP', instruction: 'Keep one problem inside the frame' })
+  })
+})
+
+describe('cameraPermissionPresentation', () => {
+  it('keeps permission loading distinct from a denial', () => {
+    expect(cameraPermissionPresentation(null)).toEqual({
+      state: 'loading',
+      title: 'Checking camera access',
+      detail: 'You can still choose a photo from your library.',
+      primaryLabel: null,
+    })
+  })
+
+  it('offers a permission request while the system can ask again', () => {
+    expect(cameraPermissionPresentation({ granted: false, canAskAgain: true })).toEqual({
+      state: 'requestable',
+      title: 'Camera access',
+      detail: 'Use the camera to capture one problem at a time.',
+      primaryLabel: 'Allow camera',
+    })
+  })
+
+  it('sends permanently denied permission to Settings', () => {
+    expect(cameraPermissionPresentation({ granted: false, canAskAgain: false })).toEqual({
+      state: 'blocked',
+      title: 'Camera access is off',
+      detail: 'Turn on Camera access in Settings, or choose a photo from your library.',
+      primaryLabel: 'Open Settings',
+    })
   })
 })
 
