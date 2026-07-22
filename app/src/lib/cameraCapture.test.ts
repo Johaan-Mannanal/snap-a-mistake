@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { capturePhoto, type CaptureLock } from './cameraCapture'
+import { capturePhoto, runIfCaptureIdle, type CaptureLock } from './cameraCapture'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -55,5 +55,53 @@ describe('capturePhoto', () => {
 
     expect(onError).toHaveBeenCalledWith('Could not take the photo. Try again or choose from your library.')
     expect(lock.current).toBe(false)
+  })
+
+  it('blocks competing actions until a pending capture resolves', async () => {
+    const pending = deferred<{ uri: string }>()
+    const lock: CaptureLock = { current: false }
+    const competingAction = vi.fn()
+    const onBusyChange = vi.fn()
+    const capture = capturePhoto({
+      camera: { takePictureAsync: vi.fn(() => pending.promise) },
+      ready: true,
+      lock,
+      onPhoto: vi.fn(),
+      onError: vi.fn(),
+      onBusyChange,
+    })
+
+    expect(runIfCaptureIdle(lock, competingAction)).toBe(false)
+    expect(competingAction).not.toHaveBeenCalled()
+
+    pending.resolve({ uri: 'file:///photo.jpg' })
+    await capture
+
+    expect(runIfCaptureIdle(lock, competingAction)).toBe(true)
+    expect(competingAction).toHaveBeenCalledTimes(1)
+    expect(onBusyChange.mock.calls).toEqual([[true], [false]])
+  })
+
+  it('re-enables competing actions after a capture rejects', async () => {
+    const pending = deferred<{ uri: string }>()
+    const lock: CaptureLock = { current: false }
+    const competingAction = vi.fn()
+    const onBusyChange = vi.fn()
+    const capture = capturePhoto({
+      camera: { takePictureAsync: vi.fn(() => pending.promise) },
+      ready: true,
+      lock,
+      onPhoto: vi.fn(),
+      onError: vi.fn(),
+      onBusyChange,
+    })
+
+    expect(runIfCaptureIdle(lock, competingAction)).toBe(false)
+    pending.reject(new Error('camera unavailable'))
+    await capture
+
+    expect(runIfCaptureIdle(lock, competingAction)).toBe(true)
+    expect(competingAction).toHaveBeenCalledTimes(1)
+    expect(onBusyChange.mock.calls).toEqual([[true], [false]])
   })
 })

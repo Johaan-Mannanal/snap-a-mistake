@@ -1,5 +1,11 @@
 export type CaptureLock = { current: boolean }
 
+export function runIfCaptureIdle(lock: CaptureLock, action: () => void) {
+  if (lock.current) return false
+  action()
+  return true
+}
+
 type CameraCapture = {
   takePictureAsync(options: { quality: number }): Promise<{ uri?: string } | undefined>
 }
