@@ -26,7 +26,11 @@ export async function capturePhoto(options: CapturePhotoOptions) {
   options.onBusyChange?.(true)
   try {
     const photo = await options.camera.takePictureAsync({ quality: 0.7 })
-    if (photo?.uri) options.onPhoto(photo.uri)
+    if (!photo?.uri) {
+      options.onError('Could not take the photo. Try again or choose from your library.')
+      return
+    }
+    options.onPhoto(photo.uri)
   } catch {
     options.onError('Could not take the photo. Try again or choose from your library.')
   } finally {

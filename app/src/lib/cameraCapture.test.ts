@@ -57,6 +57,24 @@ describe('capturePhoto', () => {
     expect(lock.current).toBe(false)
   })
 
+  it('turns an empty camera result into a recoverable error', async () => {
+    const onError = vi.fn()
+    const onPhoto = vi.fn()
+    const lock: CaptureLock = { current: false }
+
+    await capturePhoto({
+      camera: { takePictureAsync: vi.fn().mockResolvedValue(undefined) },
+      ready: true,
+      lock,
+      onPhoto,
+      onError,
+    })
+
+    expect(onPhoto).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith('Could not take the photo. Try again or choose from your library.')
+    expect(lock.current).toBe(false)
+  })
+
   it('blocks competing actions until a pending capture resolves', async () => {
     const pending = deferred<{ uri: string }>()
     const lock: CaptureLock = { current: false }
