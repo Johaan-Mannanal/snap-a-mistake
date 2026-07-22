@@ -116,7 +116,7 @@ needed for the importer tests.
 - Live smoke test passed against the real OpenAI pipeline (~9.5s/analysis).
 - Golden manifest: **25 cases** — 15 generated baseline cases plus 10 curated FERMAT photographs (2 correct, 8 intentional errors across algebra/calculus). The generated baseline last passed 15/15. Audited segmentation drift disproved fixed numeric FERMAT indices, so this branch now judges FERMAT localization by semantic anchors and exact canonical tags.
 - Latest paid FERMAT validation: **8/10**. Eight real-handwriting cases passed end-to-end; one selected the correct error step but disagreed with the strict canonical tag, and one returned truncated JSON after retry.
-- API key: in `server/.env` (git-ignored). **It was shared in a chat session — rotate it before the demo.**
+- API key: in `server/.env` (git-ignored). The previously exposed key was rotated; keep the replacement out of chats, commits, and demo recordings.
 
 ## Steps forward (rough priority order)
 
