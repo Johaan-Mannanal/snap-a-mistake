@@ -142,7 +142,7 @@ export default function Analyze() {
         ))}
       </View>
       <View style={styles.actions}>
-        {result.followUp && !correct ? <AppButton label="Try a simpler problem" onPress={() => router.push('/followup')} /> : null}
+        {result.followUp && !correct ? <AppButton label="Try a similar problem" onPress={() => router.push('/followup')} /> : null}
         <AppButton label="Snap another" onPress={snapAnother} variant="tertiary" />
       </View>
     </AppScreen>

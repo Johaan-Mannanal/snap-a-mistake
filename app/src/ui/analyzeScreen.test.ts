@@ -11,4 +11,9 @@ describe('analysis result screen', () => {
     expect(analyzeScreen).not.toMatch(unfinishedLessonAction)
     expect(analyzeScreen).not.toMatch(parkedFeatureMessage)
   })
+
+  it('offers a similar problem without promising lower difficulty', () => {
+    expect(analyzeScreen).toContain('label="Try a similar problem"')
+    expect(analyzeScreen).not.toContain('label="Try a simpler problem"')
+  })
 })
