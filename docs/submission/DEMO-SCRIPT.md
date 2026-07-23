@@ -1,13 +1,12 @@
-# Snap-a-Mistake Demo Script — 2:30 Target
+# Snap-a-Mistake Demo Script — 1:50–1:55 Target
 
-Record vertically from the phone when showing the app. The primary app take uses
-the deterministic mock server, so it must carry a persistent, unmistakable
-on-screen label: **“DETERMINISTIC MOCK MODE — CANNED RESPONSE (NOT LIVE GPT-5.6).”**
-Show separately labeled **“REAL GPT-5.6 RUN EVIDENCE — PAID FERMAT
-GATE: 8/10”** in the repository cutaway; this is evidence, not part of the mock
-take.
+Record vertically from the phone when showing the app. The core diagnosis is a
+**real live-model result** recorded from the live pipeline. If a deterministic
+mock is needed to show a separate UI state, it must carry a persistent,
+unmistakable on-screen label: **“DETERMINISTIC MOCK MODE — CANNED RESPONSE
+(NOT LIVE MODEL).”** Do not present canned footage as a live diagnosis.
 
-## 0:00–0:15 — Problem
+## 0:00–0:12 — The educational problem
 
 **On screen:** Handwritten work, then Snap-a-Mistake home screen.
 
@@ -15,62 +14,59 @@ take.
 the first handwritten step where the reasoning broke, explains the
 misconception, and gives the student a smaller problem to try next.”
 
-## 0:15–0:45 — Capture and analysis
+## 0:12–0:34 — Real capture and diagnosis
 
-**On screen:** Keep the persistent **“DETERMINISTIC MOCK MODE — CANNED RESPONSE
-(NOT LIVE GPT-5.6)”** banner visible while capturing an intentionally
-incorrect problem; show Reading, Checking, and Verifying progress stages.
+**On screen:** Capture an intentionally incorrect problem and show Reading,
+Checking, and Verifying. Keep a visible **“REAL LIVE-MODEL RUN”** label through
+the resulting diagnosis.
 
-**Say:** “This primary take is deterministic mock mode, so the displayed
-response is canned—not a live model call. In the live pipeline, GPT-5.6 vision
-transcribes the page into positioned steps, a reasoning pass finds the earliest
-error, and a separate verifier checks the diagnosis before the app displays it.”
+**Say:** “This is a real live-model run. A multimodal transcription pass reads
+the page into positioned steps, a reasoning diagnosis finds the earliest error,
+and an independent verifier checks the result before the app displays it.”
 
-## 0:45–1:15 — Exact-step feedback
+## 0:34–0:58 — Exact-step feedback
 
-**On screen:** Result overlay, wrong step card, misconception, explanation.
+**On screen:** The real-result overlay, wrong step card, misconception, and
+explanation.
 
-**Say:** “The app preserves the student’s page, highlights the exact line, and
-labels the underlying misconception—not merely the final answer. If the
+**Say:** “The app keeps the student's page in view, highlights the exact line,
+and names the underlying misconception—not merely the final answer. If the
 verifier disagrees, the red error becomes a softer uncertain state.”
 
-## 1:15–1:40 — Close the learning loop
+## 0:58–1:18 — Close the learning loop
 
-**On screen:** Follow-up problem, retry action, then correct state.
+**On screen:** Follow-up problem, retry action, then a correct state. Use the
+real result where possible. If mock footage is needed for this additional UI
+state, show the persistent canned-response label.
 
-**Say:** “Feedback immediately becomes targeted practice. The student tries an
-easier version, snaps again, and closes the loop with a verified correct state.”
+**Say:** “Feedback becomes targeted practice. The student tries an easier
+version, snaps again, and closes the loop with a verified correct state.”
 
-## 1:40–1:55 — Insights
+## 1:18–1:34 — Local insights
 
-**On screen:** Insights screen with local trend cards.
+**On screen:** Insights screen with local trend cards. If this is a mock state,
+keep the persistent canned-response label visible.
 
 **Say:** “Recurring misconception tags become private on-device trends, so a
 student can see whether sign errors or rule mistakes are improving over time.”
 
-## 1:55–2:20 — Codex build story
+## 1:34–1:50 — Technical trust and close
 
-**On screen:** Repository architecture, tests, semantic-anchor test, and a
-separate card labeled **“REAL GPT-5.6 RUN EVIDENCE — PAID FERMAT GATE: 8/10.”**
+**On screen:** Repository architecture, shared API schema, and a card labeled
+**“REAL-HANDWRITING VALIDATION — PAID FERMAT GATE: 8/10.”** Then return to the
+product name.
 
-**Say:** “I built this with Codex as an engineering partner. It helped turn the
-idea into design specs, drive test-first implementation and independent reviews,
-curate a licensed handwriting set, and diagnose paid evaluations. When model
-segmentation shifted, Codex replaced brittle line numbers with semantic math
-anchors. Separately, the paid real GPT-5.6 FERMAT gate is eight of ten: one
-canonical-tag mismatch and one truncated-JSON failure.”
-
-## 2:20–2:30 — Close
-
-**On screen:** Product name and Education category.
-
-**Say:** “Snap-a-Mistake helps students understand where their thinking changed,
-then gives them the next achievable step. That is feedback built for learning.”
+**Say:** “The system combines multimodal transcription, reasoning diagnosis,
+and independent verification. In the latest paid FERMAT gate, eight of ten
+real-handwriting cases passed; the two remaining misses are documented. Snap-a-
+Mistake helps students understand where their thinking changed, then gives them
+the next achievable step.”
 
 ## Recording safety
 
-- Start `npm run mock -w server` before recording; use `MOCK=correct` for the retry payoff.
-- Record one clean continuous app take, then add the repository cutaway.
-- Keep the final export below 2:50 to preserve upload-platform margin.
-- Listen once with the screen off to confirm Codex and GPT-5.6 are both audible.
-- Upload publicly to YouTube and verify playback in a signed-out browser.
+- Record the live-model core diagnosis before adding any mock cutaway.
+- Use a persistent canned-response label for every mock segment; do not imply
+  it is live.
+- Keep the final export at or below 1:55.
+- Upload publicly or unlisted as the rules allow, then verify playback in a
+  signed-out browser with audio and captions enabled.

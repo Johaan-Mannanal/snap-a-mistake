@@ -1,6 +1,9 @@
 # Snap-a-Mistake
 
-Snap a photo of handwritten algebra/calculus work → AI finds the exact step where the reasoning broke, names the misconception, explains why it broke, and generates an easier follow-up problem. Recurring mistake patterns are tracked locally over time.
+Snap a photo of handwritten algebra or calculus work. Snap-a-Mistake finds the
+first step where the reasoning broke, names the misconception, explains why it
+broke, and creates an easier problem to try next. Recurring mistake patterns
+are tracked locally over time.
 
 <p align="center">
   <img src="docs/assets/readme/analysis-error.png" alt="Snap-a-Mistake locating the first broken step in handwritten calculus work" width="31%" />
@@ -10,51 +13,61 @@ Snap a photo of handwritten algebra/calculus work → AI finds the exact step wh
 
 <p align="center"><sub>Locate the first break · generate targeted practice · track recurring patterns locally</sub></p>
 
-The screens above are captured from the real iOS app. The analysis screen uses
-the deterministic mock response so the public UI preview is reproducible; live
-GPT-5.6 validation results are reported below.
+The screens above are captured from the iOS app. The analysis screen uses the
+deterministic mock response so the public UI preview is reproducible; live-model
+validation results are reported below.
 
-Built for **OpenAI Build Week** in the **Education** category. The submission
-deadline is July 21, 2026 at 5:00 p.m. PDT. The project is evaluated on
-technological implementation, coherent product design, potential impact, and
-quality of the idea.
+## The learning loop
+
+Students often learn only that a final answer is wrong. That does not tell them
+which assumption or rule changed their reasoning. Snap-a-Mistake is built around
+an exact-first-break loop: preserve the original work, identify the earliest
+unsupported step, explain the misconception in context, then give the student a
+smaller targeted problem. The next attempt can close the loop with a verified
+correct state.
+
+> **Current Prometheus submission:** the public package is this repository and
+> a narrated video. Complete the required Google form, confirm eligibility,
+> verify public signed-out video playback, and submit by July 29 operationally
+> ahead of the official July 30, 2026, 8:45 p.m. PDT deadline. See the
+> [Devpost checklist](docs/submission/DEVPOST.md) and
+> [recording plan](docs/submission/DEMO-SCRIPT.md).
 
 ## Architecture (three workspaces, npm monorepo)
 
 ```
 photo → app (Expo/RN) → POST /analyze → server (Fastify, stateless)
-  → Stage 1: GPT-5.6-sol vision — transcribe handwriting into indexed steps + y-position bands
-  → Stage 2: GPT-5.6-sol text — find FIRST wrong step, tag misconception, explain, follow-up problem
-  → Verifier: GPT-5.6-luna — independent audit; disagreement softens "wrong" to "suspect"
+  → multimodal transcription — indexed handwritten steps + y-position bands
+  → reasoning diagnosis — first wrong step, tag misconception, explanation, follow-up problem
+  → independent verification — disagreement softens "wrong" to "suspect"
   → typed AnalyzeResponse → app renders photo overlay + step cards → history saved to on-device SQLite
 ```
 
-- **`shared/`** — the API contract: zod schemas (`AnalyzeResponse`, `Step`, `Stage1/2/Verifier` results) and the 13-tag misconception vocabulary. Both server and app import from here; never re-declare these types.
-- **`server/`** — Fastify. One route that matters: `POST /analyze` (multipart `photo`) → sharp normalize → 3-stage LLM pipeline → JSON. Stateless by design: no DB, no accounts. All model calls flow through one wrapper (`src/llm/client.ts`: zod-validated JSON with one correction retry; transport errors propagate untouched). Provider swaps only touch this workspace.
+- **`shared/`** — the API contract: Zod schemas (`AnalyzeResponse`, `Step`, stage results) and the 13-tag misconception vocabulary. Both server and app import from here; types are not re-declared.
+- **`server/`** — Fastify. `POST /analyze` accepts a multipart photo, normalizes it, runs the three-stage model pipeline, and returns JSON. Stateless by design: no database and no accounts. All model calls flow through one wrapper (`src/llm/client.ts`: Zod-validated JSON with one correction retry; transport errors propagate untouched).
 - **`app/`** — Expo (expo-router, strict TS). Screens: camera home → analyzing (staged progress) → result (red-band photo overlay + ✓/⚠️/✗/↓ step cards) → follow-up loop → insights (weekly misconception trends). Pure logic lives in `app/src/lib/` (no RN imports — vitest-tested in node); screens are thin components over it. History is device-local SQLite.
 - **Parked feature:** an AI video-generation lesson exists in the separate `midnight apps tutor` repo; the Result screen reserves a disabled "🎬 Video lesson — coming soon" slot for it. Deliberately untouched so far.
 
-## Built with Codex and GPT-5.6
+## Product AI and safeguards
 
-Codex was the engineering partner across the project: it helped turn the idea
-into reviewed design specs, execute the backend and mobile plans with test-driven
-development, curate and provenance-check a real-handwriting regression set, and
-run independent task and whole-branch reviews. When paid golden runs exposed
-brittle line-number expectations, Codex analyzed sanitized audits and replaced
-them with semantic math anchors.
+The configured pipeline uses a multimodal transcription pass, a
+reasoning diagnosis pass, and an independent verification pass. Current model
+IDs live in `server/src/config.ts`. The verifier favors uncertainty over a false
+accusation: when it disagrees with the diagnosis, the app renders a softer
+“suspect” state.
 
-GPT-5.6 powers the product itself. A vision pass transcribes handwriting into
-positioned steps, a reasoning pass finds the first broken step and creates
-targeted feedback, and an independent verifier softens the UI when the diagnosis
-is uncertain.
-
-Key decisions made during that workflow:
+Key product decisions:
 
 - semantic math anchors instead of segmentation-dependent step numbers;
 - one exact canonical misconception tag per error;
 - a verifier that prefers uncertainty over a false accusation;
 - a stateless backend and on-device-only learning history;
-- a zero-cost mock path so judges can experience every UI state without keys.
+- a zero-cost mock path so the UI can be inspected without keys.
+
+The server is stateless and learning history is stored only on the device. There
+are no accounts or server-side student-history storage in the current product.
+The mock path is for reproducible UI inspection and must be labeled as canned
+whenever it is shown.
 
 ## Where the documentation lives
 
@@ -67,13 +80,12 @@ Key decisions made during that workflow:
 | FERMAT source records, labels, pinned revision, and shard checksums | [`server/golden/fermat-provenance.json`](server/golden/fermat-provenance.json) |
 | Optional FERMAT subset importer (requires accepted FERMAT access and `HF_TOKEN`) | [`server/scripts/import-fermat.py`](server/scripts/import-fermat.py) |
 
-Every task was implemented via fresh-agent TDD with a two-stage review (spec compliance + code quality) and a final whole-branch review per plan.
-
 ## Submission kit
 
-The [ready-to-paste Devpost form copy](docs/submission/DEVPOST.md) and [timed
-recording plan](docs/submission/DEMO-SCRIPT.md) are prepared for the final
-submission.
+The [ready-to-paste Devpost form copy](docs/submission/DEVPOST.md) and
+[1:50–1:55 recording plan](docs/submission/DEMO-SCRIPT.md) are prepared for the
+current submission. The demo leads with a real live-model diagnosis; any mock
+footage is explicitly labeled as canned UI coverage.
 
 ## Running things
 
@@ -120,25 +132,28 @@ The root `npm test` command runs both the workspace Vitest suites and the four
 stock-`python3` importer regression tests; no third-party Python packages are
 needed for the importer tests.
 
-**Conventions that will bite you if you don't know them:** the `app` workspace uses extensionless relative imports (Metro can't resolve `.js`→`.ts`); `server`/`shared` use `.js`-suffixed imports (Node ESM requires them). Model IDs and the legibility threshold live in `server/src/config.ts`. OpenAI JSON mode requires the literal word "JSON" in prompts. Copy strings in the app are tuned demo copy — don't reword casually.
+**Conventions that matter:** the `app` workspace uses extensionless relative
+imports (Metro cannot resolve `.js` to `.ts`); `server` and `shared` use
+`.js`-suffixed imports (Node ESM requires them). Model IDs and the legibility
+threshold live in `server/src/config.ts`. JSON-mode prompts must include the
+literal word “JSON.”
 
-## Current status (as of July 22)
+## Current evidence (as of July 22)
 
-- Backend + app are complete and reviewed. All **149 automated tests** pass, workspace typechecking is clean, and Expo Doctor reports **20/20 checks passed**.
-- Physical-device verification is complete on an iPhone development build: camera and gallery input, staged analysis, result overlays, follow-up practice, local Insights, non-math/unreadable responses, and network recovery were exercised. The live pipeline correctly rejected a non-math photo and processed real handwritten math after the long-running request path was hardened.
-- Live smoke test passed against the real OpenAI pipeline (~9.5s/analysis).
+- As of July 22, **149 automated tests** were passing, workspace typechecking was clean, and Expo Doctor reported **20/20 checks passed**.
+- A physical-device development-build check exercised camera and gallery input, staged analysis, result overlays, follow-up practice, local insights, non-math and unreadable responses, and network recovery. A live smoke test processed real handwritten math after the long-running request path was hardened.
 - Golden manifest: **25 cases** — 15 generated baseline cases plus 10 curated FERMAT photographs (2 correct, 8 intentional errors across algebra/calculus). The generated baseline last passed 15/15. Audited segmentation drift disproved fixed numeric FERMAT indices, so this branch now judges FERMAT localization by semantic anchors and exact canonical tags.
 - Latest paid FERMAT validation: **8/10**. Eight real-handwriting cases passed end-to-end; one selected the correct error step but disagreed with the strict canonical tag, and one returned truncated JSON after retry.
-- API key: in `server/.env` (git-ignored). The previously exposed key was rotated; keep the replacement out of chats, commits, and demo recordings.
 
-## Steps forward (rough priority order)
+These are engineering validation results, not claims about a deployed service,
+users, or learning outcomes.
 
-1. **Record the public, narrated demo (under three minutes)** using [`docs/submission/DEMO-SCRIPT.md`](docs/submission/DEMO-SCRIPT.md): snap wrong work → locate the first break → explain the misconception → generate an easier follow-up → show recurring patterns. Record the real phone camera for the opening shot, then use device screen recording for legibility.
-2. **Upload and verify the video** — make it public or unlisted as the submission rules allow, then open the link in a signed-out browser and confirm the audio, captions, and full playback work.
-3. **Complete the submission form** using [`docs/submission/DEVPOST.md`](docs/submission/DEVPOST.md), add the public repository and video links, obtain the required feedback-thread ID, and submit before the deadline.
-4. **Deploy only when a future event requires a live endpoint.** Railway is deliberately deferred for this mobile demo: the current judging package is a public repository plus narrated video, and the verified phone workflow can use the Mac-hosted server over the same LAN. A hosted backend can be added later without changing the app architecture.
-5. **Optional stretch:** wire the parked video-lesson feature into the reserved Result-screen slot.
-6. Deferred code minors: PhotoOverlay `Image.getSize` fallback → migrate to `expo-image`; `history.ts` init-race memoization; 413 status passthrough on oversized uploads; misc polish.
+## Next submission actions
+
+1. Record the narrated demo using [`docs/submission/DEMO-SCRIPT.md`](docs/submission/DEMO-SCRIPT.md): real diagnosis first, then clearly labeled mock footage only for reproducible UI states the live run does not show.
+2. Upload the video and verify full playback, audio, and captions in a signed-out browser.
+3. Complete the required Google form and Devpost entry, confirm eligibility and the public repository, then submit by July 29 ahead of the official deadline.
+4. Deploy only when a future event requires a live endpoint. The present mobile workflow can use the Mac-hosted server over the same LAN; a hosted backend is not claimed here.
 
 ## Things intentionally NOT done
 
