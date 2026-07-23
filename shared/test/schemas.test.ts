@@ -67,6 +67,15 @@ describe('Stage2Schema', () => {
       explanation: 'Dividing by $\\frac{x}{2}$ changes the value.',
     })).toThrow('raw LaTeX')
   })
+
+  it('rejects raw LaTeX control symbols in follow-up problems', () => {
+    expect(() => Stage2Schema.parse({
+      errorStepIndex: 0,
+      misconceptionTag: 'algebraic-slip',
+      explanation: 'Use the same operation on both sides.',
+      followUp: { problem: 'Simplify x\\, y.', concept: 'multiplication' },
+    })).toThrow('raw LaTeX')
+  })
 })
 
 describe('AnalyzeResponseSchema', () => {
@@ -91,6 +100,27 @@ describe('AnalyzeResponseSchema', () => {
       misconceptionTag: 'sign-error', explanation: 'A diagnosis should not be present.',
       followUp: { problem: 'x', concept: 'signs' }, verifierAgreed: true,
     })).toThrow('correct work must have all-null diagnosis fields')
+  })
+  it('rejects raw LaTeX in analysis student-facing fields', () => {
+    const base = {
+      kind: 'analysis' as const,
+      steps: [{ ...step(0), verdict: 'wrong' as const }],
+      errorStepIndex: 0,
+      misconceptionTag: 'algebraic-slip' as const,
+      verifierAgreed: true,
+    }
+
+    expect(() => AnalyzeResponseSchema.parse({
+      ...base,
+      explanation: 'Terms are not automatically equal\\!',
+      followUp: { problem: 'Simplify x².', concept: 'equality' },
+    })).toThrow('raw LaTeX')
+
+    expect(() => AnalyzeResponseSchema.parse({
+      ...base,
+      explanation: 'Terms are not automatically equal.',
+      followUp: { problem: 'Simplify x\\, y.', concept: 'multiplication' },
+    })).toThrow('raw LaTeX')
   })
 })
 

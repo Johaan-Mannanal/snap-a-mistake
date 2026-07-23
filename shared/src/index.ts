@@ -9,7 +9,7 @@ export const MISCONCEPTION_TAGS = [
 export type MisconceptionTag = (typeof MISCONCEPTION_TAGS)[number]
 
 const StudentFacingMathTextSchema = z.string().min(1).refine(
-  (value) => !/(?:\$|\^|\\(?:[A-Za-z]+|[()[\]]))/.test(value),
+  (value) => !/[\\$^]/.test(value),
   { message: 'must use Unicode or prose without raw LaTeX, math delimiters, or caret notation' },
 )
 
