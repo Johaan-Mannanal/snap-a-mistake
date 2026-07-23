@@ -46,7 +46,6 @@ photo → app (Expo/RN) → POST /analyze → server (Fastify, stateless)
 - **`shared/`** — the API contract: Zod schemas (`AnalyzeResponse`, `Step`, stage results) and the 13-tag misconception vocabulary. Both server and app import from here; types are not re-declared.
 - **`server/`** — Fastify. `POST /analyze` accepts a multipart photo, normalizes it, runs the three-stage model pipeline, and returns JSON. Stateless by design: no database and no accounts. All model calls flow through one wrapper (`src/llm/client.ts`: Zod-validated JSON with one correction retry; transport errors propagate untouched).
 - **`app/`** — Expo (expo-router, strict TS). Screens: camera home → analyzing (staged progress) → result (red-band photo overlay + ✓/⚠️/✗/↓ step cards) → follow-up loop → insights (weekly misconception trends). Pure logic lives in `app/src/lib/` (no RN imports — vitest-tested in node); screens are thin components over it. History is device-local SQLite.
-- **Parked feature:** an AI video-generation lesson exists in the separate `midnight apps tutor` repo; the Result screen reserves a disabled "🎬 Video lesson — coming soon" slot for it. Deliberately untouched so far.
 
 ## Product AI and safeguards
 
@@ -153,7 +152,6 @@ users, or learning outcomes.
 1. Record the narrated demo using [`docs/submission/DEMO-SCRIPT.md`](docs/submission/DEMO-SCRIPT.md): real diagnosis first, then clearly labeled mock footage only for reproducible UI states the live run does not show.
 2. Upload the video and verify full playback, audio, and captions in a signed-out browser.
 3. Complete the required Google form and Devpost entry, confirm eligibility and the public repository, then submit by July 29 ahead of the official deadline.
-4. Deploy only when a future event requires a live endpoint. The present mobile workflow can use the Mac-hosted server over the same LAN; a hosted backend is not claimed here.
 
 ## Things intentionally NOT done
 
