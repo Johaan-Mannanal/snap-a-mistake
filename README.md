@@ -95,7 +95,7 @@ footage is explicitly labeled as canned UI coverage.
 npm install
 npm run mock -w server
 # In a second terminal, use localhost for the iOS simulator:
-cd app && EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start
+cd app && EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --go
 ```
 
 Press `i` for the iOS simulator. For a physical iPhone, keep the phone and Mac
@@ -103,7 +103,7 @@ on the same network and use the Mac's LAN address instead—its `localhost` poin
 to the phone, not this server:
 
 ```bash
-cd app && EXPO_PUBLIC_API_URL=http://<Mac-LAN-IP>:3000 npx expo start
+cd app && EXPO_PUBLIC_API_URL=http://<Mac-LAN-IP>:3000 npx expo start --go
 ```
 
 Use `MOCK=correct npm run mock -w server` or replace `correct` with `error`,
@@ -125,7 +125,7 @@ npm run golden -w server          # paid combined 25-case gate; exits 1 on failu
 npm run golden:fermat -w server   # paid ten-case handwriting-only gate
 
 # App (device/simulator)
-cd app && npx expo start     # Expo Go; phone needs EXPO_PUBLIC_API_URL=http://<Mac-LAN-IP>:3000
+cd app && npx expo start --go   # Expo Go; phone needs EXPO_PUBLIC_API_URL=http://<Mac-LAN-IP>:3000
 ```
 
 The root `npm test` command runs both the workspace Vitest suites and the four
