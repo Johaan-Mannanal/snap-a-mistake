@@ -139,7 +139,7 @@ literal word “JSON.”
 
 ## Current evidence (as of July 22)
 
-- As of July 22, **149 automated tests** were passing, workspace typechecking was clean, and Expo Doctor reported **20/20 checks passed**.
+- As of July 22, **150 automated tests** were passing, workspace typechecking was clean, and Expo Doctor reported **20/20 checks passed**.
 - A physical-device development-build check exercised camera and gallery input, staged analysis, result overlays, follow-up practice, local insights, non-math and unreadable responses, and network recovery. A live smoke test processed real handwritten math after the long-running request path was hardened.
 - Golden manifest: **25 cases** — 15 generated baseline cases plus 10 curated FERMAT photographs (2 correct, 8 intentional errors across algebra/calculus). The generated baseline last passed 15/15. Audited segmentation drift disproved fixed numeric FERMAT indices, so this branch now judges FERMAT localization by semantic anchors and exact canonical tags.
 - Latest paid FERMAT validation: **8/10**. Eight real-handwriting cases passed end-to-end; one selected the correct error step but disagreed with the strict canonical tag, and one returned truncated JSON after retry.

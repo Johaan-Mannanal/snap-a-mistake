@@ -50,7 +50,7 @@ private on-device trend tracking rather than acting as another answer generator.
 
 - TypeScript monorepo with Expo, Fastify, Zod, SQLite, and shared API schemas.
 - Three-stage model pipeline with structured-output validation and correction retry.
-- 149 automated tests were passing as of July 22, including four stock-Python
+- 150 automated tests were passing as of July 22, including four stock-Python
   importer regressions.
 - Twenty-five golden cases, including ten licensed FERMAT handwriting images.
 - Latest paid FERMAT gate: 8/10; the two remaining misses are documented rather
