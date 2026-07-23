@@ -45,13 +45,27 @@ describe('Stage2Schema', () => {
     expect(() => Stage2Schema.parse({ errorStepIndex: 1, misconceptionTag: 'sign-error', explanation: null, followUp: null })).toThrow()
   })
 
-  it('rejects raw LaTeX in student-facing diagnosis copy', () => {
-    expect(() => Stage2Schema.parse({
+  it('requires Unicode or prose in student-facing diagnosis copy', () => {
+    const base = {
       errorStepIndex: 0,
-      misconceptionTag: 'algebraic-slip',
+      misconceptionTag: 'algebraic-slip' as const,
+      followUp: { problem: 'Simplify x² ÷ 2.', concept: 'division' },
+    }
+
+    expect(Stage2Schema.parse({
+      ...base,
+      explanation: 'Dividing x² by 2 preserves the exponent.',
+    }).explanation).toContain('x²')
+
+    expect(() => Stage2Schema.parse({
+      ...base,
+      explanation: 'Dividing x^2 by 2 preserves the exponent.',
+    })).toThrow('caret notation')
+
+    expect(() => Stage2Schema.parse({
+      ...base,
       explanation: 'Dividing by $\\frac{x}{2}$ changes the value.',
-      followUp: { problem: 'Simplify \\frac{6x}{3}.', concept: 'division' },
-    })).toThrow('plain text')
+    })).toThrow('raw LaTeX')
   })
 })
 
