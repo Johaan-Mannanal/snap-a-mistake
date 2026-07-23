@@ -44,6 +44,15 @@ describe('Stage2Schema', () => {
   it('rejects an error index with a missing explanation', () => {
     expect(() => Stage2Schema.parse({ errorStepIndex: 1, misconceptionTag: 'sign-error', explanation: null, followUp: null })).toThrow()
   })
+
+  it('rejects raw LaTeX in student-facing diagnosis copy', () => {
+    expect(() => Stage2Schema.parse({
+      errorStepIndex: 0,
+      misconceptionTag: 'algebraic-slip',
+      explanation: 'Dividing by $\\frac{x}{2}$ changes the value.',
+      followUp: { problem: 'Simplify \\frac{6x}{3}.', concept: 'division' },
+    })).toThrow('plain text')
+  })
 })
 
 describe('AnalyzeResponseSchema', () => {

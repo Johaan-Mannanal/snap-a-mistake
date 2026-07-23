@@ -8,6 +8,11 @@ export const MISCONCEPTION_TAGS = [
 ] as const
 export type MisconceptionTag = (typeof MISCONCEPTION_TAGS)[number]
 
+const StudentFacingMathTextSchema = z.string().min(1).refine(
+  (value) => !/(?:\$|\\(?:[A-Za-z]+|[()[\]]))/.test(value),
+  { message: 'must be readable plain text without raw LaTeX commands or math delimiters' },
+)
+
 const StepFieldsSchema = z.object({
   index: z.number().int().min(0),
   latex: z.string(),
@@ -46,8 +51,8 @@ export const Stage2Schema = z
   .object({
     errorStepIndex: z.number().int().min(0).nullable(),
     misconceptionTag: z.enum(MISCONCEPTION_TAGS).nullable(),
-    explanation: z.string().min(1).nullable(),
-    followUp: z.object({ problem: z.string().min(1), concept: z.string().min(1) }).nullable(),
+    explanation: StudentFacingMathTextSchema.nullable(),
+    followUp: z.object({ problem: StudentFacingMathTextSchema, concept: z.string().min(1) }).nullable(),
   })
   .superRefine((v, ctx) => {
     const hasError = v.errorStepIndex !== null
@@ -67,8 +72,8 @@ export const AnalyzeResponseSchema = z.discriminatedUnion('kind', [
     steps: z.array(StepSchema),
     errorStepIndex: z.number().int().nullable(),
     misconceptionTag: z.enum(MISCONCEPTION_TAGS).nullable(),
-    explanation: z.string().nullable(),
-    followUp: z.object({ problem: z.string(), concept: z.string() }).nullable(),
+    explanation: StudentFacingMathTextSchema.nullable(),
+    followUp: z.object({ problem: StudentFacingMathTextSchema, concept: z.string() }).nullable(),
     verifierAgreed: z.boolean(),
   }),
   z.object({ kind: z.literal('unreadable'), tips: z.array(z.string()) }),

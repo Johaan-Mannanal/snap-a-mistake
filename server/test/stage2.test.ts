@@ -27,6 +27,9 @@ describe('analyzeSteps', () => {
     expect(text).toMatch(/harmless notation quirks.*not errors/i)
     expect(text).toMatch(/formula-misapplied:.*known formula.*not.*algebraic-slip/i)
     expect(text).toMatch(/algebraic-slip:.*routine arithmetic or algebraic manipulation/i)
+    expect(text).toMatch(/explanation.*followUp.*plain text/i)
+    expect(text).toMatch(/never use LaTeX commands or math delimiters/i)
+    expect(text).toMatch(/Unicode math symbols/i)
   })
 
   it('orders overlapping tags and documents their classification boundaries', async () => {
@@ -72,5 +75,27 @@ describe('analyzeSteps', () => {
     expect(text).toMatch(/replacing the established cosine term.*final integration-by-parts answer.*integration-by-parts-error/i)
     expect(text).toMatch(/isolated n\+1 to n-1.*sign-error/i)
     expect(text).toMatch(/reordered adjugate template.*formula-misapplied.*not equals-abuse/i)
+  })
+
+  it('retries when student-facing copy contains raw LaTeX', async () => {
+    const rawLatex = JSON.stringify({
+      errorStepIndex: 1,
+      misconceptionTag: 'integration-by-parts-error',
+      explanation: 'The remaining term should be $\\int e^x\\,dx$.',
+      followUp: { problem: 'Evaluate $\\int x e^x\\,dx$.', concept: 'integration by parts' },
+    })
+    const readable = JSON.stringify({
+      errorStepIndex: 1,
+      misconceptionTag: 'integration-by-parts-error',
+      explanation: 'The remaining term should be the integral of e^x with respect to x.',
+      followUp: { problem: 'Evaluate ∫ x e^x dx.', concept: 'integration by parts' },
+    })
+    const client = fakeClient(rawLatex, readable)
+
+    const result = await analyzeSteps(client, 'gpt-5.6-sol', steps)
+
+    expect(result.explanation).toBe('The remaining term should be the integral of e^x with respect to x.')
+    expect(result.followUp?.problem).toBe('Evaluate ∫ x e^x dx.')
+    expect(client.chat.completions.create).toHaveBeenCalledTimes(2)
   })
 })

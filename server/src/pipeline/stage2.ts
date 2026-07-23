@@ -59,6 +59,7 @@ ${TAG_GUIDE}
 ${TAG_DECISION_GUIDE}
 - "explanation": 2-3 sentences, spoken directly to the student. Name what they believed ("you treated d/dx as applying to each factor separately") and why it breaks. No scolding.
 - "followUp": ONE slightly easier problem exercising the same concept, plus a 2-4 word concept label.
+- Write "explanation" and "followUp.problem" as readable plain text. Use Unicode math symbols (for example ∫, √, ×, ÷, and ²) or simple forms such as x^2 when helpful. Never use LaTeX commands or math delimiters such as \\frac, \\int, \\(...\\), or $...$ in those fields.
 - Harmless notation quirks, skipped-but-valid shortcuts, equivalent forms, and unsimplified answers are not errors. Use notation-error only when the written notation changes mathematical meaning.`
 
 export async function analyzeSteps(
