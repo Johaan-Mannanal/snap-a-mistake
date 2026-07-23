@@ -60,7 +60,7 @@ const base: Pick<AnalysisResponse, 'kind' | 'steps' | 'verifierAgreed'> = {
 describe('analysisPresentation', () => {
   it('presents correct work without a green banner', () => {
     const response: AnalysisResponse = { ...base, errorStepIndex: null, misconceptionTag: null, explanation: null, followUp: null }
-    expect(analysisPresentation(response)).toMatchObject({ tone: 'success', eyebrow: 'VERIFIED', headline: 'All steps check out' })
+    expect(analysisPresentation(response)).toMatchObject({ tone: 'success', eyebrow: 'CHECKED', headline: 'All steps check out' })
   })
 
   it('localizes an agreed error', () => {

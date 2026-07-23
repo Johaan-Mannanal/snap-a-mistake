@@ -18,7 +18,8 @@ misconception, and gives the student a smaller problem to try next.”
 
 **On screen:** Capture an intentionally incorrect problem and show Reading,
 Checking, and Verifying. Keep a visible **“REAL LIVE-MODEL RUN”** label through
-the resulting diagnosis.
+the resulting diagnosis. For every cut or speed-up between capture and the real
+result, also keep the exact visible caption **“Analysis time condensed”**.
 
 **Say:** “This is a real live-model run. A multimodal transcription pass reads
 the page into positioned steps, a reasoning diagnosis finds the earliest error,
@@ -40,7 +41,7 @@ real result where possible. If mock footage is needed for this additional UI
 state, show the persistent canned-response label.
 
 **Say:** “Feedback becomes targeted practice. The student tries an easier
-version, snaps again, and closes the loop with a verified correct state.”
+version, snaps again, and closes the loop when all steps check out.”
 
 ## 1:18–1:34 — Local insights
 
@@ -53,18 +54,21 @@ student can see whether sign errors or rule mistakes are improving over time.”
 ## 1:34–1:50 — Technical trust and close
 
 **On screen:** Repository architecture, shared API schema, and a card labeled
-**“REAL-HANDWRITING VALIDATION — PAID FERMAT GATE: 8/10.”** Then return to the
-product name.
+**“OWNER-REPORTED REAL-HANDWRITING VALIDATION — PAID FERMAT GATE: 8/10.”** Then
+return to the product name.
 
 **Say:** “The system combines multimodal transcription, reasoning diagnosis,
-and independent verification. In the latest paid FERMAT gate, eight of ten
-real-handwriting cases passed; the two remaining misses are documented. Snap-a-
-Mistake helps students understand where their thinking changed, then gives them
-the next achievable step.”
+and independent verification. In the owner-reported latest paid FERMAT gate,
+eight of ten real-handwriting cases passed; the two remaining misses are
+documented. Snap-a-Mistake helps students understand where their thinking
+changed, then gives them the next achievable step.”
 
 ## Recording safety
 
 - Record the live-model core diagnosis before adding any mock cutaway.
+- For every cut or speed-up between capture and the real result, show the exact
+  visible caption **“Analysis time condensed”** while keeping **“REAL
+  LIVE-MODEL RUN”** visible.
 - Use a persistent canned-response label for every mock segment; do not imply
   it is live.
 - Keep the final export at or below 1:55.

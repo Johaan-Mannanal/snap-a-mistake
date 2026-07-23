@@ -41,7 +41,7 @@ export function trendPresentation(trend: 'fewer' | 'more' | 'same') {
 
 export function analysisPresentation(response: Extract<AnalyzeResponse, { kind: 'analysis' }>) {
   if (response.errorStepIndex === null) {
-    return { tone: 'success' as const, eyebrow: 'VERIFIED', headline: 'All steps check out', detail: 'Every step follows from the last.' }
+    return { tone: 'success' as const, eyebrow: 'CHECKED', headline: 'All steps check out', detail: 'Every step follows from the last.' }
   }
   const step = ORDINAL[response.errorStepIndex] ?? String(response.errorStepIndex + 1)
   if (!response.verifierAgreed) {

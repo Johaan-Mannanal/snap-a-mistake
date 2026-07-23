@@ -26,7 +26,7 @@ next practice step.
 Snap-a-Mistake focuses feedback on the earliest unsupported step rather than
 only the final answer. It explains the misconception in the student's original
 context, then creates a smaller targeted problem. The student can retry and see
-a verified correct state, turning diagnosis into an immediate learning loop.
+that all steps check out, turning diagnosis into an immediate learning loop.
 
 ## How it works
 
@@ -53,8 +53,10 @@ private on-device trend tracking rather than acting as another answer generator.
 - 150 automated tests were passing as of July 22, including four stock-Python
   importer regressions.
 - Twenty-five golden cases, including ten licensed FERMAT handwriting images.
-- Latest paid FERMAT gate: 8/10; the two remaining misses are documented rather
-  than hidden.
+- Owner-reported latest paid FERMAT gate: 8/10; the two reported misses were one
+  strict canonical-tag mismatch and one truncated JSON response. The raw
+  provider artifact is not committed, so this result is not independently
+  reconstructable from the repository.
 - Public repository: https://github.com/Johaan-Mannanal/snap-a-mistake
 
 ## Potential impact
@@ -66,9 +68,12 @@ accounts or server-side storage of learning history.
 
 ## Privacy posture
 
-The server is stateless. Snap-a-Mistake has no accounts and does not store
-student learning history on a server; recurring trends are kept in on-device
-SQLite.
+Misconception trend records remain on-device in SQLite. Each photo and its
+transcribed work are transiently processed by the backend and the configured
+external model API. The app server has no database and does not persist those
+photos or transcriptions. Provider handling is governed by the provider's
+applicable data terms; Snap-a-Mistake does not promise provider retention
+behavior. HTTPS is required before any hosted use.
 
 ## Prometheus submission checklist
 
