@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { bandStyle } from './overlay'
 
 describe('bandStyle', () => {
-  it('maps percentages onto the displayed height', () => {
-    expect(bandStyle({ yBandTopPct: 10, yBandBottomPct: 30 }, 500)).toEqual({ top: 50, height: 100 })
+  it('keeps an overly broad model band to one displayed line', () => {
+    expect(bandStyle({ yBandTopPct: 10, yBandBottomPct: 30 }, 500)).toEqual({ top: 50, height: 24 })
+  })
+  it('preserves an ordinary narrow band', () => {
+    expect(bandStyle({ yBandTopPct: 10, yBandBottomPct: 13 }, 1000)).toEqual({ top: 100, height: 30 })
   })
   it('enforces a 24px minimum band height', () => {
     expect(bandStyle({ yBandTopPct: 50, yBandBottomPct: 51 }, 400).height).toBe(24)

@@ -19,7 +19,9 @@ describe('transcribe', () => {
     const userMsg = call.messages.find((m) => m.role === 'user')
     const parts = userMsg?.content as Array<{ type: string; image_url?: { url: string } }>
     expect(parts.some((p) => p.type === 'image_url' && p.image_url?.url.startsWith('data:image/jpeg;base64,'))).toBe(true)
-    expect(call.messages.find((m) => m.role === 'system')).toBeTruthy()
+    const system = call.messages.find((m) => m.role === 'system')?.content
+    expect(system).toMatch(/tight band around only that line/i)
+    expect(system).toMatch(/exclude.*neighboring line/i)
     expect(call.model).toBe('gpt-5.6-sol')
   })
 })
