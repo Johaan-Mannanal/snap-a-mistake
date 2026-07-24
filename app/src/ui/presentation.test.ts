@@ -105,8 +105,52 @@ describe('analysis accessibility presentation', () => {
       yBandBottomPct: 45,
     }
     expect(stepAccessibilityLabel(step, 'Integration by parts error', 'The extra x stays inside the integral.')).toBe(
-      'Step 2, incorrect. Work: x e to the x minus x times the integral. LaTeX: x e^x - x \\int e^x dx. Misconception: Integration by parts error. Explanation: The extra x stays inside the integral.',
+      'Step 2, incorrect. Work: x e to the x minus x times the integral. Math: x eˣ − x ∫ eˣ dx. Misconception: Integration by parts error. Explanation: The extra x stays inside the integral.',
     )
+  })
+
+  it('does not expose unsupported LaTeX markup in step copy', () => {
+    const step: Step = {
+      index: 8,
+      verdict: 'ok',
+      plain: 'Cancel suitable terms.',
+      latex: '=\\overset{5}{\\cancel{35}}\\times\\frac{\\cancel{5}}{\\underset{2}{\\cancel{6}}}',
+      yBandTopPct: 70,
+      yBandBottomPct: 80,
+    }
+
+    const label = stepAccessibilityLabel(step, null, null)
+
+    expect(label).toBe('Step 9, correct. Work: Cancel suitable terms.')
+    expect(label).not.toContain('\\')
+  })
+
+  it('converts the photographed fraction and operator notation to native text', () => {
+    const step: Step = {
+      index: 0,
+      verdict: 'ok',
+      plain: 'Negative thirty-five divided by negative six fifths, times zero point two, divided by negative seven ninths.',
+      latex: '-35\\div\\left(-\\frac{6}{5}\\right)\\times 0.2\\div\\left(-\\frac{7}{9}\\right)',
+      yBandTopPct: 0,
+      yBandBottomPct: 10,
+    }
+
+    expect(stepAccessibilityLabel(step, null, null)).toBe(
+      'Step 1, correct. Work: Negative thirty-five divided by negative six fifths, times zero point two, divided by negative seven ninths. Math: −35 ÷ (−6/5) × 0.2 ÷ (−7/9).',
+    )
+  })
+
+  it('omits prose-only subtext that repeats the step title', () => {
+    const step: Step = {
+      index: 1,
+      verdict: 'ok',
+      plain: '1. Deal with the sign.',
+      latex: '1.\\ \\text{Deal with the sign:}',
+      yBandTopPct: 10,
+      yBandBottomPct: 20,
+    }
+
+    expect(stepAccessibilityLabel(step, null, null)).toBe('Step 2, correct. Work: 1. Deal with the sign.')
   })
 })
 
