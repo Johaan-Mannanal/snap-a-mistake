@@ -14,7 +14,7 @@ type CapturePhotoOptions = {
   camera: CameraCapture | null
   ready: boolean
   lock: CaptureLock
-  onPhoto: (uri: string) => void
+  onPhoto: (uri: string) => void | Promise<void>
   onError: (message: string) => void
   onBusyChange?: (busy: boolean) => void
 }
@@ -30,7 +30,7 @@ export async function capturePhoto(options: CapturePhotoOptions) {
       options.onError('Could not take the photo. Try again or choose from your library.')
       return
     }
-    options.onPhoto(photo.uri)
+    await options.onPhoto(photo.uri)
   } catch {
     options.onError('Could not take the photo. Try again or choose from your library.')
   } finally {

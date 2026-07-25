@@ -3,8 +3,10 @@ import type { AnalyzeResponse } from '@snap/shared'
 import { PersistedSessionSchema } from './scanTypes'
 import type { ScanRepository } from './scanRepository'
 import {
+  acknowledgePrivacyDisclosure,
   getSession,
   hydrateSession,
+  isPrivacyDisclosureAcknowledged,
   persistAnalysis,
   resetSession,
   setAnalysis,
@@ -21,22 +23,26 @@ const withFollowUp: AnalyzeResponse = {
 
 class MemorySessionRepository {
   state: unknown = null
+  states = new Map<string, unknown>()
   deleted: string[] = []
   failDelete = false
 
-  async getState<T>(_key: string, schema: { safeParse(value: unknown): { success: boolean; data?: T } }): Promise<T | null> {
-    const parsed = schema.safeParse(this.state)
+  async getState<T>(key: string, schema: { safeParse(value: unknown): { success: boolean; data?: T } }): Promise<T | null> {
+    const value = key === 'active-session' ? this.state : (this.states.get(key) ?? null)
+    const parsed = schema.safeParse(value)
     return parsed.success ? parsed.data! : null
   }
 
-  async setState(_key: string, value: unknown): Promise<void> {
-    this.state = value
+  async setState(key: string, value: unknown): Promise<void> {
+    if (key === 'active-session') this.state = value
+    else this.states.set(key, value)
   }
 
   async deleteState(key: string): Promise<void> {
     if (this.failDelete) throw new Error('local storage unavailable')
     this.deleted.push(key)
-    this.state = null
+    if (key === 'active-session') this.state = null
+    else this.states.delete(key)
   }
 }
 
@@ -103,6 +109,21 @@ describe('session', () => {
       analysis: null, followUp: null, parentScanId: null,
     })
     expect(getSession()).toMatchObject({ routeIntent: 'review', photoUri: 'file:///cache/camera.jpg', origin: 'camera' })
+  })
+
+  it('persists the first-use privacy acknowledgement separately from the active review', async () => {
+    const repository = new MemorySessionRepository()
+    await hydrateSession(repository as unknown as ScanRepository)
+
+    await acknowledgePrivacyDisclosure()
+    await setPendingPhoto({ uri: 'file:///cache/camera.jpg', origin: 'camera' })
+
+    expect(isPrivacyDisclosureAcknowledged()).toBe(true)
+    expect(repository.states.get('privacy-disclosure-v1')).toEqual({ acknowledged: true })
+    expect(repository.state).toEqual({
+      routeIntent: 'review', pendingScanId: null, photoUri: 'file:///cache/camera.jpg', origin: 'camera',
+      analysis: null, followUp: null, parentScanId: null,
+    })
   })
 
   it('persists a reviewed scan for analysis and a completed result without retaining a stale follow-up', async () => {

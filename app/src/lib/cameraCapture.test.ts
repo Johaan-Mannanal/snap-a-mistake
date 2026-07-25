@@ -40,6 +40,25 @@ describe('capturePhoto', () => {
     expect(lock.current).toBe(false)
   })
 
+  it('keeps capture locked until an async photo handoff persists the pending review', async () => {
+    const handoff = deferred<void>()
+    const lock: CaptureLock = { current: false }
+    const capture = capturePhoto({
+      camera: { takePictureAsync: vi.fn().mockResolvedValue({ uri: 'file:///photo.jpg' }) },
+      ready: true,
+      lock,
+      onPhoto: () => handoff.promise,
+      onError: vi.fn(),
+    })
+
+    await Promise.resolve()
+    expect(lock.current).toBe(true)
+
+    handoff.resolve()
+    await capture
+    expect(lock.current).toBe(false)
+  })
+
   it('turns capture rejection into a recoverable error and releases the lock', async () => {
     const error = new Error('camera unavailable')
     const onError = vi.fn()

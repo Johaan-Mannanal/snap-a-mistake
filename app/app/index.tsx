@@ -9,7 +9,7 @@ import { CameraCorners } from '../src/components/CameraCorners'
 import { AppIcon } from '../src/components/AppIcon'
 import { capturePhoto, runIfCaptureIdle, type CaptureLock } from '../src/lib/cameraCapture'
 import { cameraUiReducer, initialCameraUiState } from '../src/lib/cameraUiState'
-import { getSession, setPhoto } from '../src/lib/session'
+import { getSession, setPendingPhoto } from '../src/lib/session'
 import { cameraPermissionPresentation, cameraPresentation } from '../src/ui/presentation'
 import { colors, spacing, typeScale } from '../src/ui/theme'
 
@@ -21,9 +21,9 @@ export default function Home() {
   const isRetry = getSession().isRetry
   const presentation = cameraPresentation(isRetry)
 
-  const usePhoto = (uri: string) => {
-    setPhoto(uri)
-    router.push('/analyze')
+  const usePhoto = async (uri: string, origin: 'camera' | 'library') => {
+    await setPendingPhoto({ uri, origin })
+    router.push('/review')
   }
 
   const snap = () => {
@@ -31,16 +31,25 @@ export default function Home() {
       camera: camera.current,
       ready: cameraReady,
       lock: captureLock.current,
-      onPhoto: usePhoto,
+      onPhoto: (uri) => usePhoto(uri, 'camera'),
       onError: (message) => dispatchCamera({ type: 'captureFailed', message }),
       onBusyChange: (busy) => dispatchCamera({ type: 'captureBusyChanged', busy }),
     })
   }
 
   const pickPhoto = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 })
-    const uri = res.assets?.[0]?.uri
-    if (uri) usePhoto(uri)
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 })
+      if (res.canceled) return
+      const uri = res.assets?.[0]?.uri
+      if (!uri) {
+        dispatchCamera({ type: 'captureFailed', message: 'Could not choose that photo. Try again or take a new photo.' })
+        return
+      }
+      await usePhoto(uri, 'library')
+    } catch {
+      dispatchCamera({ type: 'captureFailed', message: 'Could not open your library. Try again or take a new photo.' })
+    }
   }
 
   const pick = () => {

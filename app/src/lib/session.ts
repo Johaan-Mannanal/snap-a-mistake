@@ -1,7 +1,11 @@
 import type { AnalyzeResponse, FollowUp } from '@snap/shared'
+import { z } from 'zod'
 import type { ScanOrigin } from './scanTypes'
 import { PersistedSessionSchema, type PersistedSession } from './scanTypes'
 import type { ScanRepository } from './scanRepository'
+
+const PRIVACY_DISCLOSURE_KEY = 'privacy-disclosure-v1'
+const PrivacyDisclosureSchema = z.object({ acknowledged: z.literal(true) })
 
 export type Session = {
   routeIntent: PersistedSession['routeIntent']
@@ -33,6 +37,7 @@ function emptySession(): Session {
 
 let session: Session = emptySession()
 let sessionRepository: ScanRepository | null = null
+let privacyDisclosureAcknowledged = false
 
 function persisted(sessionValue: Session): PersistedSession {
   return PersistedSessionSchema.parse({
@@ -66,6 +71,7 @@ export function getSession(): Session {
 
 export async function hydrateSession(repository: ScanRepository): Promise<Session> {
   sessionRepository = repository
+  privacyDisclosureAcknowledged = (await repository.getState(PRIVACY_DISCLOSURE_KEY, PrivacyDisclosureSchema)) !== null
   const stored = await repository.getState(ACTIVE_SESSION_KEY, PersistedSessionSchema)
   if (stored === null) {
     session = emptySession()
@@ -82,6 +88,16 @@ export async function hydrateSession(repository: ScanRepository): Promise<Sessio
 
   session = fromPersisted(stored)
   return session
+}
+
+export function isPrivacyDisclosureAcknowledged(): boolean {
+  return privacyDisclosureAcknowledged
+}
+
+export async function acknowledgePrivacyDisclosure(): Promise<void> {
+  if (privacyDisclosureAcknowledged) return
+  if (sessionRepository) await sessionRepository.setState(PRIVACY_DISCLOSURE_KEY, { acknowledged: true })
+  privacyDisclosureAcknowledged = true
 }
 
 export async function setPendingPhoto(input: { uri: string; origin: ScanOrigin }): Promise<void> {
