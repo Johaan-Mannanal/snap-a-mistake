@@ -68,6 +68,13 @@ const app = buildApp({
     },
     verifierAgreed: true,
   }),
+  generateFollowUp: async (context) => ({
+    problem: context.previousProblems[0] === 'Simplify 3x + 5x.'
+      ? 'Simplify 4x + 6x.'
+      : 'Simplify 3x + 5x.',
+    concept: context.concept,
+    hint: 'Combine the coefficients of matching variable terms.',
+  }),
   logger: true,
 })
 app.listen({ port: 3000, host: '0.0.0.0' }).then(() => {

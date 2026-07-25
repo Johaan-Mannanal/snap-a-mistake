@@ -28,6 +28,8 @@ describe('analyzeSteps', () => {
     expect(text).toMatch(/formula-misapplied:.*known formula.*not.*algebraic-slip/i)
     expect(text).toMatch(/algebraic-slip:.*routine arithmetic or algebraic manipulation/i)
     expect(text).toMatch(/explanation.*followUp.*plain text/i)
+    expect(text).toMatch(/followUp.*hint/i)
+    expect(text).toMatch(/every error diagnosis.*hint/i)
     expect(text).toMatch(/Unicode math symbols/i)
     expect(text).toMatch(/never use.*caret notation/i)
     expect(text).toMatch(/if the needed expression is not practical in Unicode.*describe.*in words/i)

@@ -1,15 +1,22 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import multipart from '@fastify/multipart'
 import sharp from 'sharp'
-import { CorrectionContextSchema, type AnalyzeResponse } from '@snap/shared'
+import {
+  AlternateFollowUpContextSchema,
+  FollowUpSchema,
+  CorrectionContextSchema,
+  type AnalyzeResponse,
+} from '@snap/shared'
 import { ModelJsonError } from './llm/client.js'
 import type { RunCorrectionFn } from './pipeline/correction.js'
+import type { GenerateFollowUpFn } from './pipeline/followup.js'
 
 export type RunAnalysisFn = (image: { base64: string; mediaType: 'image/jpeg' }) => Promise<AnalyzeResponse>
 
 export type BuildAppDeps = {
   runAnalysis: RunAnalysisFn
   runCorrection: RunCorrectionFn
+  generateFollowUp: GenerateFollowUpFn
   logger?: boolean
 }
 
@@ -33,6 +40,19 @@ export function buildApp(deps: BuildAppDeps): FastifyInstance {
   })
 
   app.get('/health', async () => ({ ok: true }))
+
+  app.post('/follow-up', async (req, reply) => {
+    const context = AlternateFollowUpContextSchema.safeParse(req.body)
+    if (!context.success) return reply.code(400).send({ error: 'invalid follow-up request' })
+    try {
+      const followUp = FollowUpSchema.safeParse(await deps.generateFollowUp(context.data))
+      if (!followUp.success) return reply.code(502).send({ error: 'follow-up-failed' })
+      return followUp.data
+    } catch (err) {
+      if (err instanceof ModelJsonError) return reply.code(502).send({ error: 'follow-up-failed' })
+      return reply.code(500).send({ error: 'internal' })
+    }
+  })
 
   app.post('/analyze', async (req, reply) => {
     try {

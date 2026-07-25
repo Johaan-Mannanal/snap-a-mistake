@@ -1,7 +1,7 @@
 import { createRequire } from 'module'
 import { describe, expect, it } from 'vitest'
 import sharp from 'sharp'
-import type { AnalyzeResponse, CorrectionContext } from '@snap/shared'
+import type { AlternateFollowUpContext, AnalyzeResponse, CorrectionContext, FollowUp } from '@snap/shared'
 import { buildApp, type BuildAppDeps } from '../src/app.js'
 import { ModelJsonError } from '../src/llm/client.js'
 
@@ -39,6 +39,9 @@ function appDeps(overrides: Partial<BuildAppDeps> = {}): BuildAppDeps {
   return {
     runAnalysis: async () => ({ kind: 'not-math' }),
     runCorrection: async (_image, context) => correctedResponse(context),
+    generateFollowUp: async () => ({
+      problem: 'Simplify 2x + 5x.', concept: 'like terms', hint: 'Combine matching variable terms.',
+    }),
     ...overrides,
   }
 }
@@ -53,6 +56,61 @@ describe('GET /health', () => {
     const res = await app.inject({ method: 'GET', url: '/health' })
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual({ ok: true })
+  })
+})
+
+describe('POST /follow-up', () => {
+  const context: AlternateFollowUpContext = {
+    concept: 'like terms',
+    diagnosis: 'You combined unlike terms.',
+    previousProblems: ['Simplify 2x + 3 + 4x.'],
+  }
+
+  it('returns a schema-validated alternate follow-up', async () => {
+    let received: AlternateFollowUpContext | undefined
+    const app = buildApp(appDeps({
+      generateFollowUp: async (value): Promise<FollowUp> => {
+        received = value
+        return { problem: 'Simplify 3x + 5x.', concept: 'like terms', hint: 'Add the coefficients of x.' }
+      },
+    }))
+
+    const response = await app.inject({ method: 'POST', url: '/follow-up', payload: context })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({ problem: 'Simplify 3x + 5x.', concept: 'like terms', hint: 'Add the coefficients of x.' })
+    expect(received).toEqual(context)
+  })
+
+  it('rejects invalid follow-up context before invoking the model', async () => {
+    let called = false
+    const app = buildApp(appDeps({ generateFollowUp: async () => { called = true; throw new Error('unexpected') } }))
+
+    const response = await app.inject({ method: 'POST', url: '/follow-up', payload: { concept: '', diagnosis: 'x', previousProblems: [] } })
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: 'invalid follow-up request' })
+    expect(called).toBe(false)
+  })
+
+  it('returns 502 for follow-up model JSON failures', async () => {
+    const app = buildApp(appDeps({ generateFollowUp: async () => { throw new ModelJsonError('bad') } }))
+
+    const response = await app.inject({ method: 'POST', url: '/follow-up', payload: context })
+
+    expect(response.statusCode).toBe(502)
+    expect(response.json()).toEqual({ error: 'follow-up-failed' })
+  })
+
+  it('returns 502 when the generated follow-up violates the shared response schema', async () => {
+    const app = buildApp(appDeps({
+      generateFollowUp: async () => ({ problem: 'Evaluate x^2.', concept: 'powers', hint: 'Use the power rule.' }) as FollowUp,
+    }))
+
+    const response = await app.inject({ method: 'POST', url: '/follow-up', payload: context })
+
+    expect(response.statusCode).toBe(502)
+    expect(response.json()).toEqual({ error: 'follow-up-failed' })
   })
 })
 
