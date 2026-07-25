@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import type { AnalyzeResponse } from '@snap/shared'
 import { ApiError, type ApiFailure, analyzePhoto } from '../src/lib/api'
@@ -14,8 +14,9 @@ import { AppButton } from '../src/components/AppButton'
 import { AppIcon } from '../src/components/AppIcon'
 import { AppScreen } from '../src/components/AppScreen'
 import { AnalysisProgress } from '../src/components/AnalysisProgress'
-import { StepCard } from '../src/components/StepCard'
+import { StepTimeline } from '../src/components/StepTimeline'
 import { PhotoOverlay } from '../src/components/PhotoOverlay'
+import { ZoomablePhoto } from '../src/components/ZoomablePhoto'
 import { analysisPresentation, analysisRecoveryPresentation } from '../src/ui/presentation'
 import { colors, spacing } from '../src/ui/theme'
 
@@ -43,6 +44,9 @@ export default function Analyze() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [isResetting, setIsResetting] = useState(false)
   const [resetFailed, setResetFailed] = useState(false)
+  const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null)
+  const [showAllSteps, setShowAllSteps] = useState(false)
+  const [reduceMotion, setReduceMotion] = useState(false)
   const { photoUri: uri, pendingScanId: scanId } = getSession()
   const resetTransition = useRef<(() => Promise<void>) | null>(null)
   const activeRequest = useRef<AbortController | null>(null)
@@ -54,6 +58,8 @@ export default function Analyze() {
   const activeToken = useRef<number | null>(null)
   const pendingSave = useRef<PendingSave | null>(null)
   const mounted = useRef(true)
+  const resultScrollRef = useRef<ScrollView | null>(null)
+  const photoOffsetY = useRef(0)
   if (resetTransition.current === null)
     resetTransition.current = createSessionResetTransition(resetSession, () => router.dismissTo('/'))
 
@@ -187,6 +193,16 @@ export default function Analyze() {
 
   useEffect(() => { run() }, [run])
   useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion)
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion)
+    return () => subscription.remove()
+  }, [])
+  useEffect(() => {
+    if (!result || result.kind !== 'analysis') return
+    setSelectedStepIndex(result.errorStepIndex ?? result.steps[0]?.index ?? null)
+    setShowAllSteps(result.errorStepIndex === null)
+  }, [result])
+  useEffect(() => {
     if (result || failure) return
     const startedAt = Date.now()
     const t = setInterval(() => setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000)
@@ -215,6 +231,26 @@ export default function Analyze() {
       setIsResetting(false)
       setResetFailed(true)
     })
+  }, [])
+
+  const scrollToPhoto = useCallback(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      resultScrollRef.current?.scrollTo({
+        y: Math.max(0, photoOffsetY.current - spacing.md),
+        animated: !reduceMotion,
+      })
+    }))
+  }, [reduceMotion])
+
+  const selectTimelineStep = useCallback((index: number) => {
+    setSelectedStepIndex(index)
+    setShowAllSteps(true)
+    scrollToPhoto()
+  }, [scrollToPhoto])
+
+  const selectPhotoStep = useCallback((index: number) => {
+    setSelectedStepIndex(index)
+    setShowAllSteps(true)
   }, [])
 
   const resetFailure = resetFailed ? <ResetFailure onRetry={snapAnother} /> : null
@@ -314,7 +350,7 @@ export default function Analyze() {
   const presentation = analysisPresentation(result)
 
   return (
-    <AppScreen contentStyle={styles.resultContent}>
+    <AppScreen contentStyle={styles.resultContent} scrollRef={resultScrollRef}>
       <View style={styles.topBar}>
         <Pressable
           accessibilityRole="button"
@@ -330,7 +366,21 @@ export default function Analyze() {
         <Text style={styles.topTitle}>Analysis</Text>
         <View style={styles.topAction} />
       </View>
-      {uri && <PhotoOverlay uri={uri} steps={result.steps} />}
+      {uri ? (
+        <View onLayout={(event) => { photoOffsetY.current = event.nativeEvent.layout.y }}>
+          <ZoomablePhoto
+            uri={uri}
+            renderOverlay={(geometry) => (
+              <PhotoOverlay
+                steps={result.steps}
+                geometry={geometry}
+                selectedStepIndex={selectedStepIndex}
+                onSelectStep={selectPhotoStep}
+              />
+            )}
+          />
+        </View>
+      ) : null}
       <View style={styles.diagnosis}>
         {presentation.tone === 'success' ? (
           <View style={styles.verifiedLine}>
@@ -347,14 +397,16 @@ export default function Analyze() {
       </View>
       {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} /> : null}
       <View style={styles.timeline}>
-        {result.steps.map((s) => (
-          <StepCard
-            key={s.index}
-            step={s}
-            misconceptionLabel={s.index === result.errorStepIndex ? label : null}
-            explanation={s.index === result.errorStepIndex ? result.explanation : null}
-          />
-        ))}
+        <StepTimeline
+          steps={result.steps}
+          errorStepIndex={result.errorStepIndex}
+          selectedStepIndex={selectedStepIndex}
+          showAll={showAllSteps}
+          onSelectStep={selectTimelineStep}
+          onShowAll={() => setShowAllSteps((visible) => !visible)}
+          misconceptionLabel={label}
+          explanation={result.explanation}
+        />
       </View>
       <View style={styles.actions}>
         {result.followUp && !correct ? <AppButton label="Try a similar problem" onPress={() => router.push('/followup')} /> : null}

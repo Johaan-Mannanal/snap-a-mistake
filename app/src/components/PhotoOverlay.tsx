@@ -1,42 +1,51 @@
-import { useEffect, useState } from 'react'
-import { Image, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { Step } from '@snap/shared'
-import { bandStyle } from '../lib/overlay'
+import { bandStyle, hasPhotoBand, type ContainedPhotoRect } from '../lib/overlay'
 import { colors } from '../ui/theme'
 
-export function PhotoOverlay(props: { uri: string; steps: Step[] }) {
-  const [aspect, setAspect] = useState(4 / 3)
-  const [height, setHeight] = useState(0)
-
-  useEffect(() => {
-    Image.getSize(props.uri, (w, h) => setAspect(w / h), () => {})
-  }, [props.uri])
-
-  const flagged = props.steps.filter((s) => s.verdict === 'wrong' || s.verdict === 'suspect')
+export function PhotoOverlay(props: {
+  steps: Step[]
+  geometry: ContainedPhotoRect | null
+  selectedStepIndex: number | null
+  onSelectStep: (index: number) => void
+}) {
+  if (!props.geometry) return null
+  const geometry = props.geometry
+  const located = props.steps.filter((step) => (
+    hasPhotoBand(step)
+    && (step.verdict === 'wrong' || step.verdict === 'suspect' || step.index === props.selectedStepIndex)
+  ))
   return (
-    <View
-      style={{ width: '100%', aspectRatio: aspect, borderRadius: 12, overflow: 'hidden' }}
-      onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
-    >
-      <Image source={{ uri: props.uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-      {height > 0 &&
-        flagged.map((s) => {
-          const b = bandStyle(s, height)
-          const color = s.verdict === 'wrong' ? colors.error : colors.chalk
+    <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+      {located.map((step) => {
+          const band = bandStyle(step, geometry.height)
+          const selected = step.index === props.selectedStepIndex
+          const wrong = step.verdict === 'wrong'
+          const color = wrong ? colors.error : colors.chalk
           return (
-            <View
-              key={s.index}
-              pointerEvents="none"
+            <Pressable
+              key={step.index}
+              accessibilityRole="button"
+              accessibilityLabel={`Focus step ${step.index + 1} in the timeline`}
+              accessibilityHint="Selects and expands this step."
+              accessibilityState={{ selected }}
+              hitSlop={10}
+              onPress={() => props.onSelectStep(step.index)}
               style={{
-                position: 'absolute', left: 0, right: 0, top: b.top, height: b.height,
-                borderTopWidth: 1.5, borderBottomWidth: 1.5, borderColor: color,
-                backgroundColor: s.verdict === 'wrong' ? 'rgba(255,92,103,0.06)' : 'rgba(245,245,243,0.05)',
+                position: 'absolute', left: geometry.left, width: geometry.width,
+                top: geometry.top + band.top, height: band.height,
+                borderTopWidth: selected ? 2 : 1.5, borderBottomWidth: selected ? 2 : 1.5, borderColor: color,
+                backgroundColor: wrong ? 'rgba(255,92,103,0.10)' : 'rgba(245,245,243,0.07)',
               }}
             >
-              <Text style={{ alignSelf: 'flex-end', margin: 8, color, fontSize: 11, fontWeight: '700' }}>STEP {s.index + 1}</Text>
-            </View>
+              <Text numberOfLines={1} style={[styles.label, { color, backgroundColor: colors.ink }]}>STEP {step.index + 1}</Text>
+            </Pressable>
           )
         })}
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  label: { alignSelf: 'flex-end', marginRight: 4, paddingHorizontal: 4, fontSize: 11, fontWeight: '700', lineHeight: 16 },
+})

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bandStyle } from './overlay'
+import { bandStyle, containedPhotoRect, hasPhotoBand } from './overlay'
 
 describe('bandStyle', () => {
   it('keeps an overly broad model band to one displayed line', () => {
@@ -15,5 +15,21 @@ describe('bandStyle', () => {
     const b = bandStyle({ yBandTopPct: 98, yBandBottomPct: 100 }, 400)
     expect(b.top + b.height).toBeLessThanOrEqual(400)
     expect(b.top).toBeGreaterThanOrEqual(0)
+  })
+
+  it('positions bands inside the actual contained landscape photo', () => {
+    expect(containedPhotoRect({ frameWidth: 320, frameHeight: 480, imageWidth: 1600, imageHeight: 800 }))
+      .toEqual({ left: 0, top: 160, width: 320, height: 160 })
+  })
+
+  it('positions bands inside the actual contained portrait photo', () => {
+    expect(containedPhotoRect({ frameWidth: 480, frameHeight: 320, imageWidth: 800, imageHeight: 1600 }))
+      .toEqual({ left: 160, top: 0, width: 160, height: 320 })
+  })
+
+  it('rejects steps without a usable location instead of placing a fake band', () => {
+    expect(hasPhotoBand({ yBandTopPct: Number.NaN, yBandBottomPct: 20 })).toBe(false)
+    expect(hasPhotoBand({ yBandTopPct: 80, yBandBottomPct: 20 })).toBe(false)
+    expect(hasPhotoBand({ yBandTopPct: 20, yBandBottomPct: 20 })).toBe(true)
   })
 })

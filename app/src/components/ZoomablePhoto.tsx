@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { colors, spacing } from '../ui/theme'
+import { containedPhotoRect, type ContainedPhotoRect } from '../lib/overlay'
 import { clampPhotoTranslation } from './zoomMath'
 
 const MIN_SCALE = 1
@@ -12,7 +13,10 @@ function clampScale(value: number) {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value))
 }
 
-export function ZoomablePhoto({ uri }: { uri: string }) {
+export function ZoomablePhoto(props: {
+  uri: string
+  renderOverlay?: (geometry: ContainedPhotoRect | null) => ReactNode
+}) {
   const scale = useSharedValue(MIN_SCALE)
   const scaleAtGestureStart = useSharedValue(MIN_SCALE)
   const translateX = useSharedValue(0)
@@ -23,6 +27,8 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
   const imageHeight = useSharedValue(0)
   const [zoomLevel, setZoomLevel] = useState(MIN_SCALE)
   const [reduceMotion, setReduceMotion] = useState(false)
+  const [frame, setFrame] = useState({ width: 0, height: 0 })
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion)
@@ -32,10 +38,11 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
 
   useEffect(() => {
     let active = true
-    Image.getSize(uri, (width, height) => {
+    Image.getSize(props.uri, (width, height) => {
       if (!active) return
       imageWidth.value = width
       imageHeight.value = height
+      setImageSize({ width, height })
       const translation = clampPhotoTranslation({
         x: translateX.value, y: translateY.value,
         frameWidth: frameWidth.value, frameHeight: frameHeight.value,
@@ -47,9 +54,10 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
       if (!active) return
       imageWidth.value = 0
       imageHeight.value = 0
+      setImageSize({ width: 0, height: 0 })
     })
     return () => { active = false }
-  }, [reduceMotion, uri])
+  }, [props.uri, reduceMotion])
 
   const setScale = (nextScale: number) => {
     const clamped = clampScale(nextScale)
@@ -116,6 +124,13 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
     ],
   }))
 
+  const geometry = containedPhotoRect({
+    frameWidth: frame.width,
+    frameHeight: frame.height,
+    imageWidth: imageSize.width,
+    imageHeight: imageSize.height,
+  })
+
   return (
     <View>
       <GestureDetector gesture={Gesture.Simultaneous(pinch, pan)}>
@@ -125,6 +140,7 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
           onLayout={(event) => {
             frameWidth.value = event.nativeEvent.layout.width
             frameHeight.value = event.nativeEvent.layout.height
+            setFrame({ width: frameWidth.value, height: frameHeight.value })
             const translation = clampPhotoTranslation({
               x: translateX.value, y: translateY.value,
               frameWidth: frameWidth.value, frameHeight: frameHeight.value,
@@ -136,7 +152,8 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
           style={styles.frame}
         >
           <Animated.View style={[styles.photoWrap, animatedPhotoStyle]}>
-            <Image source={{ uri }} resizeMode="contain" style={styles.photo} />
+            <Image source={{ uri: props.uri }} resizeMode="contain" style={styles.photo} />
+            {props.renderOverlay?.(geometry)}
           </Animated.View>
         </View>
       </GestureDetector>
@@ -160,7 +177,7 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
 
 const styles = StyleSheet.create({
   frame: { height: 340, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.graphite, borderWidth: 1, borderColor: colors.carbon },
-  photoWrap: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  photoWrap: { width: '100%', height: '100%', position: 'relative', alignItems: 'center', justifyContent: 'center' },
   photo: { width: '100%', height: '100%' },
   zoomControls: { minHeight: 44, marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   zoomButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.carbon },
