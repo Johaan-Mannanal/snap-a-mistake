@@ -278,7 +278,7 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
         'SELECT tag, correct, createdAt FROM analyses ORDER BY createdAt DESC',
       )
       return [
-        ...scans.map((scan): TrendSource => ({ kind: 'scan', scan })),
+        ...scans.filter((scan) => scan.lifecycle === 'complete').map((scan): TrendSource => ({ kind: 'scan', scan })),
         ...legacy.map((row): TrendSource => ({
           kind: 'legacy', tag: row.tag as MisconceptionTag | null, correct: row.correct === 1, createdAt: row.createdAt,
         })),

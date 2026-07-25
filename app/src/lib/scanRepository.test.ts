@@ -239,6 +239,20 @@ describe('scan repository records', () => {
     expect(replayed.revisions).toEqual([initial])
   })
 
+  it('excludes an interrupted revision from trend sources while retaining it for audit', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.saveRevision('scan-1', revision('revision-1', 'initial'), 400)
+    await repository.setLifecycle('scan-1', 'interrupted')
+
+    const scan = await repository.get('scan-1')
+    await expect(repository.loadTrendSources()).resolves.toEqual([])
+    expect(scan?.activeRevision?.id).toBe('revision-1')
+    expect(scan?.lifecycle).toBe('interrupted')
+  })
+
   it('clears stale follow-up state when a retry has no follow-up', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)

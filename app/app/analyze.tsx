@@ -7,6 +7,7 @@ import { getLocalScanRepository, recordAnalysis } from '../src/lib/history'
 import { getSession, persistAnalysis, resetSession } from '../src/lib/session'
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
 import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
+import { createAnalysisFinalization } from '../src/lib/analysisFinalization'
 import type { ScanRevision } from '../src/lib/scanTypes'
 import { tagLabel } from '../src/lib/labels'
 import { AppButton } from '../src/components/AppButton'
@@ -46,15 +47,16 @@ export default function Analyze() {
   const requestInFlight = useRef(false)
   const runFence = useRef(createRunFence())
   const saveLock = useRef(createAsyncLock<void>())
-  const cancellationLock = useRef(createAsyncLock<void>())
+  const finalization = useRef(createAnalysisFinalization())
   const activeToken = useRef<number | null>(null)
   const pendingSave = useRef<PendingSave | null>(null)
-  const durableResult = useRef(false)
   const mounted = useRef(true)
   if (resetTransition.current === null)
     resetTransition.current = createSessionResetTransition(resetSession, () => router.dismissTo('/'))
 
-  const owns = useCallback((token: number) => mounted.current && runFence.current.owns(token), [])
+  const owns = useCallback((token: number) => (
+    mounted.current && runFence.current.owns(token) && finalization.current.isActive()
+  ), [])
 
   const persistPendingSave = useCallback(async (pending: PendingSave, token: number) => {
     await saveLock.current.run(async () => {
@@ -64,7 +66,6 @@ export default function Analyze() {
         if (!owns(token)) return
         await getLocalScanRepository().saveRevision(scanId!, pending.revision, pending.durationMs)
         if (!owns(token)) return
-        durableResult.current = true
         await persistAnalysis(scanId!, pending.response, pending.durationMs)
         if (!owns(token)) return
         if (mounted.current) setUnsaved(false)
@@ -78,6 +79,8 @@ export default function Analyze() {
             // Legacy aggregate history is supplementary; the durable scan revision is already saved.
           }
         }
+        if (!owns(token)) return
+        finalization.current.markSuccessfulHandoff()
       } catch {
         if (!owns(token)) return
         if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'unsaved').catch(() => {})
@@ -89,32 +92,31 @@ export default function Analyze() {
     })
   }, [owns, scanId])
 
+  const finalizationDependencies = useCallback((navigate: boolean) => ({
+    interrupt: async () => {
+      if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'interrupted')
+    },
+    restoreReview: () => resetSession({ preserveDraft: true }),
+    navigate: () => { if (navigate && mounted.current) router.replace('/review') },
+  }), [scanId])
+
   const returnToReview = useCallback(() => {
-    const pendingRun = runFence.current.invalidate()
+    runFence.current.invalidate()
     activeRequest.current?.abort()
-    return cancellationLock.current.run(async () => {
-      if (mounted.current) setReviewReturnFailed(false)
-      await pendingRun?.catch(() => {})
-      try {
-        if (scanId && !durableResult.current)
-          await getLocalScanRepository().setLifecycle(scanId, 'interrupted')
-        if (!mounted.current) return
-        await resetSession({ preserveDraft: true })
-        if (mounted.current) router.replace('/review')
-      } catch {
-        if (mounted.current) setReviewReturnFailed(true)
-      }
-    })
-  }, [scanId])
+    return finalization.current.cancel(finalizationDependencies(true)).then(
+      () => { if (mounted.current) setReviewReturnFailed(false) },
+      () => { if (mounted.current) setReviewReturnFailed(true) },
+    )
+  }, [finalizationDependencies])
 
   const run = useCallback(() => {
     if (!uri || !scanId) { router.replace('/review'); return }
     if (requestInFlight.current) return
     requestInFlight.current = true
+    finalization.current.begin()
     const token = runFence.current.begin()
     activeToken.current = token
     pendingSave.current = null
-    durableResult.current = false
     if (mounted.current) {
       setFailure(null)
       setUnsaved(false)
@@ -161,6 +163,7 @@ export default function Analyze() {
       }
     })()
     runFence.current.track(token, task)
+    finalization.current.track(task)
   }, [owns, persistPendingSave, scanId, uri])
 
   useEffect(() => { run() }, [run])
@@ -174,7 +177,8 @@ export default function Analyze() {
     mounted.current = false
     runFence.current.invalidate()
     activeRequest.current?.abort()
-  }, [])
+    finalization.current.abandon(finalizationDependencies(false))
+  }, [finalizationDependencies])
 
   const retrySaving = useCallback(() => {
     const token = activeToken.current
@@ -182,6 +186,7 @@ export default function Analyze() {
     if (token === null || pending === null || !owns(token)) return
     const task = persistPendingSave(pending, token)
     runFence.current.track(token, task)
+    finalization.current.track(task)
   }, [owns, persistPendingSave])
 
   const snapAnother = useCallback(() => {
