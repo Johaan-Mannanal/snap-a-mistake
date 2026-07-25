@@ -3,6 +3,7 @@ import { AccessibilityInfo, Image, Pressable, StyleSheet, Text, View } from 'rea
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { colors, spacing } from '../ui/theme'
+import { clampPhotoTranslation } from './zoomMath'
 
 const MIN_SCALE = 1
 const MAX_SCALE = 4
@@ -16,6 +17,8 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
   const scaleAtGestureStart = useSharedValue(MIN_SCALE)
   const translateX = useSharedValue(0)
   const translateY = useSharedValue(0)
+  const frameWidth = useSharedValue(0)
+  const frameHeight = useSharedValue(0)
   const [zoomLevel, setZoomLevel] = useState(MIN_SCALE)
   const [reduceMotion, setReduceMotion] = useState(false)
 
@@ -28,10 +31,11 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
   const setScale = (nextScale: number) => {
     const clamped = clampScale(nextScale)
     scale.value = withTiming(clamped, { duration: reduceMotion ? 0 : 160 })
-    if (clamped === MIN_SCALE) {
-      translateX.value = withTiming(0, { duration: reduceMotion ? 0 : 160 })
-      translateY.value = withTiming(0, { duration: reduceMotion ? 0 : 160 })
-    }
+    const translation = clampPhotoTranslation({
+      x: translateX.value, y: translateY.value, width: frameWidth.value, height: frameHeight.value, scale: clamped,
+    })
+    translateX.value = withTiming(translation.x, { duration: reduceMotion ? 0 : 160 })
+    translateY.value = withTiming(translation.y, { duration: reduceMotion ? 0 : 160 })
     setZoomLevel(clamped)
   }
 
@@ -40,22 +44,36 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
       scaleAtGestureStart.value = scale.value
     })
     .onUpdate((event) => {
-      scale.value = clampScale(scaleAtGestureStart.value * event.scale)
+      const nextScale = clampScale(scaleAtGestureStart.value * event.scale)
+      scale.value = nextScale
+      const translation = clampPhotoTranslation({
+        x: translateX.value, y: translateY.value, width: frameWidth.value, height: frameHeight.value, scale: nextScale,
+      })
+      translateX.value = translation.x
+      translateY.value = translation.y
     })
     .onEnd(() => {
       const nextScale = clampScale(scale.value)
       scale.value = withTiming(nextScale, { duration: reduceMotion ? 0 : 160 })
-      if (nextScale === MIN_SCALE) {
-        translateX.value = withTiming(0, { duration: reduceMotion ? 0 : 160 })
-        translateY.value = withTiming(0, { duration: reduceMotion ? 0 : 160 })
-      }
+      const translation = clampPhotoTranslation({
+        x: translateX.value, y: translateY.value, width: frameWidth.value, height: frameHeight.value, scale: nextScale,
+      })
+      translateX.value = withTiming(translation.x, { duration: reduceMotion ? 0 : 160 })
+      translateY.value = withTiming(translation.y, { duration: reduceMotion ? 0 : 160 })
       runOnJS(setZoomLevel)(nextScale)
     })
 
   const pan = Gesture.Pan().onChange((event) => {
     if (scale.value > MIN_SCALE) {
-      translateX.value += event.changeX
-      translateY.value += event.changeY
+      const translation = clampPhotoTranslation({
+        x: translateX.value + event.changeX,
+        y: translateY.value + event.changeY,
+        width: frameWidth.value,
+        height: frameHeight.value,
+        scale: scale.value,
+      })
+      translateX.value = translation.x
+      translateY.value = translation.y
     }
   })
 
@@ -70,7 +88,15 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
   return (
     <View>
       <GestureDetector gesture={Gesture.Simultaneous(pinch, pan)}>
-        <View accessible accessibilityLabel={`Selected photo. Zoom ${Math.round(zoomLevel * 100)} percent.`} style={styles.frame}>
+        <View
+          accessible
+          accessibilityLabel={`Selected photo. Zoom ${Math.round(zoomLevel * 100)} percent.`}
+          onLayout={(event) => {
+            frameWidth.value = event.nativeEvent.layout.width
+            frameHeight.value = event.nativeEvent.layout.height
+          }}
+          style={styles.frame}
+        >
           <Animated.View style={[styles.photoWrap, animatedPhotoStyle]}>
             <Image source={{ uri }} resizeMode="contain" style={styles.photo} />
           </Animated.View>

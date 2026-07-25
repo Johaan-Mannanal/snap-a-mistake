@@ -6,7 +6,8 @@ import { AppButton } from '../src/components/AppButton'
 import { AppScreen } from '../src/components/AppScreen'
 import { ZoomablePhoto } from '../src/components/ZoomablePhoto'
 import { getLocalScanRepository } from '../src/lib/history'
-import { ownScanPhoto } from '../src/lib/scanFiles'
+import { deleteOwnedPhoto, flushCleanupQueue, ownScanPhoto } from '../src/lib/scanFiles'
+import { advanceReviewTransaction, createReviewTransaction, discardReviewTransaction, type ReviewTransaction } from '../src/lib/reviewTransaction'
 import { acknowledgePrivacyDisclosure, getSession, isPrivacyDisclosureAcknowledged, setPendingPhoto, setReviewedPhoto } from '../src/lib/session'
 import type { ScanOrigin } from '../src/lib/scanTypes'
 import { reviewPresentation } from '../src/ui/reviewScreen'
@@ -30,6 +31,7 @@ export default function Review() {
   const [copyFailed, setCopyFailed] = useState(false)
   const [selectionError, setSelectionError] = useState<string | null>(null)
   const copyLock = useRef(false)
+  const transaction = useRef<ReviewTransaction | null>(null)
 
   useEffect(() => {
     if (!photo) router.replace('/')
@@ -45,27 +47,22 @@ export default function Review() {
     setIsCopying(true)
     setCopyFailed(false)
     try {
-      const scanId = allocateScanId()
-      const ownedUri = await ownScanPhoto(scanId, photo.uri)
       const currentSession = getSession()
-      await getLocalScanRepository().createDraft({
-        id: scanId,
-        imageUri: ownedUri,
+      const repository = getLocalScanRepository()
+      transaction.current ??= createReviewTransaction(allocateScanId(), disclosureAcknowledged)
+      const completed = await advanceReviewTransaction(transaction.current, {
         origin: photo.origin,
         attemptKind: currentSession.parentScanId ? 'follow-up' : 'original',
         parentScanId: currentSession.parentScanId,
         createdAt: new Date().toISOString(),
+      }, {
+        ownPhoto: (scanId) => ownScanPhoto(scanId, photo.uri),
+        findDraft: async (scanId) => (await repository.get(scanId)) !== null,
+        createDraft: (input) => repository.createDraft(input),
+        persistReviewedPhoto: setReviewedPhoto,
+        acknowledgeDisclosure: acknowledgePrivacyDisclosure,
       })
-      if (!disclosureAcknowledged) {
-        await acknowledgePrivacyDisclosure()
-        setDisclosureAcknowledged(true)
-      }
-      await setReviewedPhoto({
-        scanId,
-        uri: ownedUri,
-        origin: photo.origin,
-        parentScanId: currentSession.parentScanId,
-      })
+      if (completed.disclosureAcknowledged) setDisclosureAcknowledged(true)
       router.replace('/analyze')
     } catch {
       setCopyFailed(true)
@@ -86,8 +83,18 @@ export default function Review() {
         setSelectionError('We couldn’t use that photo. Choose another one or keep this photo.')
         return
       }
+      const repository = getLocalScanRepository()
+      if (transaction.current) {
+        await discardReviewTransaction(transaction.current, {
+          findDraft: async (scanId) => (await repository.get(scanId)) !== null,
+          deleteDraft: (scanId) => repository.delete(scanId),
+          flushOwnedPhotos: () => flushCleanupQueue(repository),
+          deleteOwnedPhoto,
+        })
+      }
       await setPendingPhoto({ uri, origin: 'library' })
       setPhoto({ uri, origin: 'library' })
+      transaction.current = null
       setCopyFailed(false)
     } catch {
       setSelectionError('We couldn’t open your library. Choose another photo when you’re ready.')

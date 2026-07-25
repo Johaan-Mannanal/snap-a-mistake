@@ -15,7 +15,7 @@ export type ReviewPresentation = {
   errorCopy: string | null
 }
 
-const FIRST_USE_PRIVACY_COPY = 'When you analyze, this photo is sent to the tutor. A copy is saved only on this device so you can revisit it.'
+const FIRST_USE_PRIVACY_COPY = 'When you analyze, your photo is sent to our AI service. Our server does not keep it. Your completed scan and photo stay on this device until you delete them.'
 const COPY_FAILURE_COPY = 'We couldn’t save this photo on your device. Try analyzing again or choose another photo.'
 
 export function reviewPresentation(input: {

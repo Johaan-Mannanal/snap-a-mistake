@@ -23,7 +23,7 @@ describe('review presentation', () => {
   it('shows privacy context before the first analysis only', () => {
     expect(reviewPresentation({
       origin: 'camera', disclosureAcknowledged: false, isCopying: false, copyFailed: false,
-    }).privacyCopy).toBe('When you analyze, this photo is sent to the tutor. A copy is saved only on this device so you can revisit it.')
+    }).privacyCopy).toBe('When you analyze, your photo is sent to our AI service. Our server does not keep it. Your completed scan and photo stay on this device until you delete them.')
 
     expect(reviewPresentation({
       origin: 'camera', disclosureAcknowledged: true, isCopying: false, copyFailed: false,
