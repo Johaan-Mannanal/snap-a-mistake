@@ -18,6 +18,11 @@ export async function initLocalScanStorage(): Promise<void> {
   repository = createdRepository
 }
 
+export function getLocalScanRepository(): ScanRepositoryWithLegacyHistory {
+  if (!repository) throw new Error('local scan storage is not initialized')
+  return repository
+}
+
 // Temporary compatibility facade. Analyze and Insights still read/write legacy aggregate rows.
 export async function initDb(): Promise<void> {
   await initLocalScanStorage()

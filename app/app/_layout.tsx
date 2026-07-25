@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { initLocalScanStorage } from '../src/lib/history'
+import { getLocalScanRepository, initLocalScanStorage } from '../src/lib/history'
+import { flushCleanupQueue } from '../src/lib/scanFiles'
+import { hydrateSession } from '../src/lib/session'
 import { bootstrapLocalStorage, type LocalStorageBootstrapState } from '../src/lib/startup'
 import { colors } from '../src/ui/theme'
 
@@ -10,7 +12,12 @@ export default function RootLayout() {
   const [startup, setStartup] = useState<LocalStorageBootstrapState | null>(null)
   const initialize = useCallback(() => {
     setStartup(null)
-    void bootstrapLocalStorage(initLocalScanStorage).then(setStartup)
+    void bootstrapLocalStorage(async () => {
+      await initLocalScanStorage()
+      const repository = getLocalScanRepository()
+      await flushCleanupQueue(repository)
+      await hydrateSession(repository)
+    }).then(setStartup)
   }, [])
 
   useEffect(initialize, [initialize])
