@@ -22,6 +22,7 @@ const withFollowUp: AnalyzeResponse = {
 class MemorySessionRepository {
   state: unknown = null
   deleted: string[] = []
+  failDelete = false
 
   async getState<T>(_key: string, schema: { safeParse(value: unknown): { success: boolean; data?: T } }): Promise<T | null> {
     const parsed = schema.safeParse(this.state)
@@ -33,6 +34,7 @@ class MemorySessionRepository {
   }
 
   async deleteState(key: string): Promise<void> {
+    if (this.failDelete) throw new Error('local storage unavailable')
     this.deleted.push(key)
     this.state = null
   }
@@ -80,10 +82,10 @@ describe('session', () => {
     expect(getSession().isRetry).toBe(false)
     expect(getSession().followUp?.problem).toBe('p')
   })
-  it('resetSession clears everything', () => {
+  it('resetSession clears everything', async () => {
     setPhoto('file:///a.jpg')
     startFollowUp()
-    resetSession()
+    await resetSession()
     expect(getSession()).toMatchObject({
       routeIntent: 'capture', pendingScanId: null, photoUri: null, origin: null,
       analysis: null, followUp: null, parentScanId: null, isRetry: false,
@@ -146,6 +148,36 @@ describe('session', () => {
 
     expect(getSession()).toMatchObject({ routeIntent: 'capture', photoUri: null })
     expect(repository.deleted).toContain('active-session')
+  })
+
+  it('discards a stale persisted follow-up that contradicts a result without one', async () => {
+    const repository = new MemorySessionRepository()
+    repository.state = {
+      routeIntent: 'result', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: { kind: 'analysis', steps: [], errorStepIndex: null, misconceptionTag: null, explanation: null, followUp: null, verifierAgreed: true },
+      followUp: withFollowUp.followUp, parentScanId: null,
+    }
+
+    await hydrateSession(repository as unknown as ScanRepository)
+
+    expect(getSession()).toMatchObject({ routeIntent: 'capture', photoUri: null, followUp: null })
+    expect(repository.deleted).toContain('active-session')
+  })
+
+  it('keeps the active reviewed photo available when durable session reset fails', async () => {
+    const repository = new MemorySessionRepository()
+    await hydrateSession(repository as unknown as ScanRepository)
+    await setPendingPhoto({ uri: 'file:///cache/camera.jpg', origin: 'camera' })
+    repository.failDelete = true
+
+    try {
+      await expect(resetSession()).rejects.toThrow('local storage unavailable')
+
+      expect(getSession()).toMatchObject({ routeIntent: 'review', photoUri: 'file:///cache/camera.jpg', origin: 'camera' })
+    } finally {
+      repository.failDelete = false
+      await resetSession()
+    }
   })
 
   it('restores a terminated analysis as an interrupted review that retains the reviewed photo', async () => {

@@ -100,6 +100,14 @@ describe('PersistedSessionSchema', () => {
       analysis: response, followUp: null, parentScanId: null,
     }).routeIntent).toBe('result')
     expect(PersistedSessionSchema.parse({
+      routeIntent: 'result', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: {
+        kind: 'analysis', steps: [], errorStepIndex: 0, misconceptionTag: 'sign-error',
+        explanation: 'The sign changed.', followUp, verifierAgreed: true,
+      },
+      followUp, parentScanId: null,
+    }).routeIntent).toBe('result')
+    expect(PersistedSessionSchema.parse({
       routeIntent: 'follow-up', pendingScanId: null, photoUri: null, origin: null,
       analysis: null, followUp, parentScanId: 'scan-1',
     }).routeIntent).toBe('follow-up')
@@ -126,6 +134,25 @@ describe('PersistedSessionSchema', () => {
       routeIntent: 'follow-up', pendingScanId: null, photoUri: null, origin: null,
       analysis: null, followUp: null, parentScanId: null,
     })).toThrow('follow-up requires parentScanId and followUp')
+  })
+
+  it('rejects stale route data and result follow-ups that do not match the active analysis', () => {
+    expect(() => PersistedSessionSchema.parse({
+      routeIntent: 'review', pendingScanId: null, photoUri: 'file:///temporary.jpg', origin: 'camera',
+      analysis: response, followUp: null, parentScanId: null,
+    })).toThrow('review cannot retain an analysis result or follow-up')
+    expect(() => PersistedSessionSchema.parse({
+      routeIntent: 'analyze', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: null, followUp, parentScanId: null,
+    })).toThrow('analyze cannot retain an analysis result or follow-up')
+    expect(() => PersistedSessionSchema.parse({
+      routeIntent: 'result', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: response, followUp, parentScanId: null,
+    })).toThrow('result followUp must match analysis followUp')
+    expect(() => PersistedSessionSchema.parse({
+      routeIntent: 'follow-up', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: response, followUp, parentScanId: 'scan-1',
+    })).toThrow('follow-up cannot retain scan or analysis result')
   })
 
   it('restores a valid interrupted analysis session', () => {

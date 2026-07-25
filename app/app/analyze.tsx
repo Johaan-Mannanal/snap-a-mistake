@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import type { AnalyzeResponse } from '@snap/shared'
 import { analyzePhoto } from '../src/lib/api'
 import { getSession, setAnalysis, resetSession } from '../src/lib/session'
+import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
 import { recordAnalysis } from '../src/lib/history'
 import { tagLabel } from '../src/lib/labels'
 import { AppButton } from '../src/components/AppButton'
@@ -21,7 +22,12 @@ export default function Analyze() {
   const [result, setResult] = useState<AnalyzeResponse | null>(null)
   const [failed, setFailed] = useState(false)
   const [stage, setStage] = useState(0)
+  const [isResetting, setIsResetting] = useState(false)
+  const [resetFailed, setResetFailed] = useState(false)
   const uri = getSession().photoUri
+  const resetTransition = useRef<(() => Promise<void>) | null>(null)
+  if (resetTransition.current === null)
+    resetTransition.current = createSessionResetTransition(resetSession, () => router.dismissTo('/'))
 
   const run = useCallback(() => {
     if (!uri) { router.replace('/'); return }
@@ -49,7 +55,16 @@ export default function Analyze() {
     return () => clearInterval(t)
   }, [result, failed])
 
-  const snapAnother = () => { resetSession(); router.dismissTo('/') }
+  const snapAnother = useCallback(() => {
+    setIsResetting(true)
+    setResetFailed(false)
+    void resetTransition.current!().catch(() => {
+      setIsResetting(false)
+      setResetFailed(true)
+    })
+  }, [])
+
+  const resetFailure = resetFailed ? <ResetFailure onRetry={snapAnother} /> : null
 
   if (failed) {
     return (
@@ -60,7 +75,8 @@ export default function Analyze() {
           <Text style={styles.stateDetail}>Your photo is saved. Check your connection and try again.</Text>
         </View>
         <AppButton label="Try again" onPress={run} />
-        <AppButton label="Use another photo" onPress={snapAnother} variant="secondary" />
+        {resetFailure}
+        <AppButton label="Use another photo" onPress={snapAnother} disabled={isResetting} variant="secondary" />
       </AppScreen>
     )
   }
@@ -77,7 +93,8 @@ export default function Analyze() {
           <Text style={styles.stateTitle}>This photo doesn't look like math.</Text>
           <Text style={styles.stateDetail}>Snap a photo of handwritten algebra or calculus work.</Text>
         </View>
-        <AppButton label="Retake" onPress={snapAnother} />
+        {resetFailure}
+        <AppButton label="Retake" onPress={snapAnother} disabled={isResetting} />
       </AppScreen>
     )
   }
@@ -92,7 +109,8 @@ export default function Analyze() {
             {result.tips.map((tip) => <Text key={tip} style={styles.tip}>— {tip}</Text>)}
           </View>
         </View>
-        <AppButton label="Retake" onPress={snapAnother} />
+        {resetFailure}
+        <AppButton label="Retake" onPress={snapAnother} disabled={isResetting} />
       </AppScreen>
     )
   }
@@ -107,6 +125,8 @@ export default function Analyze() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Return to camera"
+          accessibilityState={{ disabled: isResetting }}
+          disabled={isResetting}
           hitSlop={8}
           onPress={snapAnother}
           style={({ pressed }) => [styles.topAction, { opacity: pressed ? 0.5 : 1 }]}
@@ -143,9 +163,19 @@ export default function Analyze() {
       </View>
       <View style={styles.actions}>
         {result.followUp && !correct ? <AppButton label="Try a similar problem" onPress={() => router.push('/followup')} /> : null}
-        <AppButton label="Snap another" onPress={snapAnother} variant="tertiary" />
+        {resetFailure}
+        <AppButton label="Snap another" onPress={snapAnother} disabled={isResetting} variant="tertiary" />
       </View>
     </AppScreen>
+  )
+}
+
+function ResetFailure({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={styles.resetFailure}>
+      <Text accessibilityRole="alert" style={styles.resetFailureCopy}>We couldn’t clear this saved session. Your photo is still available.</Text>
+      <AppButton label="Try again" onPress={onRetry} variant="secondary" />
+    </View>
   )
 }
 
@@ -169,4 +199,6 @@ const styles = StyleSheet.create({
   diagnosisDetail: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   timeline: { marginTop: spacing.xs },
   actions: { gap: spacing.md, marginTop: spacing.sm },
+  resetFailure: { gap: spacing.sm },
+  resetFailureCopy: { color: colors.error, fontSize: 15, lineHeight: 22 },
 })

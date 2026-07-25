@@ -1,4 +1,4 @@
-import { AnalyzeResponseSchema, FollowUpSchema, type MisconceptionTag } from '@snap/shared'
+import { AnalyzeResponseSchema, FollowUpSchema, type FollowUp, type MisconceptionTag } from '@snap/shared'
 import { z } from 'zod'
 
 export const ScanOriginSchema = z.enum(['camera', 'library'])
@@ -78,6 +78,16 @@ const PersistedSessionFieldsSchema = z.object({
   followUp: FollowUpSchema.nullable(),
   parentScanId: z.string().min(1).nullable(),
 })
+
+function sameFollowUp(left: FollowUp | null, right: FollowUp | null): boolean {
+  return left === null
+    ? right === null
+    : right !== null
+      && left.problem === right.problem
+      && left.concept === right.concept
+      && left.hint === right.hint
+}
+
 export const PersistedSessionSchema = PersistedSessionFieldsSchema.superRefine((session, ctx) => {
   const hasScanData = session.pendingScanId !== null || session.photoUri !== null || session.origin !== null
     || session.analysis !== null || session.followUp !== null || session.parentScanId !== null
@@ -85,12 +95,23 @@ export const PersistedSessionSchema = PersistedSessionFieldsSchema.superRefine((
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'capture cannot retain scan data' })
   if (session.routeIntent === 'review' && (session.photoUri === null || session.origin === null))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'review requires photoUri and origin' })
+  if (session.routeIntent === 'review' && (session.analysis !== null || session.followUp !== null))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'review cannot retain an analysis result or follow-up' })
   if (session.routeIntent === 'analyze' && (session.pendingScanId === null || session.photoUri === null || session.origin === null))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'analyze requires pendingScanId, photoUri, and origin' })
+  if (session.routeIntent === 'analyze' && (session.analysis !== null || session.followUp !== null))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'analyze cannot retain an analysis result or follow-up' })
   if (session.routeIntent === 'result' && (session.pendingScanId === null || session.photoUri === null || session.origin === null || session.analysis === null))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'result requires pendingScanId, photoUri, origin, and analysis' })
+  if (session.routeIntent === 'result' && session.analysis !== null) {
+    const responseFollowUp = session.analysis.kind === 'analysis' ? session.analysis.followUp : null
+    if (!sameFollowUp(session.followUp, responseFollowUp))
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'result followUp must match analysis followUp' })
+  }
   if (session.routeIntent === 'follow-up' && (session.parentScanId === null || session.followUp === null))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'follow-up requires parentScanId and followUp' })
+  if (session.routeIntent === 'follow-up' && (session.pendingScanId !== null || session.photoUri !== null || session.origin !== null || session.analysis !== null))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'follow-up cannot retain scan or analysis result' })
 })
 export type PersistedSession = z.infer<typeof PersistedSessionSchema>
 

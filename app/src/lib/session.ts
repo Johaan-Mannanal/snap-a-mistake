@@ -125,13 +125,17 @@ export async function resetSession(options: { preserveDraft?: boolean } = {}): P
   const next = preserveDraft
     ? { ...session, routeIntent: 'review' as const, analysis: null, followUp: null, isRetry: false, isInterrupted: false }
     : emptySession()
-  session = next
-  if (!sessionRepository) return
+  if (!sessionRepository) {
+    session = next
+    return
+  }
   if (next.routeIntent === 'capture') {
     await sessionRepository.deleteState(ACTIVE_SESSION_KEY)
+    session = next
     return
   }
   await sessionRepository.setState(ACTIVE_SESSION_KEY, persisted(next))
+  session = next
 }
 
 // Temporary compatibility wrapper. Task 6 migrates capture routes to setPendingPhoto.
