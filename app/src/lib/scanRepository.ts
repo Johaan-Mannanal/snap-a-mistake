@@ -34,6 +34,7 @@ export interface ScanRepository {
   list(): Promise<ScanRecord[]>
   loadTrendSources(): Promise<TrendSource[]>
   delete(scanId: string): Promise<string | null>
+  discardReviewAndSession(input: { scanId: string; ownedUri: string | null }): Promise<void>
   clearAll(): Promise<string[]>
   getCleanupQueue(): Promise<string[]>
   acknowledgeCleanup(imageUri: string): Promise<void>
@@ -71,6 +72,7 @@ type RevisionRow = {
 }
 
 const SCHEMA_VERSION = 1
+const ACTIVE_SESSION_KEY = 'active-session'
 
 const scanSelect = `
   SELECT id, image_uri, origin, attempt_kind, parent_scan_id, lifecycle,
@@ -293,6 +295,35 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
           await transaction.runAsync('INSERT INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)', [descendant.image_uri, now()])
         await transaction.runAsync('DELETE FROM scans WHERE id = ?', [scanId])
         return scan.imageUri
+      })
+    },
+
+    async discardReviewAndSession(input): Promise<void> {
+      await db.withExclusiveTransactionAsync(async (transaction) => {
+        const scan = await readRecord(transaction, input.scanId)
+        if (scan) {
+          const descendants = await transaction.getAllAsync<{ image_uri: string }>(`
+            WITH RECURSIVE descendant_scans(id, image_uri) AS (
+              SELECT id, image_uri FROM scans WHERE id = ?
+              UNION ALL
+              SELECT scans.id, scans.image_uri
+              FROM scans JOIN descendant_scans ON scans.parent_scan_id = descendant_scans.id
+            )
+            SELECT image_uri FROM descendant_scans
+          `, [input.scanId])
+          for (const descendant of descendants)
+            await transaction.runAsync(
+              'INSERT OR IGNORE INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)',
+              [descendant.image_uri, now()],
+            )
+          await transaction.runAsync('DELETE FROM scans WHERE id = ?', [input.scanId])
+        } else if (input.ownedUri !== null) {
+          await transaction.runAsync(
+            'INSERT OR IGNORE INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)',
+            [input.ownedUri, now()],
+          )
+        }
+        await transaction.runAsync('DELETE FROM app_state WHERE key = ?', [ACTIVE_SESSION_KEY])
       })
     },
 

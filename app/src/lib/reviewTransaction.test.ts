@@ -159,30 +159,77 @@ describe('review transaction', () => {
     expect(transaction.ownedUri).toBe('file:///documents/scans/scan-1.jpg')
   })
 
-  it('cleans a partial review and resets the active session before retaking', async () => {
+  it('atomically clears a partial review session before flushing its queued owned photo', async () => {
     const calls: string[] = []
     const transaction = createReviewTransaction('scan-1')
     transaction.ownedUri = 'file:///documents/scans/scan-1.jpg'
 
     await resetReviewForRetake(transaction, {
-      discard: async () => { calls.push('cleanup') },
+      discardReviewAndSession: async () => { calls.push('atomic discard') },
+      clearInMemorySession: () => { calls.push('clear memory') },
+      flushOwnedPhotos: async () => { calls.push('flush') },
       resetSession: async () => { calls.push('reset') },
     })
 
-    expect(calls).toEqual(['cleanup', 'reset'])
+    expect(calls).toEqual(['atomic discard', 'clear memory', 'flush'])
   })
 
-  it('does not reset the active session when retake cleanup fails', async () => {
+  it('keeps the session intact when atomic review disposal fails', async () => {
     const resetSession = vi.fn(async () => {})
+    const clearInMemorySession = vi.fn()
     const transaction = createReviewTransaction('scan-1')
     transaction.ownedUri = 'file:///documents/scans/scan-1.jpg'
 
     await expect(resetReviewForRetake(transaction, {
-      discard: async () => { throw new Error('device unavailable') },
+      discardReviewAndSession: async () => { throw new Error('state unavailable') },
+      clearInMemorySession,
+      flushOwnedPhotos: async () => {},
       resetSession,
-    })).rejects.toThrow('device unavailable')
+    })).rejects.toThrow('state unavailable')
 
+    expect(clearInMemorySession).not.toHaveBeenCalled()
     expect(resetSession).not.toHaveBeenCalled()
+  })
+
+  it('resets directly when no partial analyze transaction exists', async () => {
+    const resetSession = vi.fn(async () => {})
+
+    await resetReviewForRetake(null, {
+      discardReviewAndSession: async () => { throw new Error('should not discard') },
+      clearInMemorySession: () => { throw new Error('should not clear') },
+      flushOwnedPhotos: async () => { throw new Error('should not flush') },
+      resetSession,
+    })
+
+    expect(resetSession).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the review open when direct pre-analyze session reset fails', async () => {
+    const clearInMemorySession = vi.fn()
+
+    await expect(resetReviewForRetake(null, {
+      discardReviewAndSession: async () => {},
+      clearInMemorySession,
+      flushOwnedPhotos: async () => {},
+      resetSession: async () => { throw new Error('state unavailable') },
+    })).rejects.toThrow('state unavailable')
+
+    expect(clearInMemorySession).not.toHaveBeenCalled()
+  })
+
+  it('continues after the atomic commit when owned-file cleanup flush fails', async () => {
+    const transaction = createReviewTransaction('scan-1')
+    transaction.ownedUri = 'file:///documents/scans/scan-1.jpg'
+    const clearInMemorySession = vi.fn()
+
+    await expect(resetReviewForRetake(transaction, {
+      discardReviewAndSession: async () => {},
+      clearInMemorySession,
+      flushOwnedPhotos: async () => { throw new Error('device unavailable') },
+      resetSession: async () => {},
+    })).resolves.toBeUndefined()
+
+    expect(clearInMemorySession).toHaveBeenCalledOnce()
   })
 
   it('coalesces repeated retake actions until the first cleanup and reset settles', async () => {

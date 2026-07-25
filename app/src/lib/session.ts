@@ -154,6 +154,10 @@ export async function resetSession(options: { preserveDraft?: boolean } = {}): P
   session = next
 }
 
+export function clearSessionAfterAtomicDiscard(): void {
+  session = emptySession()
+}
+
 // Temporary compatibility wrapper. Task 6 migrates capture routes to setPendingPhoto.
 export function setPhoto(uri: string): void {
   session = { ...session, photoUri: uri, analysis: null, isRetry: false }

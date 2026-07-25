@@ -15,6 +15,7 @@ class MemoryDatabase implements DatabasePort {
   readonly cleanup = new Set<string>()
   readonly analyses: Array<{ tag: string | null; correct: number; createdAt: string }> = []
   userVersion = 0
+  failActiveSessionDeletion = false
 
   async execAsync(sql: string): Promise<void> {
     for (const statement of sql.split(';').map((part) => part.trim()).filter(Boolean)) {
@@ -83,11 +84,16 @@ class MemoryDatabase implements DatabasePort {
     }
     if (normalized.startsWith('delete from scans')) { this.scans.clear(); this.revisions.clear(); return { changes: 1 } }
     if (normalized.startsWith('delete from analyses')) { this.analyses.splice(0); return { changes: 1 } }
+    if (normalized.startsWith('delete from app_state where')) {
+      if (String(params[0]) === 'active-session' && this.failActiveSessionDeletion)
+        throw new Error('state unavailable')
+      this.appState.delete(String(params[0]))
+      return { changes: 1 }
+    }
     if (normalized.startsWith('delete from app_state')) { this.appState.clear(); return { changes: 1 } }
     if (normalized.startsWith('delete from cleanup_queue where image_uri')) { this.cleanup.delete(String(params[0])); return { changes: 1 } }
     if (normalized.startsWith('delete from cleanup_queue')) { this.cleanup.clear(); return { changes: 1 } }
     if (normalized.startsWith('insert into app_state')) { this.appState.set(String(params[0]), String(params[1])); return { changes: 1 } }
-    if (normalized.startsWith('delete from app_state where')) { this.appState.delete(String(params[0])); return { changes: 1 } }
     throw new Error(`Unhandled run: ${sql}`)
   }
 
@@ -113,7 +119,19 @@ class MemoryDatabase implements DatabasePort {
   }
 
   async withExclusiveTransactionAsync<T>(task: (transaction: DatabasePort) => Promise<T>): Promise<T> {
-    return task(this)
+    const scans = new Map([...this.scans].map(([key, value]) => [key, { ...value }]))
+    const revisions = new Map([...this.revisions].map(([key, value]) => [key, { ...value }]))
+    const appState = new Map(this.appState)
+    const cleanup = new Set(this.cleanup)
+    try {
+      return await task(this)
+    } catch (error) {
+      this.scans.clear(); scans.forEach((value, key) => this.scans.set(key, value))
+      this.revisions.clear(); revisions.forEach((value, key) => this.revisions.set(key, value))
+      this.appState.clear(); appState.forEach((value, key) => this.appState.set(key, value))
+      this.cleanup.clear(); cleanup.forEach((value) => this.cleanup.add(value))
+      throw error
+    }
   }
 }
 
@@ -225,6 +243,36 @@ describe('scan repository records', () => {
     await expect(repository.delete('scan-1')).resolves.toBe('file:///documents/scans/scan-1.jpg')
     expect(db.revisions).toHaveLength(0)
     expect(db.cleanup).toEqual(new Set(['file:///documents/scans/scan-1.jpg']))
+  })
+
+  it('atomically removes a reviewed draft, queues its owned photo, and clears the active session', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.setState('active-session', { routeIntent: 'review' })
+
+    await repository.discardReviewAndSession({ scanId: 'scan-1', ownedUri: 'file:///documents/scans/scan-1.jpg' })
+
+    expect(db.scans).toHaveLength(0)
+    expect(db.appState.has('active-session')).toBe(false)
+    expect(db.cleanup).toEqual(new Set(['file:///documents/scans/scan-1.jpg']))
+  })
+
+  it('rolls back review disposal when clearing the active session fails', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.setState('active-session', { routeIntent: 'review' })
+    db.failActiveSessionDeletion = true
+
+    await expect(repository.discardReviewAndSession({ scanId: 'scan-1', ownedUri: 'file:///documents/scans/scan-1.jpg' }))
+      .rejects.toThrow('state unavailable')
+
+    expect(db.scans).toHaveLength(1)
+    expect(db.appState.has('active-session')).toBe(true)
+    expect(db.cleanup).toEqual(new Set())
   })
 
   it('deletes linked follow-up scans with their parent and queues every owned image', async () => {

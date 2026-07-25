@@ -17,7 +17,7 @@ import {
   runExclusiveReviewAction,
   type ReviewTransaction,
 } from '../src/lib/reviewTransaction'
-import { acknowledgePrivacyDisclosure, getSession, isPrivacyDisclosureAcknowledged, resetSession, setPendingPhoto, setReviewedPhoto } from '../src/lib/session'
+import { acknowledgePrivacyDisclosure, clearSessionAfterAtomicDiscard, getSession, isPrivacyDisclosureAcknowledged, resetSession, setPendingPhoto, setReviewedPhoto } from '../src/lib/session'
 import type { ScanOrigin } from '../src/lib/scanTypes'
 import { reviewPresentation } from '../src/ui/reviewScreen'
 import { colors, spacing } from '../src/ui/theme'
@@ -162,12 +162,9 @@ export default function Review() {
           cleanupTransaction.current = null
         }
         await resetReviewForRetake(transaction.current, {
-          discard: (savedTransaction) => discardReviewTransaction(savedTransaction, {
-            findDraft: async (scanId) => (await repository.get(scanId)) !== null,
-            deleteDraft: (scanId) => repository.delete(scanId),
-            flushOwnedPhotos: () => flushCleanupQueue(repository),
-            deleteOwnedPhoto,
-          }),
+          discardReviewAndSession: (input) => repository.discardReviewAndSession(input),
+          clearInMemorySession: clearSessionAfterAtomicDiscard,
+          flushOwnedPhotos: () => flushCleanupQueue(repository),
           resetSession,
         })
         transaction.current = null

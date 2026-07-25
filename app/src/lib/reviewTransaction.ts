@@ -118,8 +118,25 @@ export async function replaceReviewPhoto(
 
 export async function resetReviewForRetake(
   transaction: ReviewTransaction | null,
-  dependencies: { discard(transaction: ReviewTransaction): Promise<void>; resetSession(): Promise<void> },
+  dependencies: {
+    discardReviewAndSession(input: { scanId: string; ownedUri: string | null }): Promise<void>
+    clearInMemorySession(): void
+    flushOwnedPhotos(): Promise<void>
+    resetSession(): Promise<void>
+  },
 ): Promise<void> {
-  if (transaction !== null) await dependencies.discard(transaction)
-  await dependencies.resetSession()
+  if (transaction === null) {
+    await dependencies.resetSession()
+    return
+  }
+  await dependencies.discardReviewAndSession({ scanId: transaction.scanId, ownedUri: transaction.ownedUri })
+  dependencies.clearInMemorySession()
+  transaction.ownedUri = null
+  transaction.draftCreated = false
+  transaction.sessionPersisted = false
+  try {
+    await dependencies.flushOwnedPhotos()
+  } catch {
+    // The committed cleanup queue will retry this safe, owned-file deletion at next launch.
+  }
 }
