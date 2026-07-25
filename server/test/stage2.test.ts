@@ -11,7 +11,7 @@ const steps: TranscribedStep[] = [
 
 const diagnosis = JSON.stringify({
   errorStepIndex: 1, misconceptionTag: 'integration-by-parts-error',
-  explanation: 'You differentiated both factors.', followUp: { problem: '∫x·2 dx', concept: 'parts' },
+  explanation: 'You differentiated both factors.', followUp: { problem: '∫x·2 dx', concept: 'parts', hint: 'Differentiate one factor.' },
 })
 
 describe('analyzeSteps', () => {
@@ -84,13 +84,13 @@ describe('analyzeSteps', () => {
       errorStepIndex: 1,
       misconceptionTag: 'integration-by-parts-error',
       explanation: 'Since v = e^x, the remaining integral is ∫e^x dx.',
-      followUp: { problem: 'Evaluate ∫ x e^x dx.', concept: 'integration by parts' },
+      followUp: { problem: 'Evaluate ∫ x e^x dx.', concept: 'integration by parts', hint: 'Start with u = x.' },
     })
     const readable = JSON.stringify({
       errorStepIndex: 1,
       misconceptionTag: 'integration-by-parts-error',
       explanation: 'Since v = eˣ, the remaining integral is ∫eˣ dx.',
-      followUp: { problem: 'Evaluate ∫ x eˣ dx.', concept: 'integration by parts' },
+      followUp: { problem: 'Evaluate ∫ x eˣ dx.', concept: 'integration by parts', hint: 'Start with u = x.' },
     })
     const client = fakeClient(caretNotation, readable)
 

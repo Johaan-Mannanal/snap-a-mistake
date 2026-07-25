@@ -26,14 +26,14 @@ const FIXTURES: Record<string, AnalyzeResponse> = {
     misconceptionTag: 'integration-by-parts-error',
     explanation:
       'You kept the x inside the remaining integral — integration by parts moves it out: ∫u dv = uv − ∫v du, and du is just dx here. That stray x makes every later line collapse to zero.',
-    followUp: { problem: 'Use integration by parts to evaluate ∫ x·2ᵈˣ… try the simpler ∫ x eˣ dx again with u = x, dv = eˣ dx.', concept: 'integration by parts' },
+    followUp: { problem: 'Use integration by parts to evaluate ∫ x·2ᵈˣ… try the simpler ∫ x eˣ dx again with u = x, dv = eˣ dx.', concept: 'integration by parts', hint: 'Choose u before differentiating.' },
     verifierAgreed: true,
   },
   suspect: {
     kind: 'analysis', steps: steps(['ok', 'suspect', 'downstream', 'downstream']), errorStepIndex: 1,
     misconceptionTag: 'integration-by-parts-error',
     explanation: 'Step 2 may have kept an extra factor of x inside the integral.',
-    followUp: { problem: 'Evaluate ∫ x eˣ dx with u = x, dv = eˣ dx.', concept: 'integration by parts' },
+    followUp: { problem: 'Evaluate ∫ x eˣ dx with u = x, dv = eˣ dx.', concept: 'integration by parts', hint: 'Differentiate u and integrate dv.' },
     verifierAgreed: false,
   },
   unreadable: { kind: 'unreadable', tips: ['Get more light on the page', 'Flatten the page and shoot from directly above', 'Fit just one problem in the frame'] },

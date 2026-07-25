@@ -1,9 +1,9 @@
-import type { AnalyzeResponse } from '@snap/shared'
+import type { AnalyzeResponse, FollowUp } from '@snap/shared'
 
 export type Session = {
   photoUri: string | null
   analysis: AnalyzeResponse | null
-  followUp: { problem: string; concept: string } | null
+  followUp: FollowUp | null
   isRetry: boolean
 }
 

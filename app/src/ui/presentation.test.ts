@@ -66,7 +66,7 @@ describe('analysisPresentation', () => {
   it('localizes an agreed error', () => {
     const response: AnalysisResponse = {
       ...base, errorStepIndex: 1, misconceptionTag: 'integration-by-parts-error', explanation: 'Extra x.',
-      followUp: { problem: 'Try again.', concept: 'integration by parts' },
+      followUp: { problem: 'Try again.', concept: 'integration by parts', hint: 'Choose u first.' },
     }
     expect(analysisPresentation(response)).toEqual({
       tone: 'error', eyebrow: 'INTEGRATION BY PARTS ERROR', headline: 'The first break is in step two.', detail: 'Extra x.',
@@ -76,7 +76,7 @@ describe('analysisPresentation', () => {
   it('softens verifier disagreement', () => {
     const response: AnalysisResponse = {
       ...base, verifierAgreed: false, errorStepIndex: 2, misconceptionTag: 'other', explanation: 'Check this transition.',
-      followUp: { problem: 'Try again.', concept: 'review' },
+      followUp: { problem: 'Try again.', concept: 'review', hint: 'Check each step.' },
     }
     expect(analysisPresentation(response)).toMatchObject({ tone: 'neutral', headline: 'Step three needs a second look.' })
   })

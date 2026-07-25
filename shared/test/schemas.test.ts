@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  AnalyzeResponseSchema, MISCONCEPTION_TAGS, Stage1Schema, Stage2Schema, VerifierSchema,
+  AlternateFollowUpContextSchema, AnalyzeResponseSchema, AnalysisResultSchema, CorrectionContextSchema,
+  FollowUpSchema, MISCONCEPTION_TAGS, Stage1Schema, Stage2Schema, VerifierSchema,
 } from '../src/index.js'
 
 const step = (index: number) => ({
@@ -28,7 +29,7 @@ describe('Stage2Schema', () => {
   it('accepts a diagnosis with a known tag', () => {
     const r = Stage2Schema.parse({
       errorStepIndex: 2, misconceptionTag: 'sign-error',
-      explanation: 'You flipped the sign.', followUp: { problem: 'd/dx(-3x)', concept: 'signs' },
+      explanation: 'You flipped the sign.', followUp: { problem: 'd/dx(-3x)', concept: 'signs', hint: 'Keep the negative sign.' },
     })
     expect(r.misconceptionTag).toBe('sign-error')
   })
@@ -49,7 +50,7 @@ describe('Stage2Schema', () => {
     const base = {
       errorStepIndex: 0,
       misconceptionTag: 'algebraic-slip' as const,
-      followUp: { problem: 'Simplify x² ÷ 2.', concept: 'division' },
+      followUp: { problem: 'Simplify x² ÷ 2.', concept: 'division', hint: 'Divide the coefficient.' },
     }
 
     expect(Stage2Schema.parse({
@@ -73,7 +74,7 @@ describe('Stage2Schema', () => {
       errorStepIndex: 0,
       misconceptionTag: 'algebraic-slip',
       explanation: 'Use the same operation on both sides.',
-      followUp: { problem: 'Simplify x\\, y.', concept: 'multiplication' },
+      followUp: { problem: 'Simplify x\\, y.', concept: 'multiplication', hint: 'Multiply the factors.' },
     })).toThrow('raw LaTeX')
   })
 })
@@ -98,7 +99,7 @@ describe('AnalyzeResponseSchema', () => {
     expect(() => AnalyzeResponseSchema.parse({
       kind: 'analysis', steps: [{ ...step(0), verdict: 'ok' }], errorStepIndex: null,
       misconceptionTag: 'sign-error', explanation: 'A diagnosis should not be present.',
-      followUp: { problem: 'x', concept: 'signs' }, verifierAgreed: true,
+      followUp: { problem: 'x', concept: 'signs', hint: 'Check the sign.' }, verifierAgreed: true,
     })).toThrow('correct work must have all-null diagnosis fields')
   })
   it('rejects raw LaTeX in analysis student-facing fields', () => {
@@ -113,14 +114,55 @@ describe('AnalyzeResponseSchema', () => {
     expect(() => AnalyzeResponseSchema.parse({
       ...base,
       explanation: 'Terms are not automatically equal\\!',
-      followUp: { problem: 'Simplify x².', concept: 'equality' },
+      followUp: { problem: 'Simplify x².', concept: 'equality', hint: 'Keep both sides equal.' },
     })).toThrow('raw LaTeX')
 
     expect(() => AnalyzeResponseSchema.parse({
       ...base,
       explanation: 'Terms are not automatically equal.',
-      followUp: { problem: 'Simplify x\\, y.', concept: 'multiplication' },
+      followUp: { problem: 'Simplify x\\, y.', concept: 'multiplication', hint: 'Multiply the factors.' },
     })).toThrow('raw LaTeX')
+  })
+})
+
+describe('correction and alternate follow-up contracts', () => {
+  it('validates a selected step contained in the submitted analysis', () => {
+    const analysis = AnalysisResultSchema.parse({
+      kind: 'analysis',
+      steps: [{ ...step(0), verdict: 'wrong' }],
+      errorStepIndex: 0,
+      misconceptionTag: 'sign-error',
+      explanation: 'The sign changed.',
+      followUp: { problem: 'Simplify −2x + x.', concept: 'signs', hint: 'Combine like terms.' },
+      verifierAgreed: true,
+    })
+
+    expect(CorrectionContextSchema.parse({ analysis, selectedStepIndex: 0 }).selectedStepIndex).toBe(0)
+    expect(() => CorrectionContextSchema.parse({ analysis, selectedStepIndex: 4 })).toThrow('selected step must exist')
+  })
+
+  it('requires Unicode-safe follow-up hints', () => {
+    expect(FollowUpSchema.parse({
+      problem: 'Simplify x².', concept: 'powers', hint: 'Use the exponent rule.',
+    }).hint).toBe('Use the exponent rule.')
+
+    expect(() => FollowUpSchema.parse({
+      problem: 'x²', concept: 'powers', hint: '\\frac{1}{2}',
+    })).toThrow('raw LaTeX')
+  })
+
+  it('limits alternate follow-up context to five previous problems', () => {
+    expect(AlternateFollowUpContextSchema.parse({
+      concept: 'signs',
+      diagnosis: 'Keep the negative sign with the term.',
+      previousProblems: ['−2 + 1', '−3 + 2', '−4 + 3', '−5 + 4', '−6 + 5'],
+    }).previousProblems).toHaveLength(5)
+
+    expect(() => AlternateFollowUpContextSchema.parse({
+      concept: 'signs',
+      diagnosis: 'Keep the negative sign with the term.',
+      previousProblems: ['−2 + 1', '−3 + 2', '−4 + 3', '−5 + 4', '−6 + 5', '−7 + 6'],
+    })).toThrow()
   })
 })
 

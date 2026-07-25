@@ -4,7 +4,7 @@ import { getSession, resetSession, setAnalysis, setPhoto, startFollowUp } from '
 
 const withFollowUp: AnalyzeResponse = {
   kind: 'analysis', steps: [], errorStepIndex: 1, misconceptionTag: 'sign-error',
-  explanation: 'x', followUp: { problem: 'p', concept: 'c' }, verifierAgreed: true,
+  explanation: 'x', followUp: { problem: 'p', concept: 'c', hint: 'h' }, verifierAgreed: true,
 }
 
 beforeEach(resetSession)

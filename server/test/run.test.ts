@@ -19,7 +19,7 @@ const s1 = (over: Partial<Stage1Result> = {}): Stage1Result =>
   ({ isMath: true, legibility: 0.9, steps: [step(0), step(1), step(2)], ...over })
 const errorDiag: Stage2Result = {
   errorStepIndex: 1, misconceptionTag: 'sign-error',
-  explanation: 'Sign flipped.', followUp: { problem: 'p', concept: 'c' },
+  explanation: 'Sign flipped.', followUp: { problem: 'p', concept: 'c', hint: 'Keep the sign.' },
 }
 const cleanDiag: Stage2Result = { errorStepIndex: null, misconceptionTag: null, explanation: null, followUp: null }
 
