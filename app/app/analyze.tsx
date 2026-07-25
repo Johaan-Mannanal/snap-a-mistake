@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, findNodeHandle, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import type { AnalyzeResponse } from '@snap/shared'
 import { ApiError, type ApiFailure, analyzePhoto } from '../src/lib/api'
@@ -14,11 +14,12 @@ import { AppButton } from '../src/components/AppButton'
 import { AppIcon } from '../src/components/AppIcon'
 import { AppScreen } from '../src/components/AppScreen'
 import { AnalysisProgress } from '../src/components/AnalysisProgress'
-import { StepTimeline } from '../src/components/StepTimeline'
+import { StepTimeline, type StepTimelineHandle } from '../src/components/StepTimeline'
 import { PhotoOverlay } from '../src/components/PhotoOverlay'
 import { ZoomablePhoto } from '../src/components/ZoomablePhoto'
 import { analysisPresentation, analysisRecoveryPresentation } from '../src/ui/presentation'
 import { colors, spacing } from '../src/ui/theme'
+import { expandStepIndex, initialExpandedStepIndexes, selectStepIndex, toggleExpandedStepIndexes } from '../src/lib/resultInteraction'
 
 type RecoverableFailure = ApiFailure | { kind: 'persistence' }
 
@@ -45,8 +46,11 @@ export default function Analyze() {
   const [isResetting, setIsResetting] = useState(false)
   const [resetFailed, setResetFailed] = useState(false)
   const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null)
+  const [expandedStepIndexes, setExpandedStepIndexes] = useState<Set<number>>(() => new Set())
   const [showAllSteps, setShowAllSteps] = useState(false)
   const [reduceMotion, setReduceMotion] = useState(false)
+  const [pendingPhotoFocusIndex, setPendingPhotoFocusIndex] = useState<number | null>(null)
+  const [timelineLayoutVersion, setTimelineLayoutVersion] = useState(0)
   const { photoUri: uri, pendingScanId: scanId } = getSession()
   const resetTransition = useRef<(() => Promise<void>) | null>(null)
   const activeRequest = useRef<AbortController | null>(null)
@@ -59,7 +63,10 @@ export default function Analyze() {
   const pendingSave = useRef<PendingSave | null>(null)
   const mounted = useRef(true)
   const resultScrollRef = useRef<ScrollView | null>(null)
+  const timelineRef = useRef<StepTimelineHandle | null>(null)
   const photoOffsetY = useRef(0)
+  const timelineOffsetY = useRef(0)
+  const timelineStepOffsets = useRef(new Map<number, number>())
   if (resetTransition.current === null)
     resetTransition.current = createSessionResetTransition(resetSession, () => router.dismissTo('/'))
 
@@ -199,8 +206,11 @@ export default function Analyze() {
   }, [])
   useEffect(() => {
     if (!result || result.kind !== 'analysis') return
-    setSelectedStepIndex(result.errorStepIndex ?? result.steps[0]?.index ?? null)
+    const initialStep = result.errorStepIndex ?? result.steps[0]?.index ?? null
+    setSelectedStepIndex(initialStep)
+    setExpandedStepIndexes(initialExpandedStepIndexes(result.errorStepIndex))
     setShowAllSteps(result.errorStepIndex === null)
+    setPendingPhotoFocusIndex(null)
   }, [result])
   useEffect(() => {
     if (result || failure) return
@@ -243,15 +253,49 @@ export default function Analyze() {
   }, [reduceMotion])
 
   const selectTimelineStep = useCallback((index: number) => {
-    setSelectedStepIndex(index)
+    setSelectedStepIndex((current) => selectStepIndex(current, index))
     setShowAllSteps(true)
     scrollToPhoto()
   }, [scrollToPhoto])
 
-  const selectPhotoStep = useCallback((index: number) => {
-    setSelectedStepIndex(index)
-    setShowAllSteps(true)
+  const toggleTimelineStepExpanded = useCallback((index: number) => {
+    setExpandedStepIndexes((expanded) => toggleExpandedStepIndexes(expanded, index))
   }, [])
+
+  const selectPhotoStep = useCallback((index: number) => {
+    setSelectedStepIndex((current) => selectStepIndex(current, index))
+    setExpandedStepIndexes((expanded) => expandStepIndex(expanded, index))
+    setShowAllSteps(true)
+    setPendingPhotoFocusIndex(index)
+  }, [])
+
+  const rememberTimelineStepLayout = useCallback((index: number, y: number) => {
+    timelineStepOffsets.current.set(index, y)
+    setTimelineLayoutVersion((version) => version + 1)
+  }, [])
+
+  useEffect(() => {
+    if (pendingPhotoFocusIndex === null) return
+    let innerFrame: number | null = null
+    const frame = requestAnimationFrame(() => {
+      innerFrame = requestAnimationFrame(() => {
+        const stepOffsetY = timelineStepOffsets.current.get(pendingPhotoFocusIndex)
+        const stepNode = timelineRef.current?.getStepNode(pendingPhotoFocusIndex)
+        if (stepOffsetY === undefined || !stepNode) return
+        resultScrollRef.current?.scrollTo({
+          y: Math.max(0, timelineOffsetY.current + stepOffsetY - spacing.md),
+          animated: !reduceMotion,
+        })
+        const nodeHandle = findNodeHandle(stepNode)
+        if (nodeHandle !== null) AccessibilityInfo.setAccessibilityFocus(nodeHandle)
+        setPendingPhotoFocusIndex(null)
+      })
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+      if (innerFrame !== null) cancelAnimationFrame(innerFrame)
+    }
+  }, [pendingPhotoFocusIndex, reduceMotion, showAllSteps, timelineLayoutVersion])
 
   const resetFailure = resetFailed ? <ResetFailure onRetry={snapAnother} /> : null
 
@@ -396,14 +440,18 @@ export default function Analyze() {
         <Text style={styles.diagnosisDetail}>{presentation.detail}</Text>
       </View>
       {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} /> : null}
-      <View style={styles.timeline}>
+      <View style={styles.timeline} onLayout={(event) => { timelineOffsetY.current = event.nativeEvent.layout.y }}>
         <StepTimeline
+          ref={timelineRef}
           steps={result.steps}
           errorStepIndex={result.errorStepIndex}
           selectedStepIndex={selectedStepIndex}
           showAll={showAllSteps}
           onSelectStep={selectTimelineStep}
           onShowAll={() => setShowAllSteps((visible) => !visible)}
+          expandedStepIndexes={expandedStepIndexes}
+          onToggleStepExpanded={toggleTimelineStepExpanded}
+          onStepLayout={rememberTimelineStepLayout}
           misconceptionLabel={label}
           explanation={result.explanation}
         />

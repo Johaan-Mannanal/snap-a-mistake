@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { Step } from '@snap/shared'
-import { bandStyle, hasPhotoBand, type ContainedPhotoRect } from '../lib/overlay'
+import { bandHitTargetStyle, hasPhotoBand, type ContainedPhotoRect } from '../lib/overlay'
 import { colors } from '../ui/theme'
 
 export function PhotoOverlay(props: {
@@ -18,7 +18,7 @@ export function PhotoOverlay(props: {
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {located.map((step) => {
-          const band = bandStyle(step, geometry.height)
+          const target = bandHitTargetStyle(step, geometry.height)
           const selected = step.index === props.selectedStepIndex
           const wrong = step.verdict === 'wrong'
           const color = wrong ? colors.error : colors.chalk
@@ -29,16 +29,25 @@ export function PhotoOverlay(props: {
               accessibilityLabel={`Focus step ${step.index + 1} in the timeline`}
               accessibilityHint="Selects and expands this step."
               accessibilityState={{ selected }}
-              hitSlop={10}
               onPress={() => props.onSelectStep(step.index)}
               style={{
                 position: 'absolute', left: geometry.left, width: geometry.width,
-                top: geometry.top + band.top, height: band.height,
-                borderTopWidth: selected ? 2 : 1.5, borderBottomWidth: selected ? 2 : 1.5, borderColor: color,
-                backgroundColor: wrong ? 'rgba(255,92,103,0.10)' : 'rgba(245,245,243,0.07)',
+                top: geometry.top + target.top, height: target.height,
               }}
             >
-              <Text numberOfLines={1} style={[styles.label, { color, backgroundColor: colors.ink }]}>STEP {step.index + 1}</Text>
+              <View pointerEvents="none" style={[
+                styles.visualBand,
+                {
+                  top: target.visualTop,
+                  height: target.visualHeight,
+                  borderTopWidth: selected ? 2 : 1.5,
+                  borderBottomWidth: selected ? 2 : 1.5,
+                  borderColor: color,
+                  backgroundColor: wrong ? 'rgba(255,92,103,0.10)' : 'rgba(245,245,243,0.07)',
+                },
+              ]}>
+                <Text numberOfLines={1} style={[styles.label, { color, backgroundColor: colors.ink }]}>STEP {step.index + 1}</Text>
+              </View>
             </Pressable>
           )
         })}
@@ -47,5 +56,6 @@ export function PhotoOverlay(props: {
 }
 
 const styles = StyleSheet.create({
+  visualBand: { position: 'absolute', left: 0, right: 0 },
   label: { alignSelf: 'flex-end', marginRight: 4, paddingHorizontal: 4, fontSize: 11, fontWeight: '700', lineHeight: 16 },
 })

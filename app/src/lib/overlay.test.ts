@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bandStyle, containedPhotoRect, hasPhotoBand } from './overlay'
+import { bandHitTargetStyle, bandStyle, containedPhotoRect, hasPhotoBand } from './overlay'
 
 describe('bandStyle', () => {
   it('keeps an overly broad model band to one displayed line', () => {
@@ -31,5 +31,15 @@ describe('bandStyle', () => {
     expect(hasPhotoBand({ yBandTopPct: Number.NaN, yBandBottomPct: 20 })).toBe(false)
     expect(hasPhotoBand({ yBandTopPct: 80, yBandBottomPct: 20 })).toBe(false)
     expect(hasPhotoBand({ yBandTopPct: 20, yBandBottomPct: 20 })).toBe(true)
+  })
+
+  it('keeps the top-edge press target fully inside the photo at 44 points', () => {
+    expect(bandHitTargetStyle({ yBandTopPct: 0, yBandBottomPct: 1 }, 400))
+      .toEqual({ top: 0, height: 44, visualTop: 0, visualHeight: 24 })
+  })
+
+  it('shifts the bottom-edge press target upward while keeping its visual line precise', () => {
+    expect(bandHitTargetStyle({ yBandTopPct: 98, yBandBottomPct: 100 }, 400))
+      .toEqual({ top: 356, height: 44, visualTop: 20, visualHeight: 24 })
   })
 })

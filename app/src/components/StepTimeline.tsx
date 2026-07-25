@@ -1,3 +1,4 @@
+import { forwardRef, useImperativeHandle, useRef } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { Step } from '@snap/shared'
 import { focusedStepIndexes } from '../lib/resultFocus'
@@ -11,11 +12,20 @@ export type StepTimelineProps = {
   showAll: boolean
   onSelectStep: (index: number) => void
   onShowAll: () => void
+  expandedStepIndexes: ReadonlySet<number>
+  onToggleStepExpanded: (index: number) => void
+  onStepLayout?: (index: number, y: number) => void
   misconceptionLabel: string | null
   explanation: string | null
 }
 
-export function StepTimeline(props: StepTimelineProps) {
+export type StepTimelineHandle = { getStepNode: (index: number) => View | null }
+
+export const StepTimeline = forwardRef<StepTimelineHandle, StepTimelineProps>(function StepTimeline(props, ref) {
+  const stepNodes = useRef(new Map<number, View | null>())
+  useImperativeHandle(ref, () => ({
+    getStepNode: (index) => stepNodes.current.get(index) ?? null,
+  }), [])
   const focused = focusedStepIndexes(props.steps, props.errorStepIndex)
   const focusedSet = new Set(focused)
   const visibleSteps = props.showAll ? props.steps : props.steps.filter((step) => focusedSet.has(step.index))
@@ -29,9 +39,17 @@ export function StepTimeline(props: StepTimelineProps) {
           step={step}
           misconceptionLabel={step.index === props.errorStepIndex ? props.misconceptionLabel : null}
           explanation={step.index === props.errorStepIndex ? props.explanation : null}
-          expanded={step.index === props.selectedStepIndex}
+          expanded={props.expandedStepIndexes.has(step.index)}
           selected={step.index === props.selectedStepIndex}
-          onPress={() => props.onSelectStep(step.index)}
+          onPress={() => {
+            props.onSelectStep(step.index)
+            props.onToggleStepExpanded(step.index)
+          }}
+          onLayout={(event) => props.onStepLayout?.(step.index, event.nativeEvent.layout.y)}
+          ref={(node) => {
+            if (node) stepNodes.current.set(step.index, node)
+            else stepNodes.current.delete(step.index)
+          }}
         />
       ))}
       {canToggle ? (
@@ -48,7 +66,7 @@ export function StepTimeline(props: StepTimelineProps) {
       ) : null}
     </View>
   )
-}
+})
 
 const styles = StyleSheet.create({
   root: { marginTop: spacing.xs },

@@ -41,3 +41,13 @@ export function bandStyle(
   const top = Math.min(Math.max(rawTop, 0), displayedHeight - height)
   return { top, height }
 }
+
+export function bandHitTargetStyle(
+  step: { yBandTopPct: number; yBandBottomPct: number },
+  displayedHeight: number,
+): { top: number; height: number; visualTop: number; visualHeight: number } {
+  const visual = bandStyle(step, displayedHeight)
+  const height = Math.min(44, displayedHeight)
+  const top = Math.min(Math.max(visual.top - (height - visual.height) / 2, 0), displayedHeight - height)
+  return { top, height, visualTop: visual.top - top, visualHeight: visual.height }
+}

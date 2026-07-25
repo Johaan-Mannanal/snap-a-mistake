@@ -1,25 +1,31 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { forwardRef } from 'react'
+import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 import type { Step } from '@snap/shared'
 import { colors, spacing } from '../ui/theme'
 import { readableStepMath, stepAccessibilityLabel } from '../ui/presentation'
 
-export function StepCard(props: {
+export const StepCard = forwardRef<View, {
   step: Step
   misconceptionLabel: string | null
   explanation: string | null
   expanded: boolean
   selected: boolean
   onPress: () => void
-}) {
+  onLayout?: (event: LayoutChangeEvent) => void
+}>(function StepCard(props, ref) {
   const mark = props.step.verdict === 'ok' ? '✓' : props.step.verdict === 'wrong' ? '×' : props.step.verdict === 'suspect' ? '?' : '↓'
   const color = props.step.verdict === 'ok' ? colors.success : props.step.verdict === 'wrong' ? colors.error : colors.muted
   const math = readableStepMath(props.step.latex, props.step.plain)
   return (
     <Pressable
+      ref={ref}
       accessibilityRole="button"
       accessibilityLabel={stepAccessibilityLabel(props.step, props.misconceptionLabel, props.explanation)}
-      accessibilityHint={props.expanded ? 'Double tap to keep this step selected.' : 'Double tap to select and expand this step.'}
+      accessibilityHint={props.expanded ? 'Double tap to collapse this step.' : 'Double tap to expand this step.'}
       accessibilityState={{ expanded: props.expanded, selected: props.selected }}
+      accessibilityActions={[{ name: props.expanded ? 'collapse' : 'expand', label: props.expanded ? 'Collapse step' : 'Expand step' }]}
+      onAccessibilityAction={props.onPress}
+      onLayout={props.onLayout}
       onPress={props.onPress}
       style={({ pressed }) => [styles.row, props.selected && styles.selected, pressed && styles.pressed]}
     >
@@ -33,7 +39,7 @@ export function StepCard(props: {
       </View>
     </Pressable>
   )
-}
+})
 
 const styles = StyleSheet.create({
   row: {
