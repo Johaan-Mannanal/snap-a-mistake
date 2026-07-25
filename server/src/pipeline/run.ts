@@ -41,7 +41,7 @@ async function timeStage<T>(
   }
 }
 
-function withVerdicts(steps: TranscribedStep[], errorIndex: number | null, verifierAgreed: boolean): Step[] {
+export function withVerdicts(steps: TranscribedStep[], errorIndex: number | null, verifierAgreed: boolean): Step[] {
   return steps.map((s) => ({
     ...s,
     verdict:

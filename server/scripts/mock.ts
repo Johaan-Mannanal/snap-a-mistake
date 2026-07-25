@@ -49,6 +49,25 @@ const app = buildApp({
     await new Promise((r) => setTimeout(r, 4000))
     return fixture
   },
+  runCorrection: async (_image, context) => ({
+    kind: 'analysis',
+    steps: context.analysis.steps.map((step) => ({
+      ...step,
+      verdict:
+        step.index < context.selectedStepIndex ? 'ok'
+          : step.index === context.selectedStepIndex ? 'wrong'
+            : 'downstream',
+    })),
+    errorStepIndex: context.selectedStepIndex,
+    misconceptionTag: 'algebraic-slip',
+    explanation: 'You combined unlike terms as if they were the same quantity.',
+    followUp: {
+      problem: 'Simplify 2x + 3 + 4x.',
+      concept: 'like terms',
+      hint: 'Combine only matching variable terms.',
+    },
+    verifierAgreed: true,
+  }),
   logger: true,
 })
 app.listen({ port: 3000, host: '0.0.0.0' }).then(() => {
