@@ -6,6 +6,7 @@ import { ApiError, type ApiFailure, analyzePhoto } from '../src/lib/api'
 import { getLocalScanRepository, recordAnalysis } from '../src/lib/history'
 import { getSession, persistAnalysis, resetSession } from '../src/lib/session'
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
+import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
 import type { ScanRevision } from '../src/lib/scanTypes'
 import { tagLabel } from '../src/lib/labels'
 import { AppButton } from '../src/components/AppButton'
@@ -23,6 +24,7 @@ type PendingSave = {
   response: AnalyzeResponse
   revision: ScanRevision
   durationMs: number
+  historyRecorded: boolean
 }
 
 function allocateRevisionId(): string {
@@ -33,6 +35,8 @@ export default function Analyze() {
   const [result, setResult] = useState<AnalyzeResponse | null>(null)
   const [failure, setFailure] = useState<RecoverableFailure | null>(null)
   const [unsaved, setUnsaved] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [reviewReturnFailed, setReviewReturnFailed] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [isResetting, setIsResetting] = useState(false)
   const [resetFailed, setResetFailed] = useState(false)
@@ -40,51 +44,75 @@ export default function Analyze() {
   const resetTransition = useRef<(() => Promise<void>) | null>(null)
   const activeRequest = useRef<AbortController | null>(null)
   const requestInFlight = useRef(false)
-  const cancelled = useRef(false)
-  const cancellationTask = useRef<Promise<void> | null>(null)
+  const runFence = useRef(createRunFence())
+  const saveLock = useRef(createAsyncLock<void>())
+  const cancellationLock = useRef(createAsyncLock<void>())
+  const activeToken = useRef<number | null>(null)
   const pendingSave = useRef<PendingSave | null>(null)
   const durableResult = useRef(false)
   const mounted = useRef(true)
   if (resetTransition.current === null)
     resetTransition.current = createSessionResetTransition(resetSession, () => router.dismissTo('/'))
 
-  const persistPendingSave = useCallback(async (pending: PendingSave) => {
-    try {
-      await getLocalScanRepository().saveRevision(scanId!, pending.revision, pending.durationMs)
-      durableResult.current = true
-      await persistAnalysis(scanId!, pending.response, pending.durationMs)
-      if (mounted.current) setUnsaved(false)
-      if (pending.response.kind === 'analysis')
-        void recordAnalysis({ tag: pending.response.misconceptionTag, correct: pending.response.errorStepIndex === null }).catch(() => {})
-    } catch {
-      if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'unsaved').catch(() => {})
-      if (mounted.current) setUnsaved(true)
-    }
-  }, [scanId])
+  const owns = useCallback((token: number) => mounted.current && runFence.current.owns(token), [])
 
-  const returnToReview = useCallback(async () => {
-    cancelled.current = true
+  const persistPendingSave = useCallback(async (pending: PendingSave, token: number) => {
+    await saveLock.current.run(async () => {
+      if (!owns(token)) return
+      if (mounted.current) setIsSaving(true)
+      try {
+        if (!owns(token)) return
+        await getLocalScanRepository().saveRevision(scanId!, pending.revision, pending.durationMs)
+        if (!owns(token)) return
+        durableResult.current = true
+        await persistAnalysis(scanId!, pending.response, pending.durationMs)
+        if (!owns(token)) return
+        if (mounted.current) setUnsaved(false)
+        if (pending.response.kind === 'analysis' && !pending.historyRecorded) {
+          if (!owns(token)) return
+          try {
+            await recordAnalysis({ tag: pending.response.misconceptionTag, correct: pending.response.errorStepIndex === null })
+            if (!owns(token)) return
+            pending.historyRecorded = true
+          } catch {
+            // Legacy aggregate history is supplementary; the durable scan revision is already saved.
+          }
+        }
+      } catch {
+        if (!owns(token)) return
+        if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'unsaved').catch(() => {})
+        if (!owns(token)) return
+        if (mounted.current) setUnsaved(true)
+      } finally {
+        if (owns(token)) setIsSaving(false)
+      }
+    })
+  }, [owns, scanId])
+
+  const returnToReview = useCallback(() => {
+    const pendingRun = runFence.current.invalidate()
     activeRequest.current?.abort()
-    if (cancellationTask.current) return cancellationTask.current
-    cancellationTask.current = (async () => {
+    return cancellationLock.current.run(async () => {
+      if (mounted.current) setReviewReturnFailed(false)
+      await pendingRun?.catch(() => {})
       try {
         if (scanId && !durableResult.current)
           await getLocalScanRepository().setLifecycle(scanId, 'interrupted')
+        if (!mounted.current) return
         await resetSession({ preserveDraft: true })
         if (mounted.current) router.replace('/review')
       } catch {
-        if (mounted.current) setFailure({ kind: 'persistence' })
+        if (mounted.current) setReviewReturnFailed(true)
       }
-    })()
-    return cancellationTask.current
+    })
   }, [scanId])
 
-  const run = useCallback(async () => {
+  const run = useCallback(() => {
     if (!uri || !scanId) { router.replace('/review'); return }
     if (requestInFlight.current) return
     requestInFlight.current = true
-    cancelled.current = false
-    cancellationTask.current = null
+    const token = runFence.current.begin()
+    activeToken.current = token
     pendingSave.current = null
     durableResult.current = false
     if (mounted.current) {
@@ -93,47 +121,49 @@ export default function Analyze() {
       setResult(null)
       setElapsedSeconds(0)
     }
-    try {
-      const scan = await getLocalScanRepository().setLifecycle(scanId, 'analyzing')
-      if (cancelled.current) {
-        await returnToReview()
-        return
-      }
-      const controller = new AbortController()
-      activeRequest.current = controller
-      const startedAt = Date.now()
-      const response = await analyzePhoto(uri, { signal: controller.signal })
-      const durationMs = Math.max(0, Date.now() - startedAt)
-      const pending: PendingSave = {
-        response,
-        durationMs,
-        revision: {
-          id: allocateRevisionId(),
-          reason: scan?.activeRevision ? 'retry' : 'initial',
+    const task = (async () => {
+      try {
+        if (!owns(token)) return
+        const scan = await getLocalScanRepository().setLifecycle(scanId, 'analyzing')
+        if (!owns(token)) return
+        const controller = new AbortController()
+        activeRequest.current = controller
+        const startedAt = Date.now()
+        const response = await analyzePhoto(uri, { signal: controller.signal })
+        if (!owns(token)) return
+        const durationMs = Math.max(0, Date.now() - startedAt)
+        const pending: PendingSave = {
           response,
-          createdAt: new Date().toISOString(),
-        },
+          durationMs,
+          historyRecorded: false,
+          revision: {
+            id: allocateRevisionId(),
+            reason: scan.activeRevision ? 'retry' : 'initial',
+            response,
+            createdAt: new Date().toISOString(),
+          },
+        }
+        if (!owns(token)) return
+        pendingSave.current = pending
+        if (mounted.current) setResult(response)
+        await persistPendingSave(pending, token)
+      } catch (error) {
+        if (!owns(token)) return
+        if (mounted.current) {
+          if (error instanceof ApiError) setFailure(error.failure)
+          else setFailure({ kind: 'persistence' })
+        }
+      } finally {
+        if (runFence.current.owns(token)) {
+          activeRequest.current = null
+          requestInFlight.current = false
+        }
       }
-      pendingSave.current = pending
-      if (mounted.current) setResult(response)
-      await persistPendingSave(pending)
-    } catch (error) {
-      if (cancelled.current || (error instanceof ApiError && error.failure.kind === 'cancelled')) {
-        if (mounted.current) await returnToReview()
-        else if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'interrupted').catch(() => {})
-        return
-      }
-      if (mounted.current) {
-        if (error instanceof ApiError) setFailure(error.failure)
-        else setFailure({ kind: 'persistence' })
-      }
-    } finally {
-      activeRequest.current = null
-      requestInFlight.current = false
-    }
-  }, [persistPendingSave, returnToReview, scanId, uri])
+    })()
+    runFence.current.track(token, task)
+  }, [owns, persistPendingSave, scanId, uri])
 
-  useEffect(() => { void run() }, [run])
+  useEffect(() => { run() }, [run])
   useEffect(() => {
     if (result || failure) return
     const startedAt = Date.now()
@@ -142,8 +172,17 @@ export default function Analyze() {
   }, [failure, result])
   useEffect(() => () => {
     mounted.current = false
+    runFence.current.invalidate()
     activeRequest.current?.abort()
   }, [])
+
+  const retrySaving = useCallback(() => {
+    const token = activeToken.current
+    const pending = pendingSave.current
+    if (token === null || pending === null || !owns(token)) return
+    const task = persistPendingSave(pending, token)
+    runFence.current.track(token, task)
+  }, [owns, persistPendingSave])
 
   const snapAnother = useCallback(() => {
     setIsResetting(true)
@@ -155,6 +194,19 @@ export default function Analyze() {
   }, [])
 
   const resetFailure = resetFailed ? <ResetFailure onRetry={snapAnother} /> : null
+
+  if (reviewReturnFailed) {
+    return (
+      <AppScreen contentStyle={styles.stateContent}>
+        <View style={styles.stateCopy}>
+          <Text style={styles.stateEyebrow}>RETURN UNAVAILABLE</Text>
+          <Text style={styles.stateTitle}>We couldn’t return to your review.</Text>
+          <Text style={styles.stateDetail}>Your reviewed photo is still saved. Try returning to review again.</Text>
+        </View>
+        <AppButton label="Try returning to review" onPress={() => { void returnToReview() }} />
+      </AppScreen>
+    )
+  }
 
   if (failure) {
     if (failure.kind === 'persistence') {
@@ -197,7 +249,7 @@ export default function Analyze() {
           <Text style={styles.stateTitle}>{presentation.title}</Text>
           <Text style={styles.stateDetail}>{presentation.detail}</Text>
         </View>
-        {unsaved ? <UnsavedBanner onRetry={() => { const pending = pendingSave.current; if (pending) void persistPendingSave(pending) }} /> : null}
+        {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} /> : null}
         <AppButton label="Return to review" onPress={() => { void returnToReview() }} />
       </AppScreen>
     )
@@ -214,7 +266,7 @@ export default function Analyze() {
             {result.tips.map((tip) => <Text key={tip} style={styles.tip}>— {tip}</Text>)}
           </View>
         </View>
-        {unsaved ? <UnsavedBanner onRetry={() => { const pending = pendingSave.current; if (pending) void persistPendingSave(pending) }} /> : null}
+        {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} /> : null}
         <AppButton label="Return to review" onPress={() => { void returnToReview() }} />
       </AppScreen>
     )
@@ -256,7 +308,7 @@ export default function Analyze() {
         )}
         <Text style={styles.diagnosisDetail}>{presentation.detail}</Text>
       </View>
-      {unsaved ? <UnsavedBanner onRetry={() => { const pending = pendingSave.current; if (pending) void persistPendingSave(pending) }} /> : null}
+      {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} /> : null}
       <View style={styles.timeline}>
         {result.steps.map((s) => (
           <StepCard
@@ -276,11 +328,11 @@ export default function Analyze() {
   )
 }
 
-function UnsavedBanner({ onRetry }: { onRetry: () => void }) {
+function UnsavedBanner({ onRetry, isSaving }: { onRetry: () => void; isSaving: boolean }) {
   return (
     <View style={styles.unsavedBanner}>
-      <Text accessibilityRole="alert" style={styles.unsavedCopy}>This result is visible, but it isn’t saved yet.</Text>
-      <AppButton label="Retry saving" onPress={onRetry} variant="secondary" />
+      <Text accessibilityRole="alert" style={styles.unsavedCopy}>{isSaving ? 'Saving this result…' : 'This result is visible, but it isn’t saved yet.'}</Text>
+      <AppButton label={isSaving ? 'Saving…' : 'Retry saving'} onPress={onRetry} disabled={isSaving} variant="secondary" />
     </View>
   )
 }

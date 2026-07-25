@@ -30,12 +30,16 @@ export async function analyzePhoto(
 
   const timeoutController = new AbortController()
   const requestController = new AbortController()
-  let timedOut = false
-  const abortForCallerCancellation = () => requestController.abort()
-  const abortForTimeout = () => {
-    timedOut = true
-    timeoutController.abort()
+  let abortReason: 'timeout' | 'cancelled' | null = null
+  const abortRequest = (reason: 'timeout' | 'cancelled') => {
+    if (abortReason !== null) return
+    abortReason = reason
     requestController.abort()
+  }
+  const abortForCallerCancellation = () => abortRequest('cancelled')
+  const abortForTimeout = () => {
+    timeoutController.abort()
+    abortRequest('timeout')
   }
   options.signal?.addEventListener('abort', abortForCallerCancellation, { once: true })
   if (options.signal?.aborted) abortForCallerCancellation()
@@ -47,16 +51,16 @@ export async function analyzePhoto(
     try {
       res = await fetchFn(`${API_URL}/analyze`, { method: 'POST', body: form, signal: requestController.signal })
     } catch {
-      if (options.signal?.aborted) throw new ApiError({ kind: 'cancelled' })
-      if (timedOut || timeoutController.signal.aborted) throw new ApiError({ kind: 'timeout' })
+      if (abortReason === 'cancelled') throw new ApiError({ kind: 'cancelled' })
+      if (abortReason === 'timeout') throw new ApiError({ kind: 'timeout' })
       throw new ApiError({ kind: 'network' })
     }
-    if (options.signal?.aborted) throw new ApiError({ kind: 'cancelled' })
-    if (timedOut || timeoutController.signal.aborted) throw new ApiError({ kind: 'timeout' })
+    if (abortReason === 'cancelled') throw new ApiError({ kind: 'cancelled' })
+    if (abortReason === 'timeout') throw new ApiError({ kind: 'timeout' })
     if (!res.ok) throw new ApiError({ kind: 'server', status: res.status })
     const body = await res.json().catch(() => null)
-    if (options.signal?.aborted) throw new ApiError({ kind: 'cancelled' })
-    if (timedOut || timeoutController.signal.aborted) throw new ApiError({ kind: 'timeout' })
+    if (abortReason === 'cancelled') throw new ApiError({ kind: 'cancelled' })
+    if (abortReason === 'timeout') throw new ApiError({ kind: 'timeout' })
     const parsed = AnalyzeResponseSchema.safeParse(body)
     if (!parsed.success) throw new ApiError({ kind: 'invalid-response', status: res.status })
     return parsed.data

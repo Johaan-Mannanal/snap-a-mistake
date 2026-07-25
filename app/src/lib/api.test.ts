@@ -83,4 +83,38 @@ describe('analyzePhoto', () => {
       vi.useRealTimers()
     }
   })
+  it('keeps timeout as the failure when it aborts before the caller does', async () => {
+    vi.useFakeTimers()
+    try {
+      const caller = new AbortController()
+      const fetchFn = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        ;(init?.signal as AbortSignal).addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+      }))
+      const pending = analyzePhoto('file:///p.jpg', { fetchFn: fetchFn as typeof fetch, signal: caller.signal }).catch((error) => error)
+
+      vi.advanceTimersByTime(180_000)
+      caller.abort()
+
+      await expect(pending).resolves.toMatchObject({ failure: { kind: 'timeout' } })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('keeps caller cancellation as the failure when it aborts before the timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      const caller = new AbortController()
+      const fetchFn = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        ;(init?.signal as AbortSignal).addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+      }))
+      const pending = analyzePhoto('file:///p.jpg', { fetchFn: fetchFn as typeof fetch, signal: caller.signal }).catch((error) => error)
+
+      caller.abort()
+      vi.advanceTimersByTime(180_000)
+
+      await expect(pending).resolves.toMatchObject({ failure: { kind: 'cancelled' } })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
