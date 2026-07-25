@@ -54,7 +54,7 @@ export function buildApp(deps: BuildAppDeps): FastifyInstance {
         return reply.code(400).send({ error: 'invalid correction request' })
 
       let photo: Buffer | undefined
-      let contextJson: string | undefined
+      let contextValue: unknown
       let invalid = false
       for await (const part of req.parts()) {
         if (part.type === 'file') {
@@ -64,20 +64,24 @@ export function buildApp(deps: BuildAppDeps): FastifyInstance {
           } else {
             photo = await part.toBuffer()
           }
-        } else if (part.fieldname !== 'context' || contextJson !== undefined || part.valueTruncated) {
+        } else if (part.fieldname !== 'context' || contextValue !== undefined || part.valueTruncated) {
           invalid = true
         } else {
-          contextJson = String(part.value)
+          contextValue = part.value
         }
       }
-      if (invalid || !photo || !contextJson)
+      if (invalid || !photo || contextValue === undefined)
         return reply.code(400).send({ error: 'invalid correction request' })
 
       let parsedContext: unknown
-      try {
-        parsedContext = JSON.parse(contextJson)
-      } catch {
-        return reply.code(400).send({ error: 'invalid correction request' })
+      if (typeof contextValue === 'string') {
+        try {
+          parsedContext = JSON.parse(contextValue)
+        } catch {
+          return reply.code(400).send({ error: 'invalid correction request' })
+        }
+      } else {
+        parsedContext = contextValue
       }
       const context = CorrectionContextSchema.safeParse(parsedContext)
       if (!context.success) return reply.code(400).send({ error: 'invalid correction request' })
@@ -90,6 +94,9 @@ export function buildApp(deps: BuildAppDeps): FastifyInstance {
         || err instanceof app.multipartErrors.FilesLimitError
         || err instanceof app.multipartErrors.FieldsLimitError
         || err instanceof app.multipartErrors.RequestFileTooLargeError
+        || err instanceof app.multipartErrors.PrototypeViolationError
+        // @fastify/multipart's type declaration omits InvalidJSONFieldError.
+        || (typeof err === 'object' && err !== null && 'code' in err && err.code === 'FST_INVALID_JSON_FIELD_ERROR')
       ) return reply.code(400).send({ error: 'invalid correction request' })
       return reply.code(500).send({ error: 'internal' })
     }

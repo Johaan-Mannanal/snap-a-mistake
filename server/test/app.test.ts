@@ -43,6 +43,10 @@ function appDeps(overrides: Partial<BuildAppDeps> = {}): BuildAppDeps {
   }
 }
 
+function jsonField(value: string) {
+  return { value, options: { contentType: 'application/json' } }
+}
+
 describe('GET /health', () => {
   it('returns ok', async () => {
     const app = buildApp(appDeps())
@@ -126,6 +130,39 @@ describe('POST /correct-diagnosis', () => {
     expect(response.statusCode).toBe(200)
     expect(response.json().errorStepIndex).toBe(2)
     expect(receivedSelectedStep).toBe(2)
+  })
+
+  it('accepts a valid application/json context field', async () => {
+    // Would fail if an already-parsed multipart JSON value were stringified before schema validation.
+    const app = buildApp(appDeps())
+    const form = formAutoContent({ photo: await tinyJpeg(), context: jsonField(JSON.stringify(correctionContext)) })
+
+    const response = await app.inject({ method: 'POST', url: '/correct-diagnosis', ...form })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json().errorStepIndex).toBe(2)
+  })
+
+  it('rejects a malformed application/json context field', async () => {
+    // Would fail if multipart JSON parsing errors leaked as internal server errors.
+    const app = buildApp(appDeps())
+    const form = formAutoContent({ photo: await tinyJpeg(), context: jsonField('{not json') })
+
+    const response = await app.inject({ method: 'POST', url: '/correct-diagnosis', ...form })
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: 'invalid correction request' })
+  })
+
+  it('rejects an oversized application/json context field', async () => {
+    // Would fail if field-size JSON parse errors leaked as internal server errors.
+    const app = buildApp(appDeps())
+    const form = formAutoContent({ photo: await tinyJpeg(), context: jsonField(`{"padding":"${'x'.repeat(64 * 1024)}"}`) })
+
+    const response = await app.inject({ method: 'POST', url: '/correct-diagnosis', ...form })
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: 'invalid correction request' })
   })
 
   it('rejects a missing or invalid correction context', async () => {
