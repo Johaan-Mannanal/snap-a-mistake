@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { advanceReviewTransaction, createReviewTransaction, discardReviewTransaction } from './reviewTransaction'
+import {
+  advanceReviewTransaction,
+  createReviewActionLock,
+  createReviewTransaction,
+  discardReviewTransaction,
+  replaceReviewPhoto,
+  resetReviewForRetake,
+  runExclusiveReviewAction,
+} from './reviewTransaction'
 
 const draft = {
   imageUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera' as const,
@@ -118,5 +126,78 @@ describe('review transaction', () => {
     expect(flushOwnedPhotos).toHaveBeenCalledOnce()
     expect(deleteOwnedPhoto).not.toHaveBeenCalled()
     expect(transaction.ownedUri).toBeNull()
+  })
+
+  it('keeps the current draft and pending photo intact when replacement session persistence fails', async () => {
+    const transaction = createReviewTransaction('scan-1')
+    transaction.ownedUri = 'file:///documents/scans/scan-1.jpg'
+    transaction.draftCreated = true
+    const discard = vi.fn(async () => {})
+
+    await expect(replaceReviewPhoto(transaction, {
+      persistReplacement: async () => { throw new Error('state unavailable') },
+      discard,
+    })).rejects.toThrow('state unavailable')
+
+    expect(discard).not.toHaveBeenCalled()
+    expect(transaction.ownedUri).toBe('file:///documents/scans/scan-1.jpg')
+  })
+
+  it('persists replacement first and preserves the new session when old-draft cleanup fails', async () => {
+    const transaction = createReviewTransaction('scan-1')
+    transaction.ownedUri = 'file:///documents/scans/scan-1.jpg'
+    transaction.draftCreated = true
+    const calls: string[] = []
+
+    const result = await replaceReviewPhoto(transaction, {
+      persistReplacement: async () => { calls.push('replacement') },
+      discard: async () => { calls.push('cleanup'); throw new Error('device unavailable') },
+    })
+
+    expect(calls).toEqual(['replacement', 'cleanup'])
+    expect(result.cleanupFailed).toBe(true)
+    expect(transaction.ownedUri).toBe('file:///documents/scans/scan-1.jpg')
+  })
+
+  it('cleans a partial review and resets the active session before retaking', async () => {
+    const calls: string[] = []
+    const transaction = createReviewTransaction('scan-1')
+    transaction.ownedUri = 'file:///documents/scans/scan-1.jpg'
+
+    await resetReviewForRetake(transaction, {
+      discard: async () => { calls.push('cleanup') },
+      resetSession: async () => { calls.push('reset') },
+    })
+
+    expect(calls).toEqual(['cleanup', 'reset'])
+  })
+
+  it('does not reset the active session when retake cleanup fails', async () => {
+    const resetSession = vi.fn(async () => {})
+    const transaction = createReviewTransaction('scan-1')
+    transaction.ownedUri = 'file:///documents/scans/scan-1.jpg'
+
+    await expect(resetReviewForRetake(transaction, {
+      discard: async () => { throw new Error('device unavailable') },
+      resetSession,
+    })).rejects.toThrow('device unavailable')
+
+    expect(resetSession).not.toHaveBeenCalled()
+  })
+
+  it('coalesces repeated retake actions until the first cleanup and reset settles', async () => {
+    let resolve!: () => void
+    const pending = new Promise<void>((done) => { resolve = done })
+    const lock = createReviewActionLock()
+    const task = vi.fn(async () => pending)
+
+    const first = runExclusiveReviewAction(lock, task)
+    const second = runExclusiveReviewAction(lock, task)
+
+    await expect(second).resolves.toBe(false)
+    expect(task).toHaveBeenCalledTimes(1)
+    resolve()
+    await first
+    expect(lock.current).toBe(false)
   })
 })

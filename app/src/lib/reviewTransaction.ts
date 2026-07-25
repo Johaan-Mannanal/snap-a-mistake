@@ -24,6 +24,23 @@ export type ReviewTransactionDiscardDependencies = {
   deleteOwnedPhoto(uri: string): Promise<void>
 }
 
+export type ReviewActionLock = { current: boolean }
+
+export function createReviewActionLock(): ReviewActionLock {
+  return { current: false }
+}
+
+export async function runExclusiveReviewAction(lock: ReviewActionLock, action: () => Promise<void>): Promise<boolean> {
+  if (lock.current) return false
+  lock.current = true
+  try {
+    await action()
+    return true
+  } finally {
+    lock.current = false
+  }
+}
+
 export function createReviewTransaction(scanId: string, disclosureAcknowledged = false): ReviewTransaction {
   return { scanId, ownedUri: null, draftCreated: false, sessionPersisted: false, disclosureAcknowledged }
 }
@@ -83,4 +100,26 @@ export async function discardReviewTransaction(
   transaction.ownedUri = null
   transaction.draftCreated = false
   transaction.sessionPersisted = false
+}
+
+export async function replaceReviewPhoto(
+  transaction: ReviewTransaction | null,
+  dependencies: { persistReplacement(): Promise<void>; discard(transaction: ReviewTransaction): Promise<void> },
+): Promise<{ cleanupFailed: boolean }> {
+  await dependencies.persistReplacement()
+  if (transaction === null) return { cleanupFailed: false }
+  try {
+    await dependencies.discard(transaction)
+    return { cleanupFailed: false }
+  } catch {
+    return { cleanupFailed: true }
+  }
+}
+
+export async function resetReviewForRetake(
+  transaction: ReviewTransaction | null,
+  dependencies: { discard(transaction: ReviewTransaction): Promise<void>; resetSession(): Promise<void> },
+): Promise<void> {
+  if (transaction !== null) await dependencies.discard(transaction)
+  await dependencies.resetSession()
 }

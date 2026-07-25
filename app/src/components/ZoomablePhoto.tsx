@@ -19,6 +19,8 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
   const translateY = useSharedValue(0)
   const frameWidth = useSharedValue(0)
   const frameHeight = useSharedValue(0)
+  const imageWidth = useSharedValue(0)
+  const imageHeight = useSharedValue(0)
   const [zoomLevel, setZoomLevel] = useState(MIN_SCALE)
   const [reduceMotion, setReduceMotion] = useState(false)
 
@@ -28,11 +30,34 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
     return () => subscription.remove()
   }, [])
 
+  useEffect(() => {
+    let active = true
+    Image.getSize(uri, (width, height) => {
+      if (!active) return
+      imageWidth.value = width
+      imageHeight.value = height
+      const translation = clampPhotoTranslation({
+        x: translateX.value, y: translateY.value,
+        frameWidth: frameWidth.value, frameHeight: frameHeight.value,
+        imageWidth: width, imageHeight: height, scale: scale.value,
+      })
+      translateX.value = withTiming(translation.x, { duration: reduceMotion ? 0 : 160 })
+      translateY.value = withTiming(translation.y, { duration: reduceMotion ? 0 : 160 })
+    }, () => {
+      if (!active) return
+      imageWidth.value = 0
+      imageHeight.value = 0
+    })
+    return () => { active = false }
+  }, [reduceMotion, uri])
+
   const setScale = (nextScale: number) => {
     const clamped = clampScale(nextScale)
     scale.value = withTiming(clamped, { duration: reduceMotion ? 0 : 160 })
     const translation = clampPhotoTranslation({
-      x: translateX.value, y: translateY.value, width: frameWidth.value, height: frameHeight.value, scale: clamped,
+      x: translateX.value, y: translateY.value,
+      frameWidth: frameWidth.value, frameHeight: frameHeight.value,
+      imageWidth: imageWidth.value, imageHeight: imageHeight.value, scale: clamped,
     })
     translateX.value = withTiming(translation.x, { duration: reduceMotion ? 0 : 160 })
     translateY.value = withTiming(translation.y, { duration: reduceMotion ? 0 : 160 })
@@ -47,7 +72,9 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
       const nextScale = clampScale(scaleAtGestureStart.value * event.scale)
       scale.value = nextScale
       const translation = clampPhotoTranslation({
-        x: translateX.value, y: translateY.value, width: frameWidth.value, height: frameHeight.value, scale: nextScale,
+        x: translateX.value, y: translateY.value,
+        frameWidth: frameWidth.value, frameHeight: frameHeight.value,
+        imageWidth: imageWidth.value, imageHeight: imageHeight.value, scale: nextScale,
       })
       translateX.value = translation.x
       translateY.value = translation.y
@@ -56,7 +83,9 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
       const nextScale = clampScale(scale.value)
       scale.value = withTiming(nextScale, { duration: reduceMotion ? 0 : 160 })
       const translation = clampPhotoTranslation({
-        x: translateX.value, y: translateY.value, width: frameWidth.value, height: frameHeight.value, scale: nextScale,
+        x: translateX.value, y: translateY.value,
+        frameWidth: frameWidth.value, frameHeight: frameHeight.value,
+        imageWidth: imageWidth.value, imageHeight: imageHeight.value, scale: nextScale,
       })
       translateX.value = withTiming(translation.x, { duration: reduceMotion ? 0 : 160 })
       translateY.value = withTiming(translation.y, { duration: reduceMotion ? 0 : 160 })
@@ -68,8 +97,10 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
       const translation = clampPhotoTranslation({
         x: translateX.value + event.changeX,
         y: translateY.value + event.changeY,
-        width: frameWidth.value,
-        height: frameHeight.value,
+        frameWidth: frameWidth.value,
+        frameHeight: frameHeight.value,
+        imageWidth: imageWidth.value,
+        imageHeight: imageHeight.value,
         scale: scale.value,
       })
       translateX.value = translation.x
@@ -94,6 +125,13 @@ export function ZoomablePhoto({ uri }: { uri: string }) {
           onLayout={(event) => {
             frameWidth.value = event.nativeEvent.layout.width
             frameHeight.value = event.nativeEvent.layout.height
+            const translation = clampPhotoTranslation({
+              x: translateX.value, y: translateY.value,
+              frameWidth: frameWidth.value, frameHeight: frameHeight.value,
+              imageWidth: imageWidth.value, imageHeight: imageHeight.value, scale: scale.value,
+            })
+            translateX.value = withTiming(translation.x, { duration: reduceMotion ? 0 : 160 })
+            translateY.value = withTiming(translation.y, { duration: reduceMotion ? 0 : 160 })
           }}
           style={styles.frame}
         >

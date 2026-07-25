@@ -1,10 +1,22 @@
-export function clampPhotoTranslation(input: { x: number; y: number; width: number; height: number; scale: number }) {
+export function clampPhotoTranslation(input: {
+  x: number
+  y: number
+  frameWidth: number
+  frameHeight: number
+  imageWidth: number
+  imageHeight: number
+  scale: number
+}) {
   'worklet'
-  if (input.width <= 0 || input.height <= 0 || input.scale <= 1) return { x: 0, y: 0 }
-  const maxX = (input.width * (input.scale - 1)) / 2
-  const maxY = (input.height * (input.scale - 1)) / 2
+  if (input.frameWidth <= 0 || input.frameHeight <= 0 || input.imageWidth <= 0 || input.imageHeight <= 0 || input.scale <= 1)
+    return { x: 0, y: 0 }
+  const containedScale = Math.min(input.frameWidth / input.imageWidth, input.frameHeight / input.imageHeight)
+  const renderedWidth = input.imageWidth * containedScale
+  const renderedHeight = input.imageHeight * containedScale
+  const maxX = Math.max(0, (renderedWidth * input.scale - input.frameWidth) / 2)
+  const maxY = Math.max(0, (renderedHeight * input.scale - input.frameHeight) / 2)
   return {
-    x: Math.min(maxX, Math.max(-maxX, input.x)),
-    y: Math.min(maxY, Math.max(-maxY, input.y)),
+    x: maxX === 0 ? 0 : Math.min(maxX, Math.max(-maxX, input.x)),
+    y: maxY === 0 ? 0 : Math.min(maxY, Math.max(-maxY, input.y)),
   }
 }
