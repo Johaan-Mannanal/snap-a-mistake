@@ -69,7 +69,7 @@ export const ScanRecordSchema = ScanRecordFieldsSchema.superRefine((scan, ctx) =
 })
 export type ScanRecord = z.infer<typeof ScanRecordSchema>
 
-export const PersistedSessionSchema = z.object({
+const PersistedSessionFieldsSchema = z.object({
   routeIntent: z.enum(['capture', 'review', 'analyze', 'result', 'follow-up']),
   pendingScanId: z.string().min(1).nullable(),
   photoUri: z.string().min(1).nullable(),
@@ -77,6 +77,20 @@ export const PersistedSessionSchema = z.object({
   analysis: AnalyzeResponseSchema.nullable(),
   followUp: FollowUpSchema.nullable(),
   parentScanId: z.string().min(1).nullable(),
+})
+export const PersistedSessionSchema = PersistedSessionFieldsSchema.superRefine((session, ctx) => {
+  const hasScanData = session.pendingScanId !== null || session.photoUri !== null || session.origin !== null
+    || session.analysis !== null || session.followUp !== null || session.parentScanId !== null
+  if (session.routeIntent === 'capture' && hasScanData)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'capture cannot retain scan data' })
+  if (session.routeIntent === 'review' && (session.photoUri === null || session.origin === null))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'review requires photoUri and origin' })
+  if (session.routeIntent === 'analyze' && (session.pendingScanId === null || session.photoUri === null || session.origin === null))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'analyze requires pendingScanId, photoUri, and origin' })
+  if (session.routeIntent === 'result' && (session.pendingScanId === null || session.photoUri === null || session.origin === null || session.analysis === null))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'result requires pendingScanId, photoUri, origin, and analysis' })
+  if (session.routeIntent === 'follow-up' && (session.parentScanId === null || session.followUp === null))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'follow-up requires parentScanId and followUp' })
 })
 export type PersistedSession = z.infer<typeof PersistedSessionSchema>
 

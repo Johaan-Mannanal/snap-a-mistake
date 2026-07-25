@@ -80,6 +80,54 @@ describe('ScanRecordSchema', () => {
 })
 
 describe('PersistedSessionSchema', () => {
+  const followUp = { problem: 'Simplify −(x + 2).', concept: 'sign distribution', hint: 'Distribute the negative to both terms.' }
+
+  it('accepts only the fields needed by each resumable route', () => {
+    expect(PersistedSessionSchema.parse({
+      routeIntent: 'capture', pendingScanId: null, photoUri: null, origin: null,
+      analysis: null, followUp: null, parentScanId: null,
+    }).routeIntent).toBe('capture')
+    expect(PersistedSessionSchema.parse({
+      routeIntent: 'review', pendingScanId: null, photoUri: 'file:///temporary.jpg', origin: 'library',
+      analysis: null, followUp: null, parentScanId: null,
+    }).routeIntent).toBe('review')
+    expect(PersistedSessionSchema.parse({
+      routeIntent: 'analyze', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: null, followUp: null, parentScanId: null,
+    }).routeIntent).toBe('analyze')
+    expect(PersistedSessionSchema.parse({
+      routeIntent: 'result', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: response, followUp: null, parentScanId: null,
+    }).routeIntent).toBe('result')
+    expect(PersistedSessionSchema.parse({
+      routeIntent: 'follow-up', pendingScanId: null, photoUri: null, origin: null,
+      analysis: null, followUp, parentScanId: 'scan-1',
+    }).routeIntent).toBe('follow-up')
+  })
+
+  it('rejects impossible persisted states for every route intent', () => {
+    expect(() => PersistedSessionSchema.parse({
+      routeIntent: 'capture', pendingScanId: null, photoUri: 'file:///temporary.jpg', origin: null,
+      analysis: null, followUp: null, parentScanId: null,
+    })).toThrow('capture cannot retain scan data')
+    expect(() => PersistedSessionSchema.parse({
+      routeIntent: 'review', pendingScanId: null, photoUri: null, origin: null,
+      analysis: null, followUp: null, parentScanId: null,
+    })).toThrow('review requires photoUri and origin')
+    expect(() => PersistedSessionSchema.parse({
+      routeIntent: 'analyze', pendingScanId: null, photoUri: null, origin: null,
+      analysis: null, followUp: null, parentScanId: null,
+    })).toThrow('analyze requires pendingScanId, photoUri, and origin')
+    expect(() => PersistedSessionSchema.parse({
+      routeIntent: 'result', pendingScanId: null, photoUri: null, origin: null,
+      analysis: null, followUp: null, parentScanId: null,
+    })).toThrow('result requires pendingScanId, photoUri, origin, and analysis')
+    expect(() => PersistedSessionSchema.parse({
+      routeIntent: 'follow-up', pendingScanId: null, photoUri: null, origin: null,
+      analysis: null, followUp: null, parentScanId: null,
+    })).toThrow('follow-up requires parentScanId and followUp')
+  })
+
   it('restores a valid interrupted analysis session', () => {
     const session = PersistedSessionSchema.parse({
       routeIntent: 'analyze',

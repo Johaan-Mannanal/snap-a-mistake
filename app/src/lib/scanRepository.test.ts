@@ -60,7 +60,7 @@ class MemoryDatabase implements DatabasePort {
       Object.assign(scan, { follow_up_status: followUpStatus, updated_at: updatedAt })
       return { changes: 1 }
     }
-    if (normalized.startsWith('insert into cleanup_queue')) {
+    if (normalized.startsWith('insert') && normalized.includes('into cleanup_queue')) {
       this.cleanup.add(String(params[0]))
       return { changes: 1 }
     }
@@ -84,6 +84,7 @@ class MemoryDatabase implements DatabasePort {
     if (normalized.startsWith('delete from scans')) { this.scans.clear(); this.revisions.clear(); return { changes: 1 } }
     if (normalized.startsWith('delete from analyses')) { this.analyses.splice(0); return { changes: 1 } }
     if (normalized.startsWith('delete from app_state')) { this.appState.clear(); return { changes: 1 } }
+    if (normalized.startsWith('delete from cleanup_queue where image_uri')) { this.cleanup.delete(String(params[0])); return { changes: 1 } }
     if (normalized.startsWith('delete from cleanup_queue')) { this.cleanup.clear(); return { changes: 1 } }
     if (normalized.startsWith('insert into app_state')) { this.appState.set(String(params[0]), String(params[1])); return { changes: 1 } }
     if (normalized.startsWith('delete from app_state where')) { this.appState.delete(String(params[0])); return { changes: 1 } }
@@ -162,6 +163,15 @@ describe('scan repository migration', () => {
       { kind: 'legacy', tag: 'sign-error', correct: false, createdAt: '2026-07-20T12:00:00.000Z' },
     ])
   })
+
+  it('rejects a database created by a newer schema version', async () => {
+    const db = new MemoryDatabase()
+    db.userVersion = 2
+
+    await expect(createScanRepository(db).migrate())
+      .rejects.toThrow('database version 2 is newer than supported version 1')
+    expect(db.tables).toHaveLength(0)
+  })
 })
 
 describe('scan repository records', () => {
@@ -237,20 +247,36 @@ describe('scan repository records', () => {
     ]))
   })
 
-  it('clears scans, revisions, legacy history, state, and queued cleanup URIs', async () => {
+  it('retains prior and newly queued cleanup obligations through clear-all until acknowledged', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)
     await repository.migrate()
     await repository.createDraft(draft())
     await repository.saveRevision('scan-1', revision('revision-1', 'initial'), 400)
     db.analyses.push({ tag: 'sign-error', correct: 0, createdAt: '2026-07-20T12:00:00.000Z' })
+    db.cleanup.add('file:///documents/scans/failed-before-clear.jpg')
     await repository.setState('active-session', { routeIntent: 'review' })
 
-    await expect(repository.clearAll()).resolves.toEqual(['file:///documents/scans/scan-1.jpg'])
+    await expect(repository.clearAll()).resolves.toEqual([
+      'file:///documents/scans/failed-before-clear.jpg',
+      'file:///documents/scans/scan-1.jpg',
+    ])
     expect(db.scans).toHaveLength(0)
     expect(db.revisions).toHaveLength(0)
     expect(db.analyses).toHaveLength(0)
     expect(db.appState).toHaveLength(0)
-    expect(db.cleanup).toHaveLength(0)
+    expect(db.cleanup).toEqual(new Set([
+      'file:///documents/scans/failed-before-clear.jpg',
+      'file:///documents/scans/scan-1.jpg',
+    ]))
+    await expect(repository.getCleanupQueue()).resolves.toEqual([
+      'file:///documents/scans/failed-before-clear.jpg',
+      'file:///documents/scans/scan-1.jpg',
+    ])
+
+    await repository.acknowledgeCleanup('file:///documents/scans/scan-1.jpg')
+    await expect(repository.getCleanupQueue()).resolves.toEqual([
+      'file:///documents/scans/failed-before-clear.jpg',
+    ])
   })
 })

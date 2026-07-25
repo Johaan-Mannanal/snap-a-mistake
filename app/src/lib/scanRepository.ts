@@ -35,6 +35,8 @@ export interface ScanRepository {
   loadTrendSources(): Promise<TrendSource[]>
   delete(scanId: string): Promise<string | null>
   clearAll(): Promise<string[]>
+  getCleanupQueue(): Promise<string[]>
+  acknowledgeCleanup(imageUri: string): Promise<void>
   getState<T>(key: string, schema: z.ZodType<T>): Promise<T | null>
   setState<T>(key: string, value: T): Promise<void>
   deleteState(key: string): Promise<void>
@@ -152,8 +154,10 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
     async migrate(): Promise<void> {
       await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
       await db.withExclusiveTransactionAsync(async (transaction) => {
-        const version = await transaction.getFirstAsync<{ user_version: number }>('PRAGMA user_version')
-        if ((version?.user_version ?? 0) >= SCHEMA_VERSION) return
+        const currentVersion = (await transaction.getFirstAsync<{ user_version: number }>('PRAGMA user_version'))?.user_version ?? 0
+        if (currentVersion > SCHEMA_VERSION)
+          throw new Error(`database version ${currentVersion} is newer than supported version ${SCHEMA_VERSION}`)
+        if (currentVersion === SCHEMA_VERSION) return
         await transaction.execAsync(`
           CREATE TABLE IF NOT EXISTS scans (
             id TEXT PRIMARY KEY NOT NULL,
@@ -295,13 +299,32 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
     async clearAll(): Promise<string[]> {
       return db.withExclusiveTransactionAsync(async (transaction) => {
         const rows = await transaction.getAllAsync<{ image_uri: string }>('SELECT image_uri FROM scans')
-        const imageUris = rows.map((row) => row.image_uri)
         await transaction.runAsync('DELETE FROM scans')
         await transaction.runAsync('DELETE FROM analyses')
         await transaction.runAsync('DELETE FROM app_state')
-        await transaction.runAsync('DELETE FROM cleanup_queue')
-        return imageUris
+        for (const row of rows)
+          await transaction.runAsync(
+            'INSERT OR IGNORE INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)',
+            [row.image_uri, now()],
+          )
+        const queued = await transaction.getAllAsync<{ image_uri: string }>(
+          'SELECT image_uri FROM cleanup_queue ORDER BY created_at ASC, image_uri ASC',
+        )
+        return queued.map((row) => row.image_uri)
       })
+    },
+
+    async getCleanupQueue(): Promise<string[]> {
+      const rows = await db.getAllAsync<{ image_uri: string }>(
+        'SELECT image_uri FROM cleanup_queue ORDER BY created_at ASC, image_uri ASC',
+      )
+      return rows.map((row) => row.image_uri)
+    },
+
+    async acknowledgeCleanup(imageUri): Promise<void> {
+      await db.withExclusiveTransactionAsync((transaction) => transaction.runAsync(
+        'DELETE FROM cleanup_queue WHERE image_uri = ?', [imageUri],
+      ).then(() => undefined))
     },
 
     async getState<T>(key: string, schema: z.ZodType<T>): Promise<T | null> {
