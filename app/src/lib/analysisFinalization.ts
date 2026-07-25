@@ -63,3 +63,25 @@ export function createAnalysisFinalization(): AnalysisFinalization {
     },
   }
 }
+
+export type CompletedReviewReturn = {
+  returnToReview(dependencies: { restoreReview(): Promise<void>; navigate(): void }): Promise<void>
+}
+
+export function createCompletedReviewReturn(): CompletedReviewReturn {
+  let active: Promise<void> | null = null
+  return {
+    returnToReview(dependencies) {
+      if (active) return active
+      const current = (async () => {
+        await dependencies.restoreReview()
+        dependencies.navigate()
+      })()
+      const tracked = current.finally(() => {
+        if (active === tracked) active = null
+      })
+      active = tracked
+      return tracked
+    },
+  }
+}

@@ -7,7 +7,7 @@ import { getLocalScanRepository, recordAnalysis } from '../src/lib/history'
 import { getSession, persistAnalysis, resetSession } from '../src/lib/session'
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
 import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
-import { createAnalysisFinalization } from '../src/lib/analysisFinalization'
+import { createAnalysisFinalization, createCompletedReviewReturn } from '../src/lib/analysisFinalization'
 import type { ScanRevision } from '../src/lib/scanTypes'
 import { tagLabel } from '../src/lib/labels'
 import { AppButton } from '../src/components/AppButton'
@@ -38,6 +38,8 @@ export default function Analyze() {
   const [unsaved, setUnsaved] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [reviewReturnFailed, setReviewReturnFailed] = useState(false)
+  const [completedReturnFailed, setCompletedReturnFailed] = useState(false)
+  const [isReturningCompleted, setIsReturningCompleted] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [isResetting, setIsResetting] = useState(false)
   const [resetFailed, setResetFailed] = useState(false)
@@ -48,6 +50,7 @@ export default function Analyze() {
   const runFence = useRef(createRunFence())
   const saveLock = useRef(createAsyncLock<void>())
   const finalization = useRef(createAnalysisFinalization())
+  const completedReturn = useRef(createCompletedReviewReturn())
   const activeToken = useRef<number | null>(null)
   const pendingSave = useRef<PendingSave | null>(null)
   const mounted = useRef(true)
@@ -69,18 +72,15 @@ export default function Analyze() {
         await persistAnalysis(scanId!, pending.response, pending.durationMs)
         if (!owns(token)) return
         if (mounted.current) setUnsaved(false)
+        finalization.current.markSuccessfulHandoff()
         if (pending.response.kind === 'analysis' && !pending.historyRecorded) {
-          if (!owns(token)) return
           try {
             await recordAnalysis({ tag: pending.response.misconceptionTag, correct: pending.response.errorStepIndex === null })
-            if (!owns(token)) return
             pending.historyRecorded = true
           } catch {
             // Legacy aggregate history is supplementary; the durable scan revision is already saved.
           }
         }
-        if (!owns(token)) return
-        finalization.current.markSuccessfulHandoff()
       } catch {
         if (!owns(token)) return
         if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'unsaved').catch(() => {})
@@ -108,6 +108,25 @@ export default function Analyze() {
       () => { if (mounted.current) setReviewReturnFailed(true) },
     )
   }, [finalizationDependencies])
+
+  const returnCompletedResultToReview = useCallback(() => {
+    if (mounted.current) {
+      setCompletedReturnFailed(false)
+      setIsReturningCompleted(true)
+    }
+    return completedReturn.current.returnToReview({
+      restoreReview: () => resetSession({ preserveDraft: true }),
+      navigate: () => { if (mounted.current) router.replace('/review') },
+    }).then(
+      () => { if (mounted.current) setIsReturningCompleted(false) },
+      () => {
+        if (mounted.current) {
+          setIsReturningCompleted(false)
+          setCompletedReturnFailed(true)
+        }
+      },
+    )
+  }, [])
 
   const run = useCallback(() => {
     if (!uri || !scanId) { router.replace('/review'); return }
@@ -213,6 +232,19 @@ export default function Analyze() {
     )
   }
 
+  if (completedReturnFailed) {
+    return (
+      <AppScreen contentStyle={styles.stateContent}>
+        <View style={styles.stateCopy}>
+          <Text style={styles.stateEyebrow}>RETURN UNAVAILABLE</Text>
+          <Text style={styles.stateTitle}>We couldn’t return to your review.</Text>
+          <Text style={styles.stateDetail}>Your completed result is still saved. Try returning to review again.</Text>
+        </View>
+        <AppButton label="Try returning to review" onPress={() => { void returnCompletedResultToReview() }} />
+      </AppScreen>
+    )
+  }
+
   if (failure) {
     if (failure.kind === 'persistence') {
       return (
@@ -255,7 +287,7 @@ export default function Analyze() {
           <Text style={styles.stateDetail}>{presentation.detail}</Text>
         </View>
         {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} /> : null}
-        <AppButton label="Return to review" onPress={() => { void returnToReview() }} />
+        <AppButton label={isReturningCompleted ? 'Returning…' : 'Return to review'} disabled={isReturningCompleted} onPress={() => { void returnCompletedResultToReview() }} />
       </AppScreen>
     )
   }
@@ -272,7 +304,7 @@ export default function Analyze() {
           </View>
         </View>
         {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} /> : null}
-        <AppButton label="Return to review" onPress={() => { void returnToReview() }} />
+        <AppButton label={isReturningCompleted ? 'Returning…' : 'Return to review'} disabled={isReturningCompleted} onPress={() => { void returnCompletedResultToReview() }} />
       </AppScreen>
     )
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createAnalysisFinalization } from './analysisFinalization'
+import { createAnalysisFinalization, createCompletedReviewReturn } from './analysisFinalization'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -107,6 +107,26 @@ describe('analysis finalization integration', () => {
     expect(calls).toEqual([])
   })
 
+  it('treats unmount during supplementary history logging as a completed handoff', async () => {
+    const finalization = createAnalysisFinalization()
+    const history = deferred<void>()
+    const calls: Calls = []
+    const persistence = (async () => {
+      calls.push('saveRevision', 'persistAnalysis')
+      finalization.markSuccessfulHandoff()
+      calls.push('recordAnalysis')
+      await history.promise
+      calls.push('historyDone')
+    })()
+    finalization.track(persistence)
+
+    finalization.abandon(dependencies(calls))
+    history.resolve()
+    await finalization.settle()
+
+    expect(calls).toEqual(['saveRevision', 'persistAnalysis', 'recordAnalysis', 'historyDone'])
+  })
+
   it('releases a failed cancellation so returning to review can be retried', async () => {
     const finalization = createAnalysisFinalization()
     const calls: Calls = []
@@ -118,5 +138,40 @@ describe('analysis finalization integration', () => {
 
     await finalization.cancel(dependencies(calls))
     expect(calls).toEqual(['interrupted', 'review', 'navigate'])
+  })
+})
+
+describe('completed-result return integration', () => {
+  it.each(['not-math', 'unreadable'] as const)('returns a complete %s result to review without interrupting it', async () => {
+    const transition = createCompletedReviewReturn()
+    const calls: Calls = []
+
+    await transition.returnToReview({
+      restoreReview: async () => { calls.push('review') },
+      navigate: () => { calls.push('navigate') },
+    })
+
+    expect(calls).toEqual(['review', 'navigate'])
+  })
+
+  it('coalesces a completed return and permits retry after a persistence failure', async () => {
+    const transition = createCompletedReviewReturn()
+    const review = deferred<void>()
+    let calls = 0
+    const deps = {
+      restoreReview: async () => { calls += 1; await review.promise },
+      navigate: () => { calls += 1 },
+    }
+    const first = transition.returnToReview(deps)
+    const second = transition.returnToReview(deps)
+    expect(calls).toBe(1)
+    review.resolve()
+    await Promise.all([first, second])
+
+    await expect(transition.returnToReview({
+      restoreReview: async () => { throw new Error('state unavailable') },
+      navigate: () => {},
+    })).rejects.toThrow('state unavailable')
+    await expect(transition.returnToReview({ restoreReview: async () => {}, navigate: () => {} })).resolves.toBeUndefined()
   })
 })
