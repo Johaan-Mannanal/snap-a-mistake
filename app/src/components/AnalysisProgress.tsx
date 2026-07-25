@@ -1,24 +1,31 @@
-import { Image, StyleSheet, Text, View } from 'react-native'
+import { useEffect } from 'react'
+import { AccessibilityInfo, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { colors, spacing } from '../ui/theme'
-import { analysisStagePresentation } from '../ui/presentation'
+import { analysisProgressPresentation } from '../ui/presentation'
 
-export function AnalysisProgress(props: { uri: string; stage: number; stages: readonly string[] }) {
+export function AnalysisProgress(props: { uri: string; elapsedSeconds: number; descriptionIndex: number; onCancel: () => void }) {
+  const presentation = analysisProgressPresentation(props.elapsedSeconds, props.descriptionIndex)
+
+  useEffect(() => {
+    if (presentation.announcement) AccessibilityInfo.announceForAccessibility(presentation.announcement)
+  }, [presentation.announcement])
+
   return (
     <View style={styles.root}>
       <Image source={{ uri: props.uri }} resizeMode="cover" style={StyleSheet.absoluteFill} />
       <View style={[StyleSheet.absoluteFill, styles.scrim]} />
       <View style={styles.panel}>
         <Text style={styles.eyebrow}>ANALYZING</Text>
-        {props.stages.map((label, index) => {
-          const presentation = analysisStagePresentation(label, index, props.stage)
-          const markColor = presentation.status === 'completed' ? colors.success : presentation.status === 'current' ? colors.chalk : colors.carbon
-          return (
-            <View key={label} style={styles.row} accessible accessibilityLabel={presentation.accessibilityLabel}>
-              <Text style={[styles.mark, { color: markColor }]}>{presentation.mark}</Text>
-              <Text style={[styles.label, { color: presentation.status === 'current' ? colors.chalk : colors.muted }]}>{label}</Text>
-            </View>
-          )
-        })}
+        <Text style={styles.description}>{presentation.description}</Text>
+        <Text accessibilityLiveRegion="polite" style={styles.elapsedCopy}>{presentation.elapsedCopy}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cancel analysis and return to review"
+          onPress={props.onCancel}
+          style={({ pressed }) => [styles.cancel, pressed && styles.pressed]}
+        >
+          <Text style={styles.cancelLabel}>Cancel</Text>
+        </Pressable>
       </View>
     </View>
   )
@@ -29,7 +36,9 @@ const styles = StyleSheet.create({
   scrim: { backgroundColor: 'rgba(0,0,0,0.62)' },
   panel: { position: 'absolute', left: spacing.xl, right: spacing.xl, bottom: 54, gap: spacing.md },
   eyebrow: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1.6, marginBottom: spacing.sm },
-  row: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  mark: { width: 20, fontSize: 16, textAlign: 'center' },
-  label: { fontSize: 16, fontWeight: '600' },
+  description: { color: colors.chalk, fontSize: 22, fontWeight: '700', lineHeight: 29 },
+  elapsedCopy: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  cancel: { alignSelf: 'flex-start', minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, marginTop: spacing.xs },
+  cancelLabel: { color: colors.chalk, fontSize: 15, fontWeight: '700', textDecorationLine: 'underline' },
+  pressed: { opacity: 0.5 },
 })

@@ -37,6 +37,7 @@ class MemoryDatabase implements DatabasePort {
     }
     if (normalized.startsWith('insert into scan_revisions')) {
       const [id, scanId, reason, response, createdAt] = params
+      if (this.revisions.has(String(id))) throw new Error('UNIQUE constraint failed: scan_revisions.id')
       this.revisions.set(String(id), { id, scan_id: scanId, reason, response_json: response, created_at: createdAt })
       return { changes: 1 }
     }
@@ -45,6 +46,13 @@ class MemoryDatabase implements DatabasePort {
       const scan = this.scans.get(String(id))
       if (!scan) return { changes: 0 }
       Object.assign(scan, { active_revision_id: activeRevisionId, lifecycle, analysis_duration_ms: duration, follow_up_json: followUp, follow_up_status: followUpStatus, feedback, updated_at: updatedAt })
+      return { changes: 1 }
+    }
+    if (normalized.startsWith('update scans set lifecycle')) {
+      const [lifecycle, updatedAt, id] = params
+      const scan = this.scans.get(String(id))
+      if (!scan) return { changes: 0 }
+      Object.assign(scan, { lifecycle, updated_at: updatedAt })
       return { changes: 1 }
     }
     if (normalized.startsWith('update scans set feedback')) {
@@ -193,6 +201,17 @@ describe('scan repository migration', () => {
 })
 
 describe('scan repository records', () => {
+  it('persists analysis start and interruption without discarding the reviewed draft', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+
+    await expect(repository.setLifecycle('scan-1', 'analyzing')).resolves.toMatchObject({ lifecycle: 'analyzing', imageUri: 'file:///documents/scans/scan-1.jpg' })
+    await expect(repository.setLifecycle('scan-1', 'interrupted')).resolves.toMatchObject({ lifecycle: 'interrupted', activeRevision: null })
+    expect(db.scans).toHaveLength(1)
+  })
+
   it('saves a retry on the same scan instead of creating another scan', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)
@@ -204,6 +223,20 @@ describe('scan repository records', () => {
     expect(db.scans).toHaveLength(1)
     expect(saved.activeRevision?.id).toBe('revision-1')
     expect(saved.lifecycle).toBe('complete')
+  })
+
+  it('replays the same revision idempotently after a partial save recovery', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    const initial = revision('revision-1', 'initial')
+
+    await repository.saveRevision('scan-1', initial, 400)
+    const replayed = await repository.saveRevision('scan-1', initial, 400)
+
+    expect(replayed.lifecycle).toBe('complete')
+    expect(replayed.revisions).toEqual([initial])
   })
 
   it('clears stale follow-up state when a retry has no follow-up', async () => {

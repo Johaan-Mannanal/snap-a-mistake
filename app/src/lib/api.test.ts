@@ -23,7 +23,7 @@ const analysis = {
 describe('analyzePhoto', () => {
   it('POSTs multipart and returns the parsed response', async () => {
     const fetchFn = vi.fn().mockResolvedValue(ok(analysis))
-    const r = await analyzePhoto('file:///photo.jpg', fetchFn)
+    const r = await analyzePhoto('file:///photo.jpg', { fetchFn })
     expect(r.kind).toBe('analysis')
     const [url, init] = fetchFn.mock.calls[0] as [string, RequestInit]
     expect(url).toContain('/analyze')
@@ -32,7 +32,7 @@ describe('analyzePhoto', () => {
   })
   it('uploads a byte-backed photo part instead of a legacy URI descriptor', async () => {
     const fetchFn = vi.fn().mockResolvedValue(ok(analysis))
-    await analyzePhoto('file:///photo.jpg', fetchFn)
+    await analyzePhoto('file:///photo.jpg', { fetchFn })
 
     const [, init] = fetchFn.mock.calls[0] as [string, RequestInit]
     const photo = (init.body as FormData).get('photo')
@@ -41,17 +41,28 @@ describe('analyzePhoto', () => {
   })
   it('maps non-2xx to ApiError{server,status}', async () => {
     const fetchFn = vi.fn().mockResolvedValue(bad(502))
-    await expect(analyzePhoto('file:///p.jpg', fetchFn)).rejects.toMatchObject({ failure: { kind: 'server', status: 502 } })
+    await expect(analyzePhoto('file:///p.jpg', { fetchFn })).rejects.toMatchObject({ failure: { kind: 'server', status: 502 } })
   })
-  it('maps a contract-violating body to ApiError{server}', async () => {
+  it('maps a contract-violating body to ApiError{invalid-response,status}', async () => {
     const fetchFn = vi.fn().mockResolvedValue(ok({ kind: 'nonsense' }))
-    await expect(analyzePhoto('file:///p.jpg', fetchFn)).rejects.toMatchObject({ failure: { kind: 'server', status: 200 } })
+    await expect(analyzePhoto('file:///p.jpg', { fetchFn })).rejects.toMatchObject({ failure: { kind: 'invalid-response', status: 200 } })
   })
   it('maps thrown fetch errors to ApiError{network}', async () => {
     const fetchFn = vi.fn().mockRejectedValue(new TypeError('Network request failed'))
-    await expect(analyzePhoto('file:///p.jpg', fetchFn)).rejects.toMatchObject({ failure: { kind: 'network' } })
+    await expect(analyzePhoto('file:///p.jpg', { fetchFn })).rejects.toMatchObject({ failure: { kind: 'network' } })
   })
-  it('allows multi-stage analysis past 35 seconds, then aborts at 180 seconds', async () => {
+  it('classifies an aborted caller request as cancelled', async () => {
+    const controller = new AbortController()
+    const fetchFn = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      ;(init?.signal as AbortSignal).addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+    }))
+
+    const pending = analyzePhoto('file:///p.jpg', { fetchFn: fetchFn as typeof fetch, signal: controller.signal })
+    controller.abort()
+
+    await expect(pending).rejects.toMatchObject({ failure: { kind: 'cancelled' } })
+  })
+  it('allows analysis past 35 seconds, then reports the 180-second timeout', async () => {
     vi.useFakeTimers()
     try {
       const fetchMock = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
@@ -60,14 +71,14 @@ describe('analyzePhoto', () => {
           requestSignal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
         })
       })
-      const pending = analyzePhoto('file:///slow-math.jpg', fetchMock as typeof fetch).catch((error) => error)
+      const pending = analyzePhoto('file:///slow-math.jpg', { fetchFn: fetchMock as typeof fetch }).catch((error) => error)
       const signal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal
 
       await vi.advanceTimersByTimeAsync(35_000)
       expect(signal.aborted).toBe(false)
 
       await vi.advanceTimersByTimeAsync(145_000)
-      await expect(pending).resolves.toMatchObject({ failure: { kind: 'network' } })
+      await expect(pending).resolves.toMatchObject({ failure: { kind: 'timeout' } })
     } finally {
       vi.useRealTimers()
     }

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { AnalyzeResponse, Step } from '@snap/shared'
 import {
   analysisPresentation,
-  analysisStagePresentation,
+  analysisProgressPresentation,
+  analysisRecoveryPresentation,
   cameraPresentation,
   cameraPermissionPresentation,
   stepAccessibilityLabel,
@@ -82,17 +83,52 @@ describe('analysisPresentation', () => {
   })
 })
 
-describe('analysis accessibility presentation', () => {
-  it('gives completed, current, and upcoming stages distinct marks and spoken statuses', () => {
-    expect(analysisStagePresentation('Read handwriting', 0, 1)).toEqual({
-      status: 'completed', mark: '✓', accessibilityLabel: 'Read handwriting, completed',
+describe('analysis progress presentation', () => {
+  it('shows the initial honest description and announces it once', () => {
+    expect(analysisProgressPresentation(0, 0)).toEqual({
+      description: 'Looking at the photo…',
+      elapsedCopy: 'Usually takes less than a minute.',
+      announcement: 'Analyzing your work. Usually takes less than a minute.',
     })
-    expect(analysisStagePresentation('Check each step', 1, 1)).toEqual({
-      status: 'current', mark: '●', accessibilityLabel: 'Check each step, current',
+  })
+
+  it('keeps rotating descriptions silent between meaningful elapsed boundaries', () => {
+    expect(analysisProgressPresentation(19, 2)).toEqual({
+      description: 'Preparing your explanation…',
+      elapsedCopy: 'Usually takes less than a minute.',
+      announcement: null,
     })
-    expect(analysisStagePresentation('Verify diagnosis', 2, 1)).toEqual({
-      status: 'upcoming', mark: '○', accessibilityLabel: 'Verify diagnosis, upcoming',
+  })
+
+  it('updates long-wait copy and VoiceOver announcements at 20 and 60 seconds', () => {
+    expect(analysisProgressPresentation(20, 1)).toEqual({
+      description: 'Checking the math…',
+      elapsedCopy: 'Still working. This can take a little longer.',
+      announcement: 'Still working. This can take a little longer.',
     })
+    expect(analysisProgressPresentation(60, 2)).toEqual({
+      description: 'Preparing your explanation…',
+      elapsedCopy: 'Still working. You can cancel and return to your review.',
+      announcement: 'Still working. You can cancel and return to your review.',
+    })
+  })
+
+  it.each([
+    [{ kind: 'network' }, ['retry', 'review']],
+    [{ kind: 'timeout' }, ['retry', 'review']],
+    [{ kind: 'server', status: 503 }, ['retry', 'review']],
+    [{ kind: 'invalid-response', status: 200 }, ['retry', 'review']],
+    [{ kind: 'not-math' }, ['review']],
+    [{ kind: 'unreadable', tips: ['Use better light.'] }, ['review']],
+  ] as const)('keeps the reviewed photo available for %o', (input, actions) => {
+    expect(analysisRecoveryPresentation(input).actions).toEqual(actions)
+  })
+
+  it('uses specific recovery copy for network, timeout, server, and invalid responses', () => {
+    expect(analysisRecoveryPresentation({ kind: 'network' })).toMatchObject({ title: 'We couldn’t reach the tutor.' })
+    expect(analysisRecoveryPresentation({ kind: 'timeout' })).toMatchObject({ title: 'The tutor took too long to respond.' })
+    expect(analysisRecoveryPresentation({ kind: 'server', status: 503 })).toMatchObject({ title: 'The tutor is unavailable right now.' })
+    expect(analysisRecoveryPresentation({ kind: 'invalid-response', status: 200 })).toMatchObject({ title: 'We received an incomplete analysis.' })
   })
 
   it('describes the complete expanded step in human terms', () => {

@@ -1,4 +1,5 @@
 import type { AnalyzeResponse, Step } from '@snap/shared'
+import type { ApiFailure } from '../lib/api'
 import { tagLabel } from '../lib/labels'
 import { colors } from './theme'
 
@@ -55,10 +56,51 @@ export function analysisPresentation(response: Extract<AnalyzeResponse, { kind: 
   }
 }
 
-export function analysisStagePresentation(label: string, index: number, currentStage: number) {
-  const status = index < currentStage ? 'completed' : index === currentStage ? 'current' : 'upcoming'
-  const mark = status === 'completed' ? '✓' : status === 'current' ? '●' : '○'
-  return { status, mark, accessibilityLabel: `${label}, ${status}` }
+const ANALYSIS_DESCRIPTIONS = ['Looking at the photo…', 'Checking the math…', 'Preparing your explanation…'] as const
+
+export function analysisProgressPresentation(elapsedSeconds: number, descriptionIndex: number) {
+  const description = ANALYSIS_DESCRIPTIONS[descriptionIndex % ANALYSIS_DESCRIPTIONS.length] ?? ANALYSIS_DESCRIPTIONS[0]
+  if (elapsedSeconds >= 60) {
+    const elapsedCopy = 'Still working. You can cancel and return to your review.'
+    return { description, elapsedCopy, announcement: elapsedSeconds === 60 ? elapsedCopy : null }
+  }
+  if (elapsedSeconds >= 20) {
+    const elapsedCopy = 'Still working. This can take a little longer.'
+    return { description, elapsedCopy, announcement: elapsedSeconds === 20 ? elapsedCopy : null }
+  }
+  const elapsedCopy = 'Usually takes less than a minute.'
+  return {
+    description,
+    elapsedCopy,
+    announcement: elapsedSeconds === 0 ? `Analyzing your work. ${elapsedCopy}` : null,
+  }
+}
+
+type RecoveryAction = 'retry' | 'review'
+type AnalysisRecovery = ApiFailure | { kind: 'not-math' } | { kind: 'unreadable'; tips: readonly string[] }
+
+export function analysisRecoveryPresentation(recovery: AnalysisRecovery): {
+  eyebrow: string
+  title: string
+  detail: string
+  actions: readonly RecoveryAction[]
+} {
+  switch (recovery.kind) {
+    case 'network':
+      return { eyebrow: 'CONNECTION', title: 'We couldn’t reach the tutor.', detail: 'Your reviewed photo is still saved. Check your connection and try again.', actions: ['retry', 'review'] }
+    case 'timeout':
+      return { eyebrow: 'TOOK TOO LONG', title: 'The tutor took too long to respond.', detail: 'Your reviewed photo is still saved. Try again or return to review it.', actions: ['retry', 'review'] }
+    case 'server':
+      return { eyebrow: 'TUTOR UNAVAILABLE', title: 'The tutor is unavailable right now.', detail: 'Your reviewed photo is still saved. Try again in a moment.', actions: ['retry', 'review'] }
+    case 'invalid-response':
+      return { eyebrow: 'INCOMPLETE RESPONSE', title: 'We received an incomplete analysis.', detail: 'Your reviewed photo is still saved. Try again to get a complete result.', actions: ['retry', 'review'] }
+    case 'not-math':
+      return { eyebrow: 'NOT MATH', title: 'This photo doesn’t look like math.', detail: 'Return to review to choose another photo or adjust this one.', actions: ['review'] }
+    case 'unreadable':
+      return { eyebrow: 'UNREADABLE', title: 'This photo is too hard to read.', detail: 'Return to review to retake it or choose another photo.', actions: ['review'] }
+    default:
+      throw new Error('unknown analysis recovery')
+  }
 }
 
 const VERDICT_LABEL: Record<Step['verdict'], string> = {

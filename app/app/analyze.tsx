@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import type { AnalyzeResponse } from '@snap/shared'
-import { analyzePhoto } from '../src/lib/api'
-import { getSession, setAnalysis, resetSession } from '../src/lib/session'
+import { ApiError, type ApiFailure, analyzePhoto } from '../src/lib/api'
+import { getLocalScanRepository, recordAnalysis } from '../src/lib/history'
+import { getSession, persistAnalysis, resetSession } from '../src/lib/session'
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
-import { recordAnalysis } from '../src/lib/history'
+import type { ScanRevision } from '../src/lib/scanTypes'
 import { tagLabel } from '../src/lib/labels'
 import { AppButton } from '../src/components/AppButton'
 import { AppIcon } from '../src/components/AppIcon'
@@ -13,47 +14,136 @@ import { AppScreen } from '../src/components/AppScreen'
 import { AnalysisProgress } from '../src/components/AnalysisProgress'
 import { StepCard } from '../src/components/StepCard'
 import { PhotoOverlay } from '../src/components/PhotoOverlay'
-import { analysisPresentation } from '../src/ui/presentation'
+import { analysisPresentation, analysisRecoveryPresentation } from '../src/ui/presentation'
 import { colors, spacing } from '../src/ui/theme'
 
-const STAGES = ['Reading your handwriting…', 'Checking each step…', 'Verifying the diagnosis…']
+type RecoverableFailure = ApiFailure | { kind: 'persistence' }
+
+type PendingSave = {
+  response: AnalyzeResponse
+  revision: ScanRevision
+  durationMs: number
+}
+
+function allocateRevisionId(): string {
+  return `revision-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
 
 export default function Analyze() {
   const [result, setResult] = useState<AnalyzeResponse | null>(null)
-  const [failed, setFailed] = useState(false)
-  const [stage, setStage] = useState(0)
+  const [failure, setFailure] = useState<RecoverableFailure | null>(null)
+  const [unsaved, setUnsaved] = useState(false)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [isResetting, setIsResetting] = useState(false)
   const [resetFailed, setResetFailed] = useState(false)
-  const uri = getSession().photoUri
+  const { photoUri: uri, pendingScanId: scanId } = getSession()
   const resetTransition = useRef<(() => Promise<void>) | null>(null)
+  const activeRequest = useRef<AbortController | null>(null)
+  const requestInFlight = useRef(false)
+  const cancelled = useRef(false)
+  const cancellationTask = useRef<Promise<void> | null>(null)
+  const pendingSave = useRef<PendingSave | null>(null)
+  const durableResult = useRef(false)
+  const mounted = useRef(true)
   if (resetTransition.current === null)
     resetTransition.current = createSessionResetTransition(resetSession, () => router.dismissTo('/'))
 
-  const run = useCallback(() => {
-    if (!uri) { router.replace('/'); return }
-    setFailed(false)
-    setResult(null)
-    setStage(0)
-    analyzePhoto(uri)
-      .then((r) => {
-        setAnalysis(r)
-        setResult(r)
-        if (r.kind === 'analysis') {
-          recordAnalysis({ tag: r.misconceptionTag, correct: r.errorStepIndex === null }).catch(() => {})
-        }
-      })
-      .catch((e: unknown) => {
-        void e
-        setFailed(true)
-      })
-  }, [uri])
+  const persistPendingSave = useCallback(async (pending: PendingSave) => {
+    try {
+      await getLocalScanRepository().saveRevision(scanId!, pending.revision, pending.durationMs)
+      durableResult.current = true
+      await persistAnalysis(scanId!, pending.response, pending.durationMs)
+      if (mounted.current) setUnsaved(false)
+      if (pending.response.kind === 'analysis')
+        void recordAnalysis({ tag: pending.response.misconceptionTag, correct: pending.response.errorStepIndex === null }).catch(() => {})
+    } catch {
+      if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'unsaved').catch(() => {})
+      if (mounted.current) setUnsaved(true)
+    }
+  }, [scanId])
 
-  useEffect(run, [run])
+  const returnToReview = useCallback(async () => {
+    cancelled.current = true
+    activeRequest.current?.abort()
+    if (cancellationTask.current) return cancellationTask.current
+    cancellationTask.current = (async () => {
+      try {
+        if (scanId && !durableResult.current)
+          await getLocalScanRepository().setLifecycle(scanId, 'interrupted')
+        await resetSession({ preserveDraft: true })
+        if (mounted.current) router.replace('/review')
+      } catch {
+        if (mounted.current) setFailure({ kind: 'persistence' })
+      }
+    })()
+    return cancellationTask.current
+  }, [scanId])
+
+  const run = useCallback(async () => {
+    if (!uri || !scanId) { router.replace('/review'); return }
+    if (requestInFlight.current) return
+    requestInFlight.current = true
+    cancelled.current = false
+    cancellationTask.current = null
+    pendingSave.current = null
+    durableResult.current = false
+    if (mounted.current) {
+      setFailure(null)
+      setUnsaved(false)
+      setResult(null)
+      setElapsedSeconds(0)
+    }
+    try {
+      const scan = await getLocalScanRepository().setLifecycle(scanId, 'analyzing')
+      if (cancelled.current) {
+        await returnToReview()
+        return
+      }
+      const controller = new AbortController()
+      activeRequest.current = controller
+      const startedAt = Date.now()
+      const response = await analyzePhoto(uri, { signal: controller.signal })
+      const durationMs = Math.max(0, Date.now() - startedAt)
+      const pending: PendingSave = {
+        response,
+        durationMs,
+        revision: {
+          id: allocateRevisionId(),
+          reason: scan?.activeRevision ? 'retry' : 'initial',
+          response,
+          createdAt: new Date().toISOString(),
+        },
+      }
+      pendingSave.current = pending
+      if (mounted.current) setResult(response)
+      await persistPendingSave(pending)
+    } catch (error) {
+      if (cancelled.current || (error instanceof ApiError && error.failure.kind === 'cancelled')) {
+        if (mounted.current) await returnToReview()
+        else if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'interrupted').catch(() => {})
+        return
+      }
+      if (mounted.current) {
+        if (error instanceof ApiError) setFailure(error.failure)
+        else setFailure({ kind: 'persistence' })
+      }
+    } finally {
+      activeRequest.current = null
+      requestInFlight.current = false
+    }
+  }, [persistPendingSave, returnToReview, scanId, uri])
+
+  useEffect(() => { void run() }, [run])
   useEffect(() => {
-    if (result || failed) return
-    const t = setInterval(() => setStage((s) => Math.min(s + 1, STAGES.length - 1)), 3000)
+    if (result || failure) return
+    const startedAt = Date.now()
+    const t = setInterval(() => setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000)
     return () => clearInterval(t)
-  }, [result, failed])
+  }, [failure, result])
+  useEffect(() => () => {
+    mounted.current = false
+    activeRequest.current?.abort()
+  }, [])
 
   const snapAnother = useCallback(() => {
     setIsResetting(true)
@@ -66,51 +156,66 @@ export default function Analyze() {
 
   const resetFailure = resetFailed ? <ResetFailure onRetry={snapAnother} /> : null
 
-  if (failed) {
+  if (failure) {
+    if (failure.kind === 'persistence') {
+      return (
+        <AppScreen contentStyle={styles.stateContent}>
+          <View style={styles.stateCopy}>
+            <Text style={styles.stateEyebrow}>SAVE UNAVAILABLE</Text>
+            <Text style={styles.stateTitle}>We couldn’t prepare this analysis.</Text>
+            <Text style={styles.stateDetail}>Your reviewed photo is still saved. Try again or return to review it.</Text>
+          </View>
+          <AppButton label="Try again" onPress={() => { void run() }} />
+          <AppButton label="Return to review" onPress={() => { void returnToReview() }} variant="secondary" />
+        </AppScreen>
+      )
+    }
+    const presentation = analysisRecoveryPresentation(failure)
     return (
       <AppScreen contentStyle={styles.stateContent}>
         <View style={styles.stateCopy}>
-          <Text style={styles.stateEyebrow}>ANALYSIS PAUSED</Text>
-          <Text style={styles.stateTitle}>We couldn't reach the tutor.</Text>
-          <Text style={styles.stateDetail}>Your photo is saved. Check your connection and try again.</Text>
+          <Text style={styles.stateEyebrow}>{presentation.eyebrow}</Text>
+          <Text style={styles.stateTitle}>{presentation.title}</Text>
+          <Text style={styles.stateDetail}>{presentation.detail}</Text>
         </View>
-        <AppButton label="Try again" onPress={run} />
-        {resetFailure}
-        <AppButton label="Use another photo" onPress={snapAnother} disabled={isResetting} variant="secondary" />
+        {presentation.actions.includes('retry') ? <AppButton label="Try again" onPress={() => { void run() }} /> : null}
+        <AppButton label="Return to review" onPress={() => { void returnToReview() }} variant="secondary" />
       </AppScreen>
     )
   }
 
   if (!result) {
-    return uri ? <AnalysisProgress uri={uri} stage={stage} stages={STAGES} /> : null
+    return uri ? <AnalysisProgress uri={uri} elapsedSeconds={elapsedSeconds} descriptionIndex={Math.floor(elapsedSeconds / 6)} onCancel={() => { void returnToReview() }} /> : null
   }
 
   if (result.kind === 'not-math') {
+    const presentation = analysisRecoveryPresentation(result)
     return (
       <AppScreen contentStyle={styles.stateContent}>
         <View style={styles.stateCopy}>
-          <Text style={styles.stateEyebrow}>NOT MATH</Text>
-          <Text style={styles.stateTitle}>This photo doesn't look like math.</Text>
-          <Text style={styles.stateDetail}>Snap a photo of handwritten algebra or calculus work.</Text>
+          <Text style={styles.stateEyebrow}>{presentation.eyebrow}</Text>
+          <Text style={styles.stateTitle}>{presentation.title}</Text>
+          <Text style={styles.stateDetail}>{presentation.detail}</Text>
         </View>
-        {resetFailure}
-        <AppButton label="Retake" onPress={snapAnother} disabled={isResetting} />
+        {unsaved ? <UnsavedBanner onRetry={() => { const pending = pendingSave.current; if (pending) void persistPendingSave(pending) }} /> : null}
+        <AppButton label="Return to review" onPress={() => { void returnToReview() }} />
       </AppScreen>
     )
   }
 
   if (result.kind === 'unreadable') {
+    const presentation = analysisRecoveryPresentation(result)
     return (
       <AppScreen contentStyle={styles.stateContent}>
         <View style={styles.stateCopy}>
-          <Text style={styles.stateEyebrow}>UNREADABLE</Text>
-          <Text style={styles.stateTitle}>This photo is too hard to read.</Text>
+          <Text style={styles.stateEyebrow}>{presentation.eyebrow}</Text>
+          <Text style={styles.stateTitle}>{presentation.title}</Text>
           <View style={styles.tips}>
             {result.tips.map((tip) => <Text key={tip} style={styles.tip}>— {tip}</Text>)}
           </View>
         </View>
-        {resetFailure}
-        <AppButton label="Retake" onPress={snapAnother} disabled={isResetting} />
+        {unsaved ? <UnsavedBanner onRetry={() => { const pending = pendingSave.current; if (pending) void persistPendingSave(pending) }} /> : null}
+        <AppButton label="Return to review" onPress={() => { void returnToReview() }} />
       </AppScreen>
     )
   }
@@ -151,6 +256,7 @@ export default function Analyze() {
         )}
         <Text style={styles.diagnosisDetail}>{presentation.detail}</Text>
       </View>
+      {unsaved ? <UnsavedBanner onRetry={() => { const pending = pendingSave.current; if (pending) void persistPendingSave(pending) }} /> : null}
       <View style={styles.timeline}>
         {result.steps.map((s) => (
           <StepCard
@@ -167,6 +273,15 @@ export default function Analyze() {
         <AppButton label="Snap another" onPress={snapAnother} disabled={isResetting} variant="tertiary" />
       </View>
     </AppScreen>
+  )
+}
+
+function UnsavedBanner({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={styles.unsavedBanner}>
+      <Text accessibilityRole="alert" style={styles.unsavedCopy}>This result is visible, but it isn’t saved yet.</Text>
+      <AppButton label="Retry saving" onPress={onRetry} variant="secondary" />
+    </View>
   )
 }
 
@@ -201,4 +316,6 @@ const styles = StyleSheet.create({
   actions: { gap: spacing.md, marginTop: spacing.sm },
   resetFailure: { gap: spacing.sm },
   resetFailureCopy: { color: colors.error, fontSize: 15, lineHeight: 22 },
+  unsavedBanner: { gap: spacing.sm, paddingVertical: spacing.sm },
+  unsavedCopy: { color: colors.error, fontSize: 15, lineHeight: 22 },
 })
