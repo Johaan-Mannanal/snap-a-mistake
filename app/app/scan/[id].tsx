@@ -11,8 +11,8 @@ import { StepTimeline } from '../../src/components/StepTimeline'
 import { ZoomablePhoto } from '../../src/components/ZoomablePhoto'
 import { AppIcon } from '../../src/components/AppIcon'
 import { getLocalScanRepository } from '../../src/lib/history'
-import { clearSessionAfterAtomicDiscard, clearSessionForDeletedScan } from '../../src/lib/session'
-import { flushCleanupQueue } from '../../src/lib/scanFiles'
+import { clearSessionAfterAtomicDiscard, clearSessionForDeletedScans } from '../../src/lib/session'
+import { flushCommittedCleanup } from '../../src/lib/scanFiles'
 import { initialExpandedStepIndexes, selectStepIndex, toggleExpandedStepIndexes } from '../../src/lib/resultInteraction'
 import { tagLabel } from '../../src/lib/labels'
 import { analysisPresentation, analysisRecoveryPresentation } from '../../src/ui/presentation'
@@ -84,25 +84,22 @@ export default function ScanDetail() {
     setDeleteFailure(null)
     try {
       const repository = getLocalScanRepository()
-      const deleted = await repository.delete(scanId)
-      if (deleted === null) {
+      const committed = await repository.delete(scanId)
+      if (committed === null) {
         setConfirmingDelete(false)
         setState({ kind: 'missing' })
         return
       }
       try {
-        await clearSessionForDeletedScan(scanId)
+        await clearSessionForDeletedScans(committed.deletedScanIds)
       } catch {
         // The durable record is already gone; never leave the in-memory camera pointed at it.
         clearSessionAfterAtomicDiscard()
       }
-      await flushCleanupQueue(repository)
-      const cleanupPending = (await repository.getCleanupQueue()).length > 0
       setConfirmingDelete(false)
-      setState({ kind: 'deleted', cleanupPending })
-      AccessibilityInfo.announceForAccessibility(cleanupPending
-        ? 'Scan removed from history. Photo cleanup needs another try.'
-        : 'Scan removed from history.')
+      setState({ kind: 'deleted', cleanupPending: true })
+      AccessibilityInfo.announceForAccessibility('Scan removed from history. Checking photo cleanup.')
+      void settleCleanup(repository)
     } catch {
       setConfirmingDelete(false)
       setDeleteFailure('We couldn’t remove this scan from local history. Nothing was deleted. Try again.')
@@ -113,17 +110,15 @@ export default function ScanDetail() {
   }
 
   const retryCleanup = () => {
-    void (async () => {
-      try {
-        const repository = getLocalScanRepository()
-        await flushCleanupQueue(repository)
-        const cleanupPending = (await repository.getCleanupQueue()).length > 0
-        setState({ kind: 'deleted', cleanupPending })
-        if (!cleanupPending) AccessibilityInfo.announceForAccessibility('Photo cleanup finished.')
-      } catch {
-        setState({ kind: 'deleted', cleanupPending: true })
-      }
-    })()
+    void settleCleanup(getLocalScanRepository())
+  }
+
+  const settleCleanup = async (repository: ReturnType<typeof getLocalScanRepository>) => {
+    const { pending } = await flushCommittedCleanup(repository)
+    setState({ kind: 'deleted', cleanupPending: pending })
+    AccessibilityInfo.announceForAccessibility(pending
+      ? 'Scan removed from history. Photo cleanup needs another try.'
+      : 'Photo cleanup finished.')
   }
 
   if (state.kind === 'loading') return <DetailStateScreen title="Loading saved scan…" />

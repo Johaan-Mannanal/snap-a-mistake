@@ -17,6 +17,9 @@ class MemoryDatabase implements DatabasePort {
   userVersion = 0
   failActiveSessionDeletion = false
   failActiveSessionWrite = false
+  failScanDelete = false
+  failClearAll = false
+  failCleanupRead = false
   exclusiveGate: Promise<void> | null = null
   activeSessionWriteGate: Promise<void> | null = null
   activeSessionAfterWriteGate: Promise<void> | null = null
@@ -92,6 +95,7 @@ class MemoryDatabase implements DatabasePort {
       return { changes: 1 }
     }
     if (normalized.startsWith('delete from scans where id')) {
+      if (this.failScanDelete) throw new Error('database unavailable')
       const id = String(params[0])
       const scanIds = new Set([id])
       let foundChild = true
@@ -108,7 +112,10 @@ class MemoryDatabase implements DatabasePort {
       for (const [revisionId, revision] of this.revisions) if (typeof revision.scan_id === 'string' && scanIds.has(revision.scan_id)) this.revisions.delete(revisionId)
       return { changes: 1 }
     }
-    if (normalized.startsWith('delete from scans')) { this.scans.clear(); this.revisions.clear(); return { changes: 1 } }
+    if (normalized.startsWith('delete from scans')) {
+      if (this.failClearAll) throw new Error('database unavailable')
+      this.scans.clear(); this.revisions.clear(); return { changes: 1 }
+    }
     if (normalized.startsWith('delete from analyses')) { this.analyses.splice(0); return { changes: 1 } }
     if (normalized.startsWith('delete from app_state where')) {
       if (String(params[0]) === 'active-session' && this.failActiveSessionDeletion)
@@ -145,9 +152,28 @@ class MemoryDatabase implements DatabasePort {
     const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase()
     if (normalized.includes('from scan_revisions where scan_id'))
       return [...this.revisions.values()].filter((revision) => revision.scan_id === String(params[0])) as T[]
+    if (normalized.includes('with recursive descendant_scans')) {
+      const scanIds = new Set([String(params[0])])
+      let foundChild = true
+      while (foundChild) {
+        foundChild = false
+        for (const scan of this.scans.values()) {
+          if (typeof scan.id === 'string' && typeof scan.parent_scan_id === 'string' && scanIds.has(scan.parent_scan_id) && !scanIds.has(scan.id)) {
+            scanIds.add(scan.id)
+            foundChild = true
+          }
+        }
+      }
+      return [...this.scans.values()].filter((scan) => typeof scan.id === 'string' && scanIds.has(scan.id)) as T[]
+    }
+    if (normalized.includes('from scans where parent_scan_id'))
+      return [...this.scans.values()].filter((scan) => scan.parent_scan_id === String(params[0])) as T[]
     if (normalized.includes('from scans')) return [...this.scans.values()] as T[]
     if (normalized.includes('from analyses')) return this.analyses as T[]
-    if (normalized.includes('from cleanup_queue')) return [...this.cleanup].map((image_uri) => ({ image_uri })) as T[]
+    if (normalized.includes('from cleanup_queue')) {
+      if (this.failCleanupRead) throw new Error('cleanup queue unavailable')
+      return [...this.cleanup].map((image_uri) => ({ image_uri })) as T[]
+    }
     throw new Error(`Unhandled all: ${sql}`)
   }
 
@@ -463,9 +489,35 @@ describe('scan repository records', () => {
     await repository.createDraft(draft())
     await repository.saveRevision('scan-1', revision('revision-1', 'initial'), 400)
 
-    await expect(repository.delete('scan-1')).resolves.toBe('file:///documents/scans/scan-1.jpg')
+    await expect(repository.delete('scan-1')).resolves.toMatchObject({
+      deletedScanIds: ['scan-1'], queuedUris: ['file:///documents/scans/scan-1.jpg'],
+    })
     expect(db.revisions).toHaveLength(0)
     expect(db.cleanup).toEqual(new Set(['file:///documents/scans/scan-1.jpg']))
+  })
+
+  it('keeps a committed deletion durable when the cleanup queue cannot be read afterward', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    db.failCleanupRead = true
+
+    await expect(repository.delete('scan-1')).resolves.toMatchObject({ deletedScanIds: ['scan-1'] })
+    expect(db.scans).toHaveLength(0)
+    await expect(repository.getCleanupQueue()).rejects.toThrow('cleanup queue unavailable')
+  })
+
+  it('rolls back a failed deletion instead of reporting a commit', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    db.failScanDelete = true
+
+    await expect(repository.delete('scan-1')).rejects.toThrow('database unavailable')
+    expect(db.scans).toHaveLength(1)
+    expect(db.cleanup).toEqual(new Set())
   })
 
   it('clears an active session that references a scan deleted in the same transaction', async () => {
@@ -481,6 +533,32 @@ describe('scan repository records', () => {
     await repository.delete('scan-1')
 
     expect(db.appState.has('active-session')).toBe(false)
+  })
+
+  it('returns every cascaded ID and clears a durable active grandchild session without touching unrelated sessions', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('root'))
+    await repository.createDraft({ ...draft('child'), attemptKind: 'follow-up', parentScanId: 'root' })
+    await repository.createDraft({ ...draft('grandchild'), attemptKind: 'follow-up', parentScanId: 'child' })
+    await repository.setState('active-session', {
+      routeIntent: 'analyze', pendingScanId: 'grandchild', photoUri: 'file:///documents/scans/grandchild.jpg', origin: 'camera',
+      analysis: null, followUp: null, parentScanId: 'child',
+    })
+
+    await expect(repository.delete('root')).resolves.toMatchObject({ deletedScanIds: ['root', 'child', 'grandchild'] })
+    expect(db.appState.has('active-session')).toBe(false)
+
+    await repository.createDraft(draft('unrelated'))
+    await repository.setState('active-session', {
+      routeIntent: 'analyze', pendingScanId: 'unrelated', photoUri: 'file:///documents/scans/unrelated.jpg', origin: 'camera',
+      analysis: null, followUp: null, parentScanId: null,
+    })
+    await repository.createDraft(draft('root-2'))
+
+    await repository.delete('root-2')
+    expect(db.appState.has('active-session')).toBe(true)
   })
 
   it('atomically removes a reviewed draft, queues its owned photo, and clears the active session', async () => {
@@ -533,6 +611,72 @@ describe('scan repository records', () => {
     ]))
   })
 
+  it('returns a surviving parent to ready after its only resolved follow-up is deleted', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+    await repository.createDraft({ ...draft('child'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    await repository.saveRevision('child', revision('child-correct', 'initial'), 410)
+    expect((await repository.get('parent'))?.followUpStatus).toBe('resolved')
+
+    await repository.delete('child')
+
+    expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
+  })
+
+  it('uses the surviving resolved follow-up after an unresolved sibling is deleted', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+    await repository.createDraft({ ...draft('resolved'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    await repository.saveRevision('resolved', revision('resolved-correct', 'initial'), 410)
+    await repository.createDraft({ ...draft('unresolved'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    await repository.saveRevision('unresolved', { ...diagnosisRevision, id: 'unresolved-same' }, 410)
+    expect((await repository.get('parent'))?.followUpStatus).toBe('unresolved')
+
+    await repository.delete('unresolved')
+
+    expect((await repository.get('parent'))?.followUpStatus).toBe('resolved')
+  })
+
+  it('recomputes from a surviving unresolved follow-up when a resolved sibling subtree is deleted', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+    await repository.createDraft({ ...draft('unresolved'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    await repository.saveRevision('unresolved', { ...diagnosisRevision, id: 'unresolved-same' }, 410)
+    await repository.createDraft({ ...draft('resolved'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    await repository.saveRevision('resolved', revision('resolved-correct', 'initial'), 410)
+    await repository.createDraft({ ...draft('descendant'), attemptKind: 'follow-up', parentScanId: 'resolved' })
+    expect((await repository.get('parent'))?.followUpStatus).toBe('resolved')
+
+    await repository.delete('resolved')
+
+    expect((await repository.get('parent'))?.followUpStatus).toBe('unresolved')
+  })
+
+  it('ignores a future completed child while recomputing the parent after deletion', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+    await repository.createDraft({ ...draft('future'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    await repository.saveRevision('future', { ...revision('future-correct', 'initial'), createdAt: '2099-01-01T00:00:00.000Z' }, 410)
+    await repository.createDraft({ ...draft('unresolved'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    await repository.saveRevision('unresolved', { ...diagnosisRevision, id: 'unresolved-same' }, 410)
+
+    await repository.delete('unresolved')
+
+    expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
+  })
+
   it('retains prior and newly queued cleanup obligations through clear-all until acknowledged', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)
@@ -543,10 +687,10 @@ describe('scan repository records', () => {
     db.cleanup.add('file:///documents/scans/failed-before-clear.jpg')
     await repository.setState('active-session', { routeIntent: 'review' })
 
-    await expect(repository.clearAll()).resolves.toEqual([
-      'file:///documents/scans/failed-before-clear.jpg',
-      'file:///documents/scans/scan-1.jpg',
-    ])
+    await expect(repository.clearAll()).resolves.toMatchObject({
+      deletedScanIds: ['scan-1'],
+      queuedUris: ['file:///documents/scans/scan-1.jpg'],
+    })
     expect(db.scans).toHaveLength(0)
     expect(db.revisions).toHaveLength(0)
     expect(db.analyses).toHaveLength(0)
@@ -564,6 +708,30 @@ describe('scan repository records', () => {
     await expect(repository.getCleanupQueue()).resolves.toEqual([
       'file:///documents/scans/failed-before-clear.jpg',
     ])
+  })
+
+  it('commits clear-all before a later cleanup queue read can fail', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    db.failCleanupRead = true
+
+    await expect(repository.clearAll()).resolves.toMatchObject({ deletedScanIds: ['scan-1'] })
+    expect(db.scans).toHaveLength(0)
+    await expect(repository.getCleanupQueue()).rejects.toThrow('cleanup queue unavailable')
+  })
+
+  it('rolls back clear-all when its transaction cannot delete scans', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    db.failClearAll = true
+
+    await expect(repository.clearAll()).rejects.toThrow('database unavailable')
+    expect(db.scans).toHaveLength(1)
+    expect(db.cleanup).toEqual(new Set())
   })
 })
 

@@ -38,9 +38,9 @@ export interface ScanRepository {
   get(scanId: string): Promise<ScanRecord | null>
   list(): Promise<ScanRecord[]>
   loadTrendSources(): Promise<TrendSource[]>
-  delete(scanId: string): Promise<string | null>
+  delete(scanId: string): Promise<ScanDeleteCommit | null>
   discardReviewAndSession(input: { scanId: string; ownedUri: string | null }): Promise<void>
-  clearAll(): Promise<string[]>
+  clearAll(): Promise<ScanClearCommit>
   getCleanupQueue(): Promise<string[]>
   acknowledgeCleanup(imageUri: string): Promise<void>
   commitFollowUpStartIfCurrent(parentScanId: string, session: PersistedSession, targetStatus: FollowUpStatus, isCurrent: () => boolean): Promise<boolean>
@@ -48,6 +48,9 @@ export interface ScanRepository {
   setState<T>(key: string, value: T): Promise<void>
   deleteState(key: string): Promise<void>
 }
+
+export type ScanDeleteCommit = { deletedScanIds: string[]; queuedUris: string[] }
+export type ScanClearCommit = { deletedScanIds: string[]; queuedUris: string[] }
 
 // Legacy aggregate rows predate scan IDs and therefore cannot be deduplicated against
 // scan records. They remain read-only migration-era attempts; new analyses use scans.
@@ -199,6 +202,40 @@ async function clearActiveSessionForDeletedScans(db: DatabasePort, deletedScanId
   } catch {
     // Invalid persisted state is handled during hydration; do not broaden deletion scope.
   }
+}
+
+function hasUsableCompletedOutcome(scan: ScanRecord): scan is ScanRecord & { activeRevision: ScanRevision } {
+  if (scan.lifecycle !== 'complete' || scan.activeRevision === null) return false
+  if (scan.feedback === 'excluded' || scan.activeRevision.feedback === 'rejected') return false
+  const createdAt = Date.parse(scan.activeRevision.createdAt)
+  return Number.isFinite(createdAt) && createdAt <= Date.now()
+}
+
+async function recomputeSurvivingParentFollowUpStatus(db: DatabasePort, parentScanId: string | null): Promise<void> {
+  if (parentScanId === null) return
+  const parent = await readRecord(db, parentScanId)
+  if (parent === null) return
+  if (parent.followUp === null) {
+    if (parent.followUpStatus !== 'none')
+      await db.runAsync('UPDATE scans SET follow_up_status = ?, updated_at = ? WHERE id = ?', ['none', now(), parent.id])
+    return
+  }
+  const childRows = await db.getAllAsync<ScanRow>(`${scanSelect} WHERE parent_scan_id = ?`, [parent.id])
+  const children = await Promise.all(childRows
+    .filter((row) => row.parent_scan_id === parent.id)
+    .map((row) => readRecord(db, row.id)))
+  const statuses = children.flatMap((child): FollowUpStatus[] => {
+    if (child === null) return []
+    if (child.lifecycle === 'analyzing') return ['in-progress']
+    if (!hasUsableCompletedOutcome(child)) return []
+    return [followUpStatusForChild(parent, child.activeRevision.response)]
+  })
+  const status: FollowUpStatus = statuses.includes('resolved') ? 'resolved'
+    : statuses.includes('in-progress') ? 'in-progress'
+      : statuses.includes('unresolved') ? 'unresolved'
+        : 'ready'
+  if (parent.followUpStatus !== status)
+    await db.runAsync('UPDATE scans SET follow_up_status = ?, updated_at = ? WHERE id = ?', [status, now(), parent.id])
 }
 
 export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacyHistory {
@@ -423,7 +460,7 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       ]
     },
 
-    async delete(scanId): Promise<string | null> {
+    async delete(scanId): Promise<ScanDeleteCommit | null> {
       return db.withExclusiveTransactionAsync(async (transaction) => {
         const scan = await readRecord(transaction, scanId)
         if (!scan) return null
@@ -439,8 +476,10 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
         for (const descendant of descendants)
           await transaction.runAsync('INSERT INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)', [descendant.image_uri, now()])
         await transaction.runAsync('DELETE FROM scans WHERE id = ?', [scanId])
-        await clearActiveSessionForDeletedScans(transaction, new Set(descendants.map((descendant) => descendant.id)))
-        return scan.imageUri
+        const deletedScanIds = descendants.map((descendant) => descendant.id)
+        await clearActiveSessionForDeletedScans(transaction, new Set(deletedScanIds))
+        await recomputeSurvivingParentFollowUpStatus(transaction, scan.parentScanId)
+        return { deletedScanIds, queuedUris: descendants.map((descendant) => descendant.image_uri) }
       })
     },
 
@@ -473,9 +512,9 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       })
     },
 
-    async clearAll(): Promise<string[]> {
+    async clearAll(): Promise<ScanClearCommit> {
       return db.withExclusiveTransactionAsync(async (transaction) => {
-        const rows = await transaction.getAllAsync<{ image_uri: string }>('SELECT image_uri FROM scans')
+        const rows = await transaction.getAllAsync<{ id: string; image_uri: string }>('SELECT id, image_uri FROM scans')
         await transaction.runAsync('DELETE FROM scans')
         await transaction.runAsync('DELETE FROM analyses')
         await transaction.runAsync('DELETE FROM app_state')
@@ -484,10 +523,7 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
             'INSERT OR IGNORE INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)',
             [row.image_uri, now()],
           )
-        const queued = await transaction.getAllAsync<{ image_uri: string }>(
-          'SELECT image_uri FROM cleanup_queue ORDER BY created_at ASC, image_uri ASC',
-        )
-        return queued.map((row) => row.image_uri)
+        return { deletedScanIds: rows.map((row) => row.id), queuedUris: rows.map((row) => row.image_uri) }
       })
     },
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ScanRepository } from './scanRepository'
-import { deleteOwnedPhoto, flushCleanupQueue, ownScanPhoto, type FilePort } from './scanFiles'
+import { deleteOwnedPhoto, flushCommittedCleanup, flushCleanupQueue, ownScanPhoto, type FilePort } from './scanFiles'
 
 vi.mock('expo-file-system', () => ({
   Directory: class {},
@@ -52,6 +52,12 @@ class CleanupRepository {
 
   async acknowledgeCleanup(uri: string): Promise<void> {
     this.acknowledged.push(uri)
+  }
+}
+
+class FailingQueueRepository extends CleanupRepository {
+  async getCleanupQueue(): Promise<string[]> {
+    throw new Error('queue unavailable')
   }
 }
 
@@ -114,5 +120,18 @@ describe('scan file ownership', () => {
       'file:///documents/scans/missing.jpg',
     ])
     expect(files.files.has('file:///documents/scans/retry.jpg')).toBe(true)
+  })
+
+  it('reports cleanup as pending when a committed queue cannot be read', async () => {
+    await expect(flushCommittedCleanup(new FailingQueueRepository([]) as unknown as ScanRepository, new MemoryFiles())).resolves.toEqual({ pending: true })
+  })
+
+  it('reports cleanup as pending when a committed owned file deletion fails', async () => {
+    const files = new MemoryFiles()
+    files.files.add('file:///documents/scans/retry.jpg')
+    files.failDeletesFor.add('file:///documents/scans/retry.jpg')
+
+    await expect(flushCommittedCleanup(new CleanupRepository(['file:///documents/scans/retry.jpg']) as unknown as ScanRepository, files))
+      .resolves.toEqual({ pending: true })
   })
 })

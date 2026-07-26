@@ -69,3 +69,12 @@ export async function flushCleanupQueue(repository: ScanRepository, files: FileP
     }
   }
 }
+
+export async function flushCommittedCleanup(repository: ScanRepository, files: FilePort = createExpoFilePort()): Promise<{ pending: boolean }> {
+  try {
+    await flushCleanupQueue(repository, files)
+    return { pending: (await repository.getCleanupQueue()).length > 0 }
+  } catch {
+    return { pending: true }
+  }
+}

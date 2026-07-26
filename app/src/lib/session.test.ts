@@ -5,6 +5,7 @@ import type { ScanRepository } from './scanRepository'
 import {
   acknowledgePrivacyDisclosure,
   clearSessionForDeletedScan,
+  clearSessionForDeletedScans,
   getSession,
   hydrateSession,
   isPrivacyDisclosureAcknowledged,
@@ -233,6 +234,23 @@ describe('session', () => {
 
     expect(getSession()).toMatchObject({ routeIntent: 'capture', pendingScanId: null, parentScanId: null })
     expect(repository.deleted).toContain('active-session')
+  })
+
+  it('clears an in-memory grandchild session only when one of its deleted IDs matches', async () => {
+    const repository = new MemorySessionRepository()
+    repository.state = PersistedSessionSchema.parse({
+      routeIntent: 'analyze', pendingScanId: 'grandchild', photoUri: 'file:///documents/scans/grandchild.jpg', origin: 'camera',
+      analysis: null, followUp: null, parentScanId: 'child',
+    })
+    await hydrateSession(repository as unknown as ScanRepository)
+
+    await clearSessionForDeletedScans(['root', 'child', 'grandchild'])
+
+    expect(getSession().routeIntent).toBe('capture')
+
+    await setReviewedPhoto({ scanId: 'unrelated', uri: 'file:///documents/scans/unrelated.jpg', origin: 'camera' })
+    await clearSessionForDeletedScans(['root', 'child', 'grandchild'])
+    expect(getSession()).toMatchObject({ routeIntent: 'analyze', pendingScanId: 'unrelated' })
   })
 
   it('restores a terminated analysis as an interrupted review that retains the reviewed photo', async () => {

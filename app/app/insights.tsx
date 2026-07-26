@@ -8,7 +8,7 @@ import { InsightsSwitcher, type InsightsSection } from '../src/components/Insigh
 import { ScanHistoryRow } from '../src/components/ScanHistoryRow'
 import { ConfirmAction } from '../src/components/ConfirmAction'
 import { getLocalScanRepository } from '../src/lib/history'
-import { flushCleanupQueue } from '../src/lib/scanFiles'
+import { flushCommittedCleanup } from '../src/lib/scanFiles'
 import { clearSessionAfterAtomicDiscard } from '../src/lib/session'
 import { summarize } from '../src/lib/trends'
 import { insightsPresentation, type InsightsDataState } from '../src/ui/insightsPresentation'
@@ -47,37 +47,34 @@ export default function Insights() {
   const presentation = insightsPresentation(state)
   const header = <InsightsHeader section={section} onSectionChange={setSection} />
   const retryCleanup = () => {
-    void (async () => {
-      const repository = getLocalScanRepository()
-      await flushCleanupQueue(repository)
-      const stillQueued = (await repository.getCleanupQueue()).length > 0
-      setClearFailure(stillQueued ? 'History is cleared, but one or more saved photos still need cleanup. Try again.' : null)
-      if (!stillQueued) router.dismissTo('/')
-    })().catch(() => setClearFailure('History is cleared, but one or more saved photos still need cleanup. Try again.'))
+    void settleClearCleanup(getLocalScanRepository())
   }
+
+  const settleClearCleanup = async (repository: ReturnType<typeof getLocalScanRepository>) => {
+    const { pending } = await flushCommittedCleanup(repository)
+    setClearFailure(pending ? 'History is cleared, but one or more saved photos still need cleanup. Try again.' : null)
+    if (!pending) router.dismissTo('/')
+  }
+
   const clearAll = async () => {
     if (clearInFlight.current) return
     clearInFlight.current = true
     setClearFailure(null)
+    let repository: ReturnType<typeof getLocalScanRepository>
     try {
-      const repository = getLocalScanRepository()
+      repository = getLocalScanRepository()
       await repository.clearAll()
-      clearSessionAfterAtomicDiscard()
-      await flushCleanupQueue(repository)
-      const cleanupPending = (await repository.getCleanupQueue()).length > 0
-      setConfirmingClear(false)
-      if (cleanupPending) {
-        setClearFailure('History is cleared, but one or more saved photos still need cleanup. Try again.')
-        loadHistory()
-        return
-      }
-      router.dismissTo('/')
     } catch {
       setConfirmingClear(false)
       setClearFailure('We couldn’t clear local history. Your saved scans are still available. Try again.')
-    } finally {
       clearInFlight.current = false
+      return
     }
+    clearSessionAfterAtomicDiscard()
+    setConfirmingClear(false)
+    setState({ kind: 'ready', scans: [], patterns: [] })
+    clearInFlight.current = false
+    void settleClearCleanup(repository)
   }
   const privacy = <DataPrivacy clearTriggerRef={clearTriggerRef} clearFailure={clearFailure} onClear={() => setConfirmingClear(true)} onRetryCleanup={retryCleanup} />
   const confirmation = (
