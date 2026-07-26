@@ -3,6 +3,7 @@ import type { FollowUp } from '@snap/shared'
 import {
   buildAlternateFollowUpContext,
   canStartAlternateFollowUp,
+  createFollowUpHandoffCoordinator,
   createFollowUpPracticeState,
   createFollowUpCheckFence,
   createFollowUpLeaveLock,
@@ -144,6 +145,63 @@ describe('follow-up check fence', () => {
     fence.track(run, task)
 
     await expect(fence.invalidate()).rejects.toThrow('state unavailable')
+  })
+})
+
+describe('alternate follow-up local retry', () => {
+  it('retries the exact generated alternate after storage failure without another request', async () => {
+    const coordinator = createFollowUpHandoffCoordinator()
+    const replacement = replaceFollowUpProblem(createFollowUpPracticeState(initial), {
+      ...initial,
+      problem: 'Simplify −(3x − 4).',
+    })
+    if (replacement === null) throw new Error('expected distinct alternate')
+    let requestCalls = 0
+    let persistCalls = 0
+    const dependencies = {
+      request: async () => {
+        requestCalls += 1
+        return replacement
+      },
+      persist: async (candidate: typeof replacement) => {
+        persistCalls += 1
+        expect(candidate).toEqual(replacement)
+        if (persistCalls === 1) throw new Error('local storage unavailable')
+        return true
+      },
+      isRouteCurrent: () => true,
+    }
+
+    const first = coordinator.startAlternate(createFollowUpPracticeState(initial), dependencies)
+    await expect(first.promise).resolves.toEqual({ kind: 'storage-failed', practice: replacement })
+    const retry = coordinator.startAlternate(createFollowUpPracticeState(initial), dependencies)
+    await expect(retry.promise).resolves.toEqual({ kind: 'updated', practice: replacement })
+
+    expect(requestCalls).toBe(1)
+    expect(persistCalls).toBe(2)
+  })
+
+  it('requests the model again after a network generation failure', async () => {
+    const coordinator = createFollowUpHandoffCoordinator()
+    let requestCalls = 0
+    const dependencies = {
+      request: async () => {
+        requestCalls += 1
+        if (requestCalls === 1) throw new Error('network unavailable')
+        return replaceFollowUpProblem(createFollowUpPracticeState(initial), {
+          ...initial,
+          problem: 'Simplify −(3x − 4).',
+        })
+      },
+      persist: async () => true,
+      isRouteCurrent: () => true,
+    }
+
+    await expect(coordinator.startAlternate(createFollowUpPracticeState(initial), dependencies).promise)
+      .rejects.toThrow('network unavailable')
+    await expect(coordinator.startAlternate(createFollowUpPracticeState(initial), dependencies).promise)
+      .resolves.toMatchObject({ kind: 'updated' })
+    expect(requestCalls).toBe(2)
   })
 })
 

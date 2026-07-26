@@ -21,6 +21,7 @@ import { acknowledgePrivacyDisclosure, clearSessionAfterAtomicDiscard, getSessio
 import type { ScanOrigin } from '../src/lib/scanTypes'
 import { reviewPresentation } from '../src/ui/reviewScreen'
 import { colors, spacing } from '../src/ui/theme'
+import { useSystemBackTransition } from '../src/lib/useSystemBackTransition'
 
 type PendingPhoto = { uri: string; origin: ScanOrigin }
 
@@ -60,16 +61,8 @@ export default function Review() {
     mutation.current.invalidate()
   }, [])
 
-  if (!photo) return null
-
-  const presentation = reviewPresentation({
-    origin: photo.origin,
-    disclosureAcknowledged,
-    isCopying: isCopying || isRetaking || isChoosing,
-    copyFailed,
-  })
-
   const analyze = () => {
+    if (!photo) return
     void mutation.current.run(async (owns) => {
       setIsCopying(true)
       setCopyFailed(false)
@@ -213,6 +206,17 @@ export default function Review() {
       }
     })
   }
+
+  useSystemBackTransition(retake)
+
+  if (!photo) return null
+
+  const presentation = reviewPresentation({
+    origin: photo.origin,
+    disclosureAcknowledged,
+    isCopying: isCopying || isRetaking || isChoosing,
+    copyFailed,
+  })
 
   return (
     <AppScreen contentStyle={styles.content}>

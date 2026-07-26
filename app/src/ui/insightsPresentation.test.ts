@@ -90,7 +90,7 @@ describe('insights presentation', () => {
       kind: 'ready',
       patterns: {
         kind: 'list',
-        items: [{ title: 'Sign error', direction: 'Appearing more often than last week.', resolution: 'A follow-up was resolved.' }],
+        items: [{ title: 'Sign error', attemptCount: 2, direction: 'Appearing more often than last week.', resolution: 'A follow-up was resolved.' }],
       },
       scans: {
         kind: 'list',

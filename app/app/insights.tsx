@@ -152,6 +152,7 @@ function PatternState(props: { presentation: ReturnType<typeof insightsPresentat
       {props.presentation.patterns.items.map((item) => (
         <View key={item.title} style={styles.patternRow}>
           <Text style={styles.patternTitle}>{item.title}</Text>
+          <Text style={styles.patternCount}>{item.attemptCount} {item.attemptCount === 1 ? 'attempt' : 'attempts'} this week</Text>
           <Text style={styles.patternDetail}>{item.direction}</Text>
           {item.resolution ? <Text style={styles.resolution}>{item.resolution}</Text> : null}
         </View>
@@ -241,6 +242,7 @@ const styles = StyleSheet.create({
   patternList: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.carbon },
   patternRow: { gap: spacing.xs, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.carbon, paddingVertical: spacing.lg },
   patternTitle: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '700' },
+  patternCount: { color: colors.chalk, fontSize: typeScale.caption },
   patternDetail: { color: colors.muted, fontSize: typeScale.caption },
   resolution: { color: colors.success, fontSize: typeScale.caption, fontWeight: '700' },
   privacy: { gap: spacing.sm, marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.carbon },

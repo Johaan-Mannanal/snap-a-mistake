@@ -47,4 +47,22 @@ describe('createSessionResetTransition', () => {
     expect(reset).toHaveBeenCalledTimes(2)
     expect(navigate).toHaveBeenCalledTimes(1)
   })
+
+  it('does not navigate when route ownership expires while reset is pending', async () => {
+    let releaseReset: (() => void) | null = null
+    let current = true
+    const navigate = vi.fn()
+    const transition = createSessionResetTransition(
+      () => new Promise<void>((resolve) => { releaseReset = resolve }),
+      navigate,
+      () => current,
+    )
+
+    const pending = transition()
+    current = false
+    releaseReset!()
+    await pending
+
+    expect(navigate).not.toHaveBeenCalled()
+  })
 })

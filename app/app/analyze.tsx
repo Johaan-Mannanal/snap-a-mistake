@@ -32,6 +32,8 @@ import { colors, spacing } from '../src/ui/theme'
 import { expandStepIndex, initialExpandedStepIndexes, selectStepIndex, toggleExpandedStepIndexes } from '../src/lib/resultInteraction'
 import { isDurableFeedbackAvailable, synthesizeAllCorrectResponse, type CorrectionFailure } from '../src/ui/diagnosisFeedback'
 import { initialAnalysisEntry } from '../src/lib/analysisEntry'
+import { analysisSystemBackAction } from '../src/lib/routeNavigation'
+import { useSystemBackTransition } from '../src/lib/useSystemBackTransition'
 
 type RecoverableFailure = ApiFailure | { kind: 'persistence' }
 
@@ -98,7 +100,11 @@ export default function Analyze() {
     restoredResultFinalized.current = true
   }
   if (resetTransition.current === null)
-    resetTransition.current = createSessionResetTransition(resetSession, () => router.dismissTo('/'))
+    resetTransition.current = createSessionResetTransition(
+      resetSession,
+      () => router.dismissTo('/'),
+      () => mounted.current,
+    )
 
   const announceForCurrentRun = useCallback((event: string, message: string) => {
     const token = activeToken.current
@@ -350,6 +356,11 @@ export default function Analyze() {
       setResetFailed(true)
     })
   }, [])
+
+  useSystemBackTransition(analysisSystemBackAction(result !== null, {
+    active: () => { void returnToReview() },
+    result: snapAnother,
+  }))
 
   const openFollowUp = useCallback(() => {
     if (!scanId || openingFollowUp) return

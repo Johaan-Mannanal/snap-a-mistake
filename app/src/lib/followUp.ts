@@ -28,6 +28,7 @@ export type FollowUpLeaveLock = {
 
 export type FollowUpAlternateResult =
   | { kind: 'updated'; practice: FollowUpPracticeState }
+  | { kind: 'storage-failed'; practice: FollowUpPracticeState }
   | { kind: 'duplicate' }
   | { kind: 'stale' }
 
@@ -60,6 +61,7 @@ export type FollowUpHandoffCoordinator = {
 export function createFollowUpHandoffCoordinator(): FollowUpHandoffCoordinator {
   const checkFence = createFollowUpCheckFence()
   let alternateController: AbortController | null = null
+  let cachedAlternate: FollowUpPracticeState | null = null
 
   return {
     get alternateBusy() { return alternateController !== null },
@@ -76,11 +78,19 @@ export function createFollowUpHandoffCoordinator(): FollowUpHandoffCoordinator {
       )
       const promise = (async (): Promise<FollowUpAlternateResult> => {
         try {
-          const replacement = await dependencies.request(controller.signal)
+          const replacement = cachedAlternate ?? await dependencies.request(controller.signal)
           if (!owns()) return { kind: 'stale' }
           if (replacement === null) return { kind: 'duplicate' }
-          const persisted = await dependencies.persist(replacement, owns)
+          let persisted: boolean
+          try {
+            persisted = await dependencies.persist(replacement, owns)
+          } catch {
+            if (!owns()) return { kind: 'stale' }
+            cachedAlternate = replacement
+            return { kind: 'storage-failed', practice: replacement }
+          }
           if (!persisted || !owns()) return { kind: 'stale' }
+          cachedAlternate = null
           return { kind: 'updated', practice: replacement }
         } catch (error) {
           if (!owns()) return { kind: 'stale' }
@@ -96,6 +106,7 @@ export function createFollowUpHandoffCoordinator(): FollowUpHandoffCoordinator {
       if (run === null) return { started: false, promise: Promise.resolve(false) }
       const invalidatedAlternate = alternateController
       alternateController = null
+      cachedAlternate = null
       invalidatedAlternate?.abort()
       const owns = () => checkFence.owns(run) && dependencies.isRouteCurrent()
       const promise = (async () => {
@@ -109,6 +120,7 @@ export function createFollowUpHandoffCoordinator(): FollowUpHandoffCoordinator {
     async invalidate() {
       const invalidatedAlternate = alternateController
       alternateController = null
+      cachedAlternate = null
       invalidatedAlternate?.abort()
       await checkFence.invalidate()
     },

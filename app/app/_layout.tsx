@@ -7,6 +7,7 @@ import { flushCleanupQueue } from '../src/lib/scanFiles'
 import { hydrateSession, takeHydratedRouteIntent } from '../src/lib/session'
 import { bootstrapLocalStorage, type LocalStorageBootstrapState } from '../src/lib/startup'
 import { colors } from '../src/ui/theme'
+import { statefulRouteScreenOptions } from '../src/lib/routeNavigation'
 
 export default function RootLayout() {
   const [startup, setStartup] = useState<LocalStorageBootstrapState | null>(null)
@@ -54,7 +55,11 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.ink } }} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.ink } }}>
+        <Stack.Screen name="review" options={statefulRouteScreenOptions('review')} />
+        <Stack.Screen name="analyze" options={statefulRouteScreenOptions('analyze')} />
+        <Stack.Screen name="followup" options={statefulRouteScreenOptions('followup')} />
+      </Stack>
     </>
   )
 }

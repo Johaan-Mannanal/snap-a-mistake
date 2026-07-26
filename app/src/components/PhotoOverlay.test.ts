@@ -12,4 +12,9 @@ describe('zoomed photo overlay production wiring', () => {
     expect(overlaySource).toContain('<Animated.View')
     expect(overlaySource).toContain('<Animated.Text')
   })
+
+  it('keeps the photo described without grouping descendant overlay buttons', () => {
+    expect(zoomSource).not.toMatch(/<View\s+accessible[\s>]/)
+    expect(zoomSource).toMatch(/<Image\s+accessible\s+accessibilityLabel=/)
+  })
 })

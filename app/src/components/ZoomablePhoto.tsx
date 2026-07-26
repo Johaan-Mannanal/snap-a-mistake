@@ -131,8 +131,6 @@ export function ZoomablePhoto(props: {
     <View>
       <GestureDetector gesture={Gesture.Simultaneous(pinch, pan)}>
         <View
-          accessible
-          accessibilityLabel={`Selected photo. Zoom ${Math.round(zoomLevel * 100)} percent.`}
           onLayout={(event) => {
             frameWidth.value = event.nativeEvent.layout.width
             frameHeight.value = event.nativeEvent.layout.height
@@ -148,7 +146,13 @@ export function ZoomablePhoto(props: {
           style={styles.frame}
         >
           <Animated.View style={[styles.photoWrap, animatedPhotoStyle]}>
-            <Image source={{ uri: props.uri }} resizeMode="contain" style={styles.photo} />
+            <Image
+              accessible
+              accessibilityLabel={`Selected photo. Zoom ${Math.round(zoomLevel * 100)} percent.`}
+              source={{ uri: props.uri }}
+              resizeMode="contain"
+              style={styles.photo}
+            />
             {props.renderOverlay?.(geometry, scale)}
           </Animated.View>
         </View>

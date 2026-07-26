@@ -17,6 +17,9 @@ import {
 import { getLocalScanRepository } from '../src/lib/history'
 import { getFollowUpPractice, getSession, returnFromFollowUp, startFollowUp } from '../src/lib/session'
 import { colors, spacing, typeScale } from '../src/ui/theme'
+import { useSystemBackTransition } from '../src/lib/useSystemBackTransition'
+
+type AlternateFailure = 'duplicate' | 'link' | 'network' | 'storage'
 
 function currentParentId(): string | null {
   const session = getSession()
@@ -38,7 +41,7 @@ export default function FollowUp() {
   const [practice, setPractice] = useState<FollowUpPracticeState | null>(() => (
     getFollowUpPractice() ?? (initialFollowUp ? createFollowUpPracticeState(initialFollowUp) : null)
   ))
-  const [alternateFailure, setAlternateFailure] = useState<string | null>(null)
+  const [alternateFailure, setAlternateFailure] = useState<AlternateFailure | null>(null)
   const [requestingAlternate, setRequestingAlternate] = useState(false)
   const [checkingWork, setCheckingWork] = useState(false)
   const [checkFailure, setCheckFailure] = useState<string | null>(null)
@@ -83,6 +86,7 @@ export default function FollowUp() {
       },
     )
   }
+  useSystemBackTransition(leave)
 
   const requestAnother = () => {
     if (!canStartAlternateFollowUp({
@@ -118,13 +122,14 @@ export default function FollowUp() {
       (result) => {
         if (!mounted.current) return
         if (result.kind === 'duplicate') {
-          setAlternateFailure('That problem was too similar. Try another similar problem.')
+          setAlternateFailure('duplicate')
         }
+        if (result.kind === 'storage-failed') setAlternateFailure('storage')
         if (result.kind === 'updated') setPractice(result.practice)
       },
       (error) => {
         if (!mounted.current || (error instanceof ApiError && error.failure.kind === 'cancelled')) return
-        setAlternateFailure('We couldn’t get another problem. Your current problem is still here.')
+        setAlternateFailure('network')
       },
     ).finally(() => {
       if (mounted.current) setRequestingAlternate(false)
@@ -141,7 +146,7 @@ export default function FollowUp() {
       || !practiceRouteCurrent.current
     ) return
     if (parentScanId === null) {
-      setAlternateFailure('This practice problem is no longer linked to its analysis. Go back and choose it again.')
+      setAlternateFailure('link')
       return
     }
     const operation = handoff.current.startCheck(practice, {
@@ -242,8 +247,23 @@ export default function FollowUp() {
         />
         {alternateFailure ? (
           <View style={styles.failure}>
-            <Text accessibilityRole="alert" style={styles.failureCopy}>{alternateFailure}</Text>
-            {!checkingWork ? <AppButton label="Retry another problem" onPress={requestAnother} disabled={requestingAlternate || isLeaving} variant="tertiary" /> : null}
+            <Text accessibilityRole="alert" style={styles.failureCopy}>
+              {alternateFailure === 'storage'
+                ? 'Your new problem is ready, but we couldn’t save it on this device.'
+                : alternateFailure === 'link'
+                  ? 'This practice problem is no longer linked to its analysis. Go back and choose it again.'
+                : alternateFailure === 'duplicate'
+                  ? 'That problem was too similar. Try another similar problem.'
+                  : 'We couldn’t get another problem. Your current problem is still here.'}
+            </Text>
+            {!checkingWork && alternateFailure !== 'link' ? (
+              <AppButton
+                label={alternateFailure === 'storage' ? 'Retry saving problem' : 'Retry another problem'}
+                onPress={requestAnother}
+                disabled={requestingAlternate || isLeaving}
+                variant="tertiary"
+              />
+            ) : null}
           </View>
         ) : null}
         {checkFailure ? (

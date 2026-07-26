@@ -9,7 +9,7 @@ export type InsightsDataState =
 
 type EmptySection = { kind: 'empty'; title: string; detail: string; actionLabel: string }
 
-export type PatternItemPresentation = { title: string; direction: string; resolution: string | null }
+export type PatternItemPresentation = { title: string; attemptCount: number; direction: string; resolution: string | null }
 export type ScanItemPresentation = {
   id: string
   imageUri: string
@@ -111,7 +111,8 @@ export function insightsPresentation(state: InsightsDataState): InsightsPresenta
       : {
           kind: 'list',
           items: state.patterns.map((pattern) => ({
-            title: tagLabel(pattern.tag), direction: patternDirection(pattern), resolution: resolutionLabel(pattern.resolvedFollowUps),
+            title: tagLabel(pattern.tag), attemptCount: pattern.thisWeek,
+            direction: patternDirection(pattern), resolution: resolutionLabel(pattern.resolvedFollowUps),
           })),
         },
     scans: state.scans.length === 0
