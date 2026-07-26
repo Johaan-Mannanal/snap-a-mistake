@@ -116,11 +116,35 @@ export async function setReviewedPhoto(input: ReviewedPhoto): Promise<void> {
 
 export async function persistAnalysis(scanId: string, response: AnalyzeResponse, durationMs: number): Promise<void> {
   if (!Number.isInteger(durationMs) || durationMs < 0) throw new Error('durationMs must be a non-negative integer')
-  await commit({
+  await commit(resultSession(scanId, response))
+}
+
+export function resultSession(scanId: string, response: AnalyzeResponse): Session {
+  return {
     routeIntent: 'result', pendingScanId: scanId, photoUri: session.photoUri, origin: session.origin,
     analysis: response, followUp: response.kind === 'analysis' ? response.followUp : null,
     parentScanId: session.parentScanId, isRetry: false, isInterrupted: false,
-  })
+  }
+}
+
+export function adoptResultSession(scanId: string, response: AnalyzeResponse): void {
+  session = resultSession(scanId, response)
+}
+
+export function reviewSession(): Session {
+  if (session.photoUri === null || session.origin === null) throw new Error('a reviewed photo is required')
+  return {
+    ...session,
+    routeIntent: 'review',
+    analysis: null,
+    followUp: null,
+    isRetry: false,
+    isInterrupted: false,
+  }
+}
+
+export function adoptReviewSession(): void {
+  session = reviewSession()
 }
 
 export function startFollowUp(): void

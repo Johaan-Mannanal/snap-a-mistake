@@ -1,0 +1,41 @@
+import type { AnalyzeResponse, Step } from '@snap/shared'
+import type { ApiFailure } from '../lib/api'
+
+type AnalysisResponse = Extract<AnalyzeResponse, { kind: 'analysis' }>
+
+export function canRequestDiagnosisFeedback(response: AnalyzeResponse): response is AnalysisResponse {
+  return response.kind === 'analysis' && response.errorStepIndex !== null
+}
+
+export function correctionStepOptions(response: AnalysisResponse): Array<{ index: number; label: string }> {
+  return response.steps.map((step) => ({ index: step.index, label: readableStep(step) }))
+}
+
+function readableStep(step: Step): string {
+  const text = step.plain.trim() || 'Recognized work'
+  return `Step ${step.index + 1}: ${text}`
+}
+
+export function synthesizeAllCorrectResponse(response: AnalysisResponse): AnalysisResponse {
+  return {
+    ...response,
+    steps: response.steps.map((step) => ({ ...step, verdict: 'ok' })),
+    errorStepIndex: null,
+    misconceptionTag: null,
+    explanation: null,
+    followUp: null,
+    verifierAgreed: true,
+  }
+}
+
+export function correctionFailurePresentation(failure: ApiFailure) {
+  if (failure.kind === 'cancelled')
+    return { title: 'Correction cancelled.', detail: 'Your current diagnosis is unchanged.', retryLabel: 'Try again', cancelLabel: 'Back to result' }
+  if (failure.kind === 'timeout')
+    return { title: 'The revised diagnosis took too long.', detail: 'Your current diagnosis is unchanged.', retryLabel: 'Try again', cancelLabel: 'Cancel' }
+  if (failure.kind === 'network')
+    return { title: 'We couldn’t reach the tutor.', detail: 'Your current diagnosis is unchanged.', retryLabel: 'Try again', cancelLabel: 'Cancel' }
+  if (failure.kind === 'server')
+    return { title: 'The tutor is unavailable right now.', detail: 'Your current diagnosis is unchanged.', retryLabel: 'Try again', cancelLabel: 'Cancel' }
+  return { title: 'We received an incomplete revised diagnosis.', detail: 'Your current diagnosis is unchanged.', retryLabel: 'Try again', cancelLabel: 'Cancel' }
+}

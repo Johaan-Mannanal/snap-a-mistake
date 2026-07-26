@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, findNodeHandle, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import type { AnalyzeResponse } from '@snap/shared'
-import { ApiError, type ApiFailure, analyzePhoto } from '../src/lib/api'
+import { ApiError, type ApiFailure, analyzePhoto, correctDiagnosis } from '../src/lib/api'
 import { getLocalScanRepository, recordAnalysis } from '../src/lib/history'
-import { getSession, persistAnalysis, resetSession } from '../src/lib/session'
+import { adoptResultSession, adoptReviewSession, getSession, persistAnalysis, resetSession, resultSession, reviewSession } from '../src/lib/session'
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
 import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
 import { createAnalysisFinalization, createCompletedReviewReturn } from '../src/lib/analysisFinalization'
@@ -17,9 +17,11 @@ import { AnalysisProgress } from '../src/components/AnalysisProgress'
 import { StepTimeline, type StepTimelineHandle } from '../src/components/StepTimeline'
 import { PhotoOverlay } from '../src/components/PhotoOverlay'
 import { ZoomablePhoto } from '../src/components/ZoomablePhoto'
+import { DiagnosisFeedback } from '../src/components/DiagnosisFeedback'
 import { analysisPresentation, analysisRecoveryPresentation } from '../src/ui/presentation'
 import { colors, spacing } from '../src/ui/theme'
 import { expandStepIndex, initialExpandedStepIndexes, selectStepIndex, toggleExpandedStepIndexes } from '../src/lib/resultInteraction'
+import { canRequestDiagnosisFeedback, synthesizeAllCorrectResponse } from '../src/ui/diagnosisFeedback'
 
 type RecoverableFailure = ApiFailure | { kind: 'persistence' }
 
@@ -51,9 +53,15 @@ export default function Analyze() {
   const [reduceMotion, setReduceMotion] = useState(false)
   const [pendingPhotoFocusIndex, setPendingPhotoFocusIndex] = useState<number | null>(null)
   const [timelineLayoutVersion, setTimelineLayoutVersion] = useState(0)
+  const [feedbackBusy, setFeedbackBusy] = useState(false)
+  const [correctionFailure, setCorrectionFailure] = useState<ApiFailure | null>(null)
+  const [feedbackAccepted, setFeedbackAccepted] = useState(false)
   const { photoUri: uri, pendingScanId: scanId } = getSession()
   const resetTransition = useRef<(() => Promise<void>) | null>(null)
   const activeRequest = useRef<AbortController | null>(null)
+  const correctionRequest = useRef<AbortController | null>(null)
+  const feedbackLock = useRef(createAsyncLock<void>())
+  const retryCorrection = useRef<(() => void) | null>(null)
   const requestInFlight = useRef(false)
   const runFence = useRef(createRunFence())
   const saveLock = useRef(createAsyncLock<void>())
@@ -174,6 +182,7 @@ export default function Analyze() {
             id: allocateRevisionId(),
             reason: scan.activeRevision ? 'retry' : 'initial',
             response,
+            feedback: 'unreviewed',
             createdAt: new Date().toISOString(),
           },
         }
@@ -211,6 +220,7 @@ export default function Analyze() {
     setExpandedStepIndexes(initialExpandedStepIndexes(result.errorStepIndex))
     setShowAllSteps(result.errorStepIndex === null)
     setPendingPhotoFocusIndex(null)
+    setFeedbackAccepted(false)
   }, [result])
   useEffect(() => {
     if (result || failure) return
@@ -241,6 +251,84 @@ export default function Analyze() {
       setIsResetting(false)
       setResetFailed(true)
     })
+  }, [])
+
+  const acceptDiagnosis = useCallback(() => {
+    if (!scanId || feedbackLock.current.busy) return
+    retryCorrection.current = acceptDiagnosis
+    void feedbackLock.current.run(async () => {
+      setFeedbackBusy(true)
+      try {
+        await getLocalScanRepository().setFeedback(scanId, 'accepted')
+        setFeedbackAccepted(true)
+        retryCorrection.current = null
+      } catch {
+        setCorrectionFailure({ kind: 'network' })
+      } finally {
+        setFeedbackBusy(false)
+      }
+    })
+  }, [scanId])
+
+  const submitCorrection = useCallback((analysis: Extract<AnalyzeResponse, { kind: 'analysis' }>, selectedStepIndex: number, replacement?: Extract<AnalyzeResponse, { kind: 'analysis' }>) => {
+    if (!scanId || !uri || feedbackLock.current.busy) return
+    const execute = () => {
+      void feedbackLock.current.run(async () => {
+        setFeedbackBusy(true)
+        setCorrectionFailure(null)
+        const controller = new AbortController()
+        correctionRequest.current = controller
+        const startedAt = Date.now()
+        try {
+          const activeScan = await getLocalScanRepository().get(scanId)
+          const activeRevision = activeScan?.activeRevision
+          if (!activeRevision || activeRevision.feedback === 'rejected' || JSON.stringify(activeRevision.response) !== JSON.stringify(analysis))
+            throw new Error('the displayed diagnosis is no longer active')
+          const next = replacement ?? await correctDiagnosis(uri, { analysis, selectedStepIndex }, { signal: controller.signal })
+          if (controller.signal.aborted) throw new ApiError({ kind: 'cancelled' })
+          if (next.kind !== 'analysis') throw new ApiError({ kind: 'invalid-response', status: 200 })
+          const revision: ScanRevision = {
+            id: allocateRevisionId(), reason: 'student-correction', response: next, feedback: 'corrected', createdAt: new Date().toISOString(),
+          }
+          const resultState = resultSession(scanId, next)
+          await getLocalScanRepository().applyCorrection(scanId, activeRevision.id, revision, Math.max(0, Date.now() - startedAt), resultState)
+          adoptResultSession(scanId, next)
+          setResult(next)
+        } catch (error) {
+          if (error instanceof ApiError && error.failure.kind === 'cancelled') return
+          setCorrectionFailure(error instanceof ApiError ? error.failure : { kind: 'network' })
+        } finally {
+          correctionRequest.current = null
+          setFeedbackBusy(false)
+        }
+      })
+    }
+    retryCorrection.current = execute
+    execute()
+  }, [scanId, uri])
+
+  const excludeDiagnosis = useCallback(() => {
+    if (!scanId || feedbackLock.current.busy) return
+    retryCorrection.current = excludeDiagnosis
+    void feedbackLock.current.run(async () => {
+      setFeedbackBusy(true)
+      try {
+        await getLocalScanRepository().excludeDiagnosis(scanId, reviewSession())
+        adoptReviewSession()
+        retryCorrection.current = null
+        router.replace('/review')
+      } catch {
+        setCorrectionFailure({ kind: 'network' })
+      } finally {
+        setFeedbackBusy(false)
+      }
+    })
+  }, [scanId])
+
+  const cancelCorrection = useCallback(() => {
+    correctionRequest.current?.abort()
+    correctionRequest.current = null
+    setCorrectionFailure(null)
   }, [])
 
   const scrollToPhoto = useCallback(() => {
@@ -440,6 +528,20 @@ export default function Analyze() {
         <Text style={styles.diagnosisDetail}>{presentation.detail}</Text>
       </View>
       {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} /> : null}
+      {canRequestDiagnosisFeedback(result) && !feedbackAccepted ? (
+        <DiagnosisFeedback
+          response={result}
+          busy={feedbackBusy}
+          failure={correctionFailure}
+          onAccept={acceptDiagnosis}
+          onCorrectStep={(index) => submitCorrection(result, index)}
+          onAllCorrect={() => submitCorrection(result, result.errorStepIndex!, synthesizeAllCorrectResponse(result))}
+          onNotCaptured={excludeDiagnosis}
+          onRetry={() => retryCorrection.current?.()}
+          onCancelRequest={cancelCorrection}
+          reduceMotion={reduceMotion}
+        />
+      ) : null}
       <View style={styles.timeline} onLayout={(event) => { timelineOffsetY.current = event.nativeEvent.layout.y }}>
         <StepTimeline
           ref={timelineRef}

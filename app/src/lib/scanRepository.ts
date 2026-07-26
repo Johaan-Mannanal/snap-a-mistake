@@ -15,6 +15,7 @@ import {
   ScanRevisionSchema,
   type ScanLifecycle,
   type TrendSource,
+  type PersistedSession,
 } from './scanTypes'
 
 export interface DatabasePort {
@@ -30,6 +31,8 @@ export interface ScanRepository {
   createDraft(input: NewScanDraft): Promise<ScanRecord>
   setLifecycle(scanId: string, lifecycle: Extract<ScanLifecycle, 'analyzing' | 'interrupted' | 'unsaved'>): Promise<ScanRecord>
   saveRevision(scanId: string, revision: ScanRevision, durationMs: number): Promise<ScanRecord>
+  applyCorrection(scanId: string, rejectedRevisionId: string, revision: ScanRevision, durationMs: number, session?: PersistedSession): Promise<ScanRecord>
+  excludeDiagnosis(scanId: string, session?: PersistedSession): Promise<ScanRecord>
   setFeedback(scanId: string, feedback: FeedbackState): Promise<ScanRecord>
   setFollowUpStatus(scanId: string, status: FollowUpStatus): Promise<ScanRecord>
   get(scanId: string): Promise<ScanRecord | null>
@@ -70,10 +73,11 @@ type RevisionRow = {
   scan_id: string
   reason: ScanRevision['reason']
   response_json: string
+  feedback: FeedbackState
   created_at: string
 }
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 const ACTIVE_SESSION_KEY = 'active-session'
 
 const scanSelect = `
@@ -117,13 +121,14 @@ async function readRecord(db: DatabasePort, scanId: string): Promise<ScanRecord 
   const row = await db.getFirstAsync<ScanRow>(`${scanSelect} WHERE id = ?`, [scanId])
   if (!row) return null
   const revisionRows = await db.getAllAsync<RevisionRow>(
-    'SELECT id, scan_id, reason, response_json, created_at FROM scan_revisions WHERE scan_id = ? ORDER BY created_at ASC, id ASC',
+    'SELECT id, scan_id, reason, response_json, feedback, created_at FROM scan_revisions WHERE scan_id = ? ORDER BY created_at ASC, id ASC',
     [scanId],
   )
   const revisions = revisionRows.map((revision) => ScanRevisionSchema.parse({
     id: revision.id,
     reason: revision.reason,
     response: AnalyzeResponseSchema.parse(parseJson(revision.response_json)),
+    feedback: revision.feedback,
     createdAt: revision.created_at,
   }))
   const activeRevision = row.active_revision_id === null
@@ -161,8 +166,7 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
         const currentVersion = (await transaction.getFirstAsync<{ user_version: number }>('PRAGMA user_version'))?.user_version ?? 0
         if (currentVersion > SCHEMA_VERSION)
           throw new Error(`database version ${currentVersion} is newer than supported version ${SCHEMA_VERSION}`)
-        if (currentVersion === SCHEMA_VERSION) return
-        await transaction.execAsync(`
+        if (currentVersion === 0) await transaction.execAsync(`
           CREATE TABLE IF NOT EXISTS scans (
             id TEXT PRIMARY KEY NOT NULL,
             image_uri TEXT NOT NULL,
@@ -183,6 +187,7 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
             scan_id TEXT NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
             reason TEXT NOT NULL,
             response_json TEXT NOT NULL,
+            feedback TEXT NOT NULL DEFAULT 'unreviewed',
             created_at TEXT NOT NULL
           );
           CREATE TABLE IF NOT EXISTS app_state (
@@ -193,8 +198,9 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
             image_uri TEXT PRIMARY KEY NOT NULL,
             created_at TEXT NOT NULL
           );
-          PRAGMA user_version = ${SCHEMA_VERSION};
         `)
+        if (currentVersion === 1) await transaction.execAsync("ALTER TABLE scan_revisions ADD COLUMN feedback TEXT NOT NULL DEFAULT 'unreviewed';")
+        await transaction.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`)
       })
     },
 
@@ -223,25 +229,64 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
 
     async saveRevision(scanId, revision, durationMs): Promise<ScanRecord> {
       const validatedRevision = ScanRevisionSchema.parse(revision)
+      const savedRevision: ScanRevision = {
+        ...validatedRevision,
+        feedback: validatedRevision.reason === 'student-correction' ? 'corrected' : validatedRevision.feedback,
+      }
       if (!Number.isInteger(durationMs) || durationMs < 0) throw new Error('durationMs must be a non-negative integer')
       return db.withExclusiveTransactionAsync(async (transaction) => {
         const scan = await requireRecord(transaction, scanId)
-        const existingRevision = scan.revisions.find((item) => item.id === validatedRevision.id)
-        if (existingRevision && JSON.stringify(existingRevision) !== JSON.stringify(validatedRevision))
-          throw new Error(`revision ${validatedRevision.id} does not match the saved revision`)
-        const followUp = responseFollowUp(validatedRevision.response)
-        const feedback: FeedbackState = validatedRevision.reason === 'student-correction' ? 'corrected' : scan.feedback
+        const existingRevision = scan.revisions.find((item) => item.id === savedRevision.id)
+        if (existingRevision && JSON.stringify(existingRevision) !== JSON.stringify(savedRevision))
+          throw new Error(`revision ${savedRevision.id} does not match the saved revision`)
+        const followUp = responseFollowUp(savedRevision.response)
+        const feedback: FeedbackState = savedRevision.reason === 'student-correction' ? 'corrected' : scan.feedback
         const updatedAt = now()
         if (!existingRevision)
           await transaction.runAsync(
-            'INSERT INTO scan_revisions (id, scan_id, reason, response_json, created_at) VALUES (?, ?, ?, ?, ?)',
-            [validatedRevision.id, scanId, validatedRevision.reason, JSON.stringify(validatedRevision.response), validatedRevision.createdAt],
+            'INSERT INTO scan_revisions (id, scan_id, reason, response_json, feedback, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [savedRevision.id, scanId, savedRevision.reason, JSON.stringify(savedRevision.response), savedRevision.feedback, savedRevision.createdAt],
           )
         await transaction.runAsync(
           `UPDATE scans SET active_revision_id = ?, lifecycle = ?, analysis_duration_ms = ?, follow_up_json = ?,
            follow_up_status = ?, feedback = ?, updated_at = ? WHERE id = ?`,
-          [validatedRevision.id, 'complete', durationMs, followUp === null ? null : JSON.stringify(followUp),
+          [savedRevision.id, 'complete', durationMs, followUp === null ? null : JSON.stringify(followUp),
             statusForResponse(validatedRevision.response, scan.followUpStatus), feedback, updatedAt, scanId],
+        )
+        return requireRecord(transaction, scanId)
+      })
+    },
+
+    async applyCorrection(scanId, rejectedRevisionId, revision, durationMs, persistedSession): Promise<ScanRecord> {
+      const validatedRevision = ScanRevisionSchema.parse(revision)
+      if (validatedRevision.reason !== 'student-correction') throw new Error('correction revisions must use student-correction')
+      if (!Number.isInteger(durationMs) || durationMs < 0) throw new Error('durationMs must be a non-negative integer')
+      const correctedRevision: ScanRevision = { ...validatedRevision, feedback: 'corrected' }
+      return db.withExclusiveTransactionAsync(async (transaction) => {
+        const scan = await requireRecord(transaction, scanId)
+        const rejectedRevision = scan.revisions.find((item) => item.id === rejectedRevisionId)
+        if (!rejectedRevision) throw new Error(`revision ${rejectedRevisionId} not found`)
+        if (rejectedRevision.feedback === 'rejected') throw new Error('cannot replace a rejected revision')
+        if (scan.activeRevision?.id !== rejectedRevisionId) throw new Error('only the active revision can be corrected')
+        const existing = scan.revisions.find((item) => item.id === correctedRevision.id)
+        if (existing && JSON.stringify(existing) !== JSON.stringify(correctedRevision))
+          throw new Error(`revision ${correctedRevision.id} does not match the saved revision`)
+        await transaction.runAsync('UPDATE scan_revisions SET feedback = ? WHERE id = ?', ['rejected', rejectedRevisionId])
+        if (!existing) await transaction.runAsync(
+          'INSERT INTO scan_revisions (id, scan_id, reason, response_json, feedback, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          [correctedRevision.id, scanId, correctedRevision.reason, JSON.stringify(correctedRevision.response), correctedRevision.feedback, correctedRevision.createdAt],
+        )
+        const followUp = responseFollowUp(correctedRevision.response)
+        await transaction.runAsync(
+          `UPDATE scans SET active_revision_id = ?, lifecycle = ?, analysis_duration_ms = ?, follow_up_json = ?,
+           follow_up_status = ?, feedback = ?, updated_at = ? WHERE id = ?`,
+          [correctedRevision.id, 'complete', durationMs, followUp === null ? null : JSON.stringify(followUp),
+            statusForResponse(correctedRevision.response, scan.followUpStatus), 'corrected', now(), scanId],
+        )
+        if (persistedSession) await transaction.runAsync(
+          `INSERT INTO app_state (key, value_json) VALUES (?, ?)
+           ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
+          [ACTIVE_SESSION_KEY, JSON.stringify(persistedSession)],
         )
         return requireRecord(transaction, scanId)
       })
@@ -251,6 +296,23 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       return db.withExclusiveTransactionAsync(async (transaction) => {
         await requireRecord(transaction, scanId)
         await transaction.runAsync('UPDATE scans SET feedback = ?, updated_at = ? WHERE id = ?', [feedback, now(), scanId])
+        return requireRecord(transaction, scanId)
+      })
+    },
+
+    async excludeDiagnosis(scanId, persistedSession): Promise<ScanRecord> {
+      return db.withExclusiveTransactionAsync(async (transaction) => {
+        await requireRecord(transaction, scanId)
+        await transaction.runAsync(
+          `UPDATE scans SET active_revision_id = ?, lifecycle = ?, analysis_duration_ms = ?, follow_up_json = ?,
+           follow_up_status = ?, feedback = ?, updated_at = ? WHERE id = ?`,
+          [null, 'review', null, null, 'none', 'excluded', now(), scanId],
+        )
+        if (persistedSession) await transaction.runAsync(
+          `INSERT INTO app_state (key, value_json) VALUES (?, ?)
+           ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
+          [ACTIVE_SESSION_KEY, JSON.stringify(persistedSession)],
+        )
         return requireRecord(transaction, scanId)
       })
     },

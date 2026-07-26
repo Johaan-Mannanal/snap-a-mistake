@@ -1,4 +1,4 @@
-import { AnalyzeResponseSchema, type AnalyzeResponse } from '@snap/shared'
+import { AnalyzeResponseSchema, type AnalyzeResponse, type CorrectionContext } from '@snap/shared'
 import { File } from 'expo-file-system'
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000'
@@ -21,12 +21,17 @@ export class ApiError extends Error {
   }
 }
 
-export async function analyzePhoto(
+type RequestOptions = { signal?: AbortSignal; fetchFn?: typeof fetch }
+
+async function requestDiagnosis(
+  endpoint: '/analyze' | '/correct-diagnosis',
   uri: string,
-  options: { signal?: AbortSignal; fetchFn?: typeof fetch } = {},
+  context: CorrectionContext | null,
+  options: RequestOptions,
 ): Promise<AnalyzeResponse> {
   const form = new FormData()
   form.append('photo', new File(uri), 'photo.jpg')
+  if (context !== null) form.append('context', JSON.stringify(context))
 
   const timeoutController = new AbortController()
   const requestController = new AbortController()
@@ -49,7 +54,7 @@ export async function analyzePhoto(
     const fetchFn = options.fetchFn ?? fetch
     let res: Response
     try {
-      res = await fetchFn(`${API_URL}/analyze`, { method: 'POST', body: form, signal: requestController.signal })
+      res = await fetchFn(`${API_URL}${endpoint}`, { method: 'POST', body: form, signal: requestController.signal })
     } catch {
       if (abortReason === 'cancelled') throw new ApiError({ kind: 'cancelled' })
       if (abortReason === 'timeout') throw new ApiError({ kind: 'timeout' })
@@ -68,4 +73,16 @@ export async function analyzePhoto(
     clearTimeout(timer)
     options.signal?.removeEventListener('abort', abortForCallerCancellation)
   }
+}
+
+export async function analyzePhoto(uri: string, options: RequestOptions = {}): Promise<AnalyzeResponse> {
+  return requestDiagnosis('/analyze', uri, null, options)
+}
+
+export async function correctDiagnosis(
+  uri: string,
+  context: CorrectionContext,
+  options: RequestOptions = {},
+): Promise<AnalyzeResponse> {
+  return requestDiagnosis('/correct-diagnosis', uri, context, options)
 }

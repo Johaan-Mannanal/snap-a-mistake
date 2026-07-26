@@ -23,6 +23,7 @@ export const ScanRevisionSchema = z.object({
   id: z.string().min(1),
   reason: RevisionReasonSchema,
   response: AnalyzeResponseSchema,
+  feedback: FeedbackStateSchema.default('unreviewed'),
   createdAt: z.string().datetime(),
 })
 export type ScanRevision = z.infer<typeof ScanRevisionSchema>
@@ -58,10 +59,12 @@ export const ScanRecordSchema = ScanRecordFieldsSchema.superRefine((scan, ctx) =
     else if (JSON.stringify(historyEntry) !== JSON.stringify(activeRevision))
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['activeRevision'], message: 'activeRevision must match its revision history entry' })
   }
-  if (scan.activeRevision === null && scan.revisions.length > 0)
+  if (scan.activeRevision === null && scan.revisions.length > 0 && scan.feedback !== 'excluded')
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['activeRevision'], message: 'revisions require an activeRevision' })
   if (scan.activeRevision !== null && scan.lifecycle === 'review')
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['lifecycle'], message: 'review scans cannot have an activeRevision' })
+  if (scan.activeRevision?.feedback === 'rejected')
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['activeRevision'], message: 'a rejected revision cannot be active' })
   if (scan.followUpStatus !== 'none' && scan.followUp === null)
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['followUpStatus'], message: 'followUpStatus requires followUp' })
   if (scan.followUpStatus === 'none' && scan.followUp !== null)

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ApiError, analyzePhoto } from './api'
+import { ApiError, analyzePhoto, correctDiagnosis } from './api'
 
 vi.mock('expo-file-system', () => ({
   File: class MockFile extends Blob {
@@ -116,5 +116,45 @@ describe('analyzePhoto', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('correctDiagnosis', () => {
+  const diagnosis = {
+    kind: 'analysis' as const,
+    steps: [{ index: 2, latex: 'x = 4', plain: 'x equals 4', yBandTopPct: 30, yBandBottomPct: 40, verdict: 'wrong' as const }],
+    errorStepIndex: 2,
+    misconceptionTag: 'sign-error' as const,
+    explanation: 'The negative sign was lost.',
+    followUp: { problem: 'Simplify −(x + 2).', concept: 'signs', hint: 'Distribute the negative.' },
+    verifierAgreed: true,
+  }
+
+  it('POSTs the exact active analysis and selected step as multipart context', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(ok(diagnosis))
+    await correctDiagnosis('file:///photo.jpg', { analysis: diagnosis, selectedStepIndex: 2 }, { fetchFn })
+
+    const [url, init] = fetchFn.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/correct-diagnosis')
+    expect(init.method).toBe('POST')
+    expect(init.body).toBeInstanceOf(FormData)
+    expect((init.body as FormData).get('context')).toBe(JSON.stringify({ analysis: diagnosis, selectedStepIndex: 2 }))
+    expect((init.body as FormData).get('photo')).toBeInstanceOf(Blob)
+  })
+
+  it('uses the same deterministic cancellation and invalid-response failures as analysis', async () => {
+    const caller = new AbortController()
+    const fetchFn = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      ;(init?.signal as AbortSignal).addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+    }))
+    const pending = correctDiagnosis('file:///photo.jpg', { analysis: diagnosis, selectedStepIndex: 2 }, {
+      fetchFn: fetchFn as typeof fetch,
+      signal: caller.signal,
+    })
+    caller.abort()
+    await expect(pending).rejects.toMatchObject({ failure: { kind: 'cancelled' } })
+    await expect(correctDiagnosis('file:///photo.jpg', { analysis: diagnosis, selectedStepIndex: 2 }, {
+      fetchFn: vi.fn().mockResolvedValue(ok({ kind: 'bad' })) as typeof fetch,
+    })).rejects.toMatchObject({ failure: { kind: 'invalid-response', status: 200 } })
   })
 })

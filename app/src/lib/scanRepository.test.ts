@@ -36,9 +36,18 @@ class MemoryDatabase implements DatabasePort {
       return { changes: 1 }
     }
     if (normalized.startsWith('insert into scan_revisions')) {
-      const [id, scanId, reason, response, createdAt] = params
+      const [id, scanId, reason, response] = params
+      const feedback = params.length === 6 ? params[4] : 'unreviewed'
+      const createdAt = params.length === 6 ? params[5] : params[4]
       if (this.revisions.has(String(id))) throw new Error('UNIQUE constraint failed: scan_revisions.id')
-      this.revisions.set(String(id), { id, scan_id: scanId, reason, response_json: response, created_at: createdAt })
+      this.revisions.set(String(id), { id, scan_id: scanId, reason, response_json: response, feedback, created_at: createdAt })
+      return { changes: 1 }
+    }
+    if (normalized.startsWith('update scan_revisions set feedback')) {
+      const [feedback, id] = params
+      const revision = this.revisions.get(String(id))
+      if (!revision) return { changes: 0 }
+      Object.assign(revision, { feedback })
       return { changes: 1 }
     }
     if (normalized.startsWith('update scans set active_revision_id')) {
@@ -158,7 +167,7 @@ const analysis: AnalyzeResponse = {
 }
 
 const revision = (id: string, reason: ScanRevision['reason']): ScanRevision => ({
-  id, reason, response: analysis, createdAt: '2026-07-24T12:01:00.000Z',
+  id, reason, response: analysis, feedback: 'unreviewed', createdAt: '2026-07-24T12:01:00.000Z',
 })
 
 const diagnosisRevision: ScanRevision = {
@@ -170,6 +179,7 @@ const diagnosisRevision: ScanRevision = {
     followUp: { problem: 'Simplify −(x + 2).', concept: 'sign distribution', hint: 'Distribute the negative to both terms.' },
     verifierAgreed: true,
   },
+  feedback: 'unreviewed',
   createdAt: '2026-07-24T12:01:00.000Z',
 }
 
@@ -183,7 +193,7 @@ describe('scan repository migration', () => {
     await repository.migrate()
 
     expect([...db.tables].sort()).toEqual(['app_state', 'cleanup_queue', 'scan_revisions', 'scans'])
-    expect(db.userVersion).toBe(1)
+    expect(db.userVersion).toBe(2)
     expect(db.pragmas).toEqual(new Set(['wal', 'foreign_keys']))
     await expect(repository.loadTrendSources()).resolves.toEqual([
       { kind: 'legacy', tag: 'sign-error', correct: false, createdAt: '2026-07-20T12:00:00.000Z' },
@@ -192,10 +202,10 @@ describe('scan repository migration', () => {
 
   it('rejects a database created by a newer schema version', async () => {
     const db = new MemoryDatabase()
-    db.userVersion = 2
+    db.userVersion = 3
 
     await expect(createScanRepository(db).migrate())
-      .rejects.toThrow('database version 2 is newer than supported version 1')
+      .rejects.toThrow('database version 3 is newer than supported version 2')
     expect(db.tables).toHaveLength(0)
   })
 })
@@ -278,6 +288,42 @@ describe('scan repository records', () => {
     expect(saved.revisions.map((item) => item.id)).toEqual(['revision-1', 'revision-2'])
     expect(saved.activeRevision?.id).toBe('revision-2')
     expect(db.scans.get('scan-1')?.active_revision_id).toBe('revision-2')
+  })
+
+  it('rejects the superseded revision and never allows a rejected revision to become active', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.saveRevision('scan-1', diagnosisRevision, 400)
+
+    const corrected = await repository.applyCorrection('scan-1', 'revision-with-follow-up', {
+      ...revision('revision-corrected', 'student-correction'),
+      response: analysis,
+    }, 420)
+
+    expect(corrected.revisions.map((item) => [item.id, item.feedback])).toEqual([
+      ['revision-with-follow-up', 'rejected'],
+      ['revision-corrected', 'corrected'],
+    ])
+    expect(corrected.activeRevision?.id).toBe('revision-corrected')
+    await expect(repository.applyCorrection('scan-1', 'revision-with-follow-up', revision('revision-again', 'student-correction'), 420))
+      .rejects.toThrow('cannot replace a rejected revision')
+    expect((await repository.get('scan-1'))?.activeRevision?.id).toBe('revision-corrected')
+  })
+
+  it('excludes a disputed diagnosis from trend sources while retaining its revision history', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.saveRevision('scan-1', diagnosisRevision, 400)
+
+    const excluded = await repository.excludeDiagnosis('scan-1')
+
+    expect(excluded).toMatchObject({ lifecycle: 'review', feedback: 'excluded', activeRevision: null })
+    expect(excluded.revisions).toHaveLength(1)
+    await expect(repository.loadTrendSources()).resolves.toEqual([])
   })
 
   it('deletes a scan, cascades its revisions, and queues its owned image', async () => {
