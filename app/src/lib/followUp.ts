@@ -8,6 +8,44 @@ export type FollowUpPracticeState = {
   previousProblems: string[]
 }
 
+export type FollowUpCheckRun = { readonly token: number }
+
+export type FollowUpCheckFence = {
+  begin(): FollowUpCheckRun
+  owns(run: FollowUpCheckRun): boolean
+  track(run: FollowUpCheckRun, task: Promise<void>): void
+  invalidate(): Promise<void>
+}
+
+export function createFollowUpCheckFence(): FollowUpCheckFence {
+  let generation = 0
+  let activeRun: FollowUpCheckRun | null = null
+  let pending: Promise<void> = Promise.resolve()
+
+  return {
+    begin() {
+      generation += 1
+      const run = { token: generation }
+      activeRun = run
+      return run
+    },
+    owns(run) {
+      return activeRun === run && generation === run.token
+    },
+    track(run, task) {
+      const settled = task.catch(() => {}).finally(() => {
+        if (activeRun === run) activeRun = null
+      })
+      pending = settled
+    },
+    async invalidate() {
+      generation += 1
+      activeRun = null
+      await pending
+    },
+  }
+}
+
 export function createFollowUpPracticeState(followUp: FollowUp): FollowUpPracticeState {
   return { followUp, hintVisible: false, previousProblems: [] }
 }

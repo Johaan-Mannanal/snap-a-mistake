@@ -17,7 +17,7 @@ import {
   runExclusiveReviewAction,
   type ReviewTransaction,
 } from '../src/lib/reviewTransaction'
-import { acknowledgePrivacyDisclosure, clearSessionAfterAtomicDiscard, getSession, isPrivacyDisclosureAcknowledged, resetSession, setPendingPhoto, setReviewedPhoto } from '../src/lib/session'
+import { acknowledgePrivacyDisclosure, clearSessionAfterAtomicDiscard, getSession, isPrivacyDisclosureAcknowledged, replacePendingPhoto, resetSession, setPendingPhoto, setReviewedPhoto } from '../src/lib/session'
 import type { ScanOrigin } from '../src/lib/scanTypes'
 import { reviewPresentation } from '../src/ui/reviewScreen'
 import { colors, spacing } from '../src/ui/theme'
@@ -108,7 +108,7 @@ export default function Review() {
       }
       const priorTransaction = transaction.current
       const replacement = await replaceReviewPhoto(priorTransaction, {
-        persistReplacement: () => setPendingPhoto({ uri, origin: 'library' }),
+        persistReplacement: () => replacePendingPhoto({ uri, origin: 'library' }),
         discard: (savedTransaction) => discardReviewTransaction(savedTransaction, {
           findDraft: async (scanId) => (await repository.get(scanId)) !== null,
           deleteDraft: (scanId) => repository.delete(scanId),

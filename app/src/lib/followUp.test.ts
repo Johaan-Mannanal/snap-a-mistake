@@ -3,6 +3,7 @@ import type { FollowUp } from '@snap/shared'
 import {
   buildAlternateFollowUpContext,
   createFollowUpPracticeState,
+  createFollowUpCheckFence,
   revealFollowUpHint,
   replaceFollowUpProblem,
 } from './followUp'
@@ -54,5 +55,47 @@ describe('follow-up practice state', () => {
       'Simplify −(7x + 8).',
     ])
     expect(context.previousProblems).toHaveLength(5)
+  })
+})
+
+describe('follow-up check fence', () => {
+  it('invalidates a check before its first durable boundary and waits for it to settle', async () => {
+    let release!: () => void
+    const boundary = new Promise<void>((resolve) => { release = resolve })
+    const fence = createFollowUpCheckFence()
+    const run = fence.begin()
+    const effects: string[] = []
+    const task = (async () => {
+      await boundary
+      if (fence.owns(run)) effects.push('persist-session')
+    })()
+    fence.track(run, task)
+
+    const leaving = fence.invalidate()
+    release()
+    await leaving
+
+    expect(effects).toEqual([])
+  })
+
+  it('invalidates a check after session persistence so it cannot update status or navigate', async () => {
+    let release!: () => void
+    const boundary = new Promise<void>((resolve) => { release = resolve })
+    const fence = createFollowUpCheckFence()
+    const run = fence.begin()
+    const effects: string[] = []
+    const task = (async () => {
+      if (fence.owns(run)) effects.push('persist-session')
+      await boundary
+      if (fence.owns(run)) effects.push('persist-status')
+      if (fence.owns(run)) effects.push('navigate')
+    })()
+    fence.track(run, task)
+
+    const leaving = fence.invalidate()
+    release()
+    await leaving
+
+    expect(effects).toEqual(['persist-session'])
   })
 })

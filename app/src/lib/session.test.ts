@@ -10,6 +10,7 @@ import {
   persistAnalysis,
   resetSession,
   setPendingPhoto,
+  replacePendingPhoto,
   setReviewedPhoto,
   startFollowUp,
 } from './session'
@@ -132,6 +133,56 @@ describe('session', () => {
       analysis: null, followUp: null, parentScanId: 'scan-1',
     })
     expect(getSession()).toMatchObject({ routeIntent: 'review', parentScanId: 'scan-1', isRetry: true })
+  })
+
+  it('keeps a follow-up parent through an explicit review-photo replacement and restart', async () => {
+    const repository = new MemorySessionRepository()
+    await hydrateSession(repository as unknown as ScanRepository)
+    await startFollowUp('scan-1', withFollowUp.followUp!)
+    await setPendingPhoto({ uri: 'file:///cache/first-follow-up.jpg', origin: 'camera' })
+
+    await replacePendingPhoto({ uri: 'file:///cache/replacement-follow-up.jpg', origin: 'library' })
+    await hydrateSession(repository as unknown as ScanRepository)
+
+    expect(repository.state).toMatchObject({
+      routeIntent: 'review', photoUri: 'file:///cache/replacement-follow-up.jpg', origin: 'library', parentScanId: 'scan-1',
+    })
+    expect(getSession()).toMatchObject({ routeIntent: 'review', parentScanId: 'scan-1', isRetry: true })
+  })
+
+  it('does not give an ordinary review replacement a follow-up parent', async () => {
+    const repository = new MemorySessionRepository()
+    await hydrateSession(repository as unknown as ScanRepository)
+    await setPendingPhoto({ uri: 'file:///cache/original.jpg', origin: 'camera' })
+
+    await replacePendingPhoto({ uri: 'file:///cache/replacement.jpg', origin: 'library' })
+
+    expect(repository.state).toMatchObject({ routeIntent: 'review', parentScanId: null, photoUri: 'file:///cache/replacement.jpg' })
+    expect(getSession()).toMatchObject({ routeIntent: 'review', parentScanId: null, isRetry: false })
+  })
+
+  it('reverts a stale check-work session persistence before it changes the in-memory session', async () => {
+    const repository = new MemorySessionRepository()
+    await hydrateSession(repository as unknown as ScanRepository)
+    let release!: () => void
+    const delayed = new Promise<void>((resolve) => { release = resolve })
+    let writeCount = 0
+    repository.setState = async (key, value) => {
+      if (key === 'active-session' && writeCount++ === 0) await delayed
+      repository.state = value
+    }
+    let current = true
+
+    const pending = startFollowUp('scan-1', withFollowUp.followUp!, { isCurrent: () => current })
+    current = false
+    release()
+
+    await expect(pending).resolves.toBe(false)
+    expect(repository.state).toEqual({
+      routeIntent: 'capture', pendingScanId: null, photoUri: null, origin: null,
+      analysis: null, followUp: null, parentScanId: null,
+    })
+    expect(getSession()).toMatchObject({ routeIntent: 'capture', parentScanId: null })
   })
 
   it('discards invalid persisted state and falls back to capture', async () => {

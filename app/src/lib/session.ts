@@ -19,6 +19,8 @@ export type Session = {
   isInterrupted: boolean
 }
 
+type SessionCommitOptions = { isCurrent?: () => boolean }
+
 export type ReviewedPhoto = {
   scanId: string
   uri: string
@@ -54,7 +56,7 @@ function persisted(sessionValue: Session): PersistedSession {
 function fromPersisted(value: PersistedSession, isInterrupted = false): Session {
   return {
     ...value,
-    isRetry: value.routeIntent === 'follow-up',
+    isRetry: value.routeIntent === 'follow-up' || (value.routeIntent === 'review' && value.parentScanId !== null),
     isInterrupted,
   }
 }
@@ -63,6 +65,22 @@ async function commit(next: Session): Promise<void> {
   const state = persisted(next)
   if (sessionRepository) await sessionRepository.setState(ACTIVE_SESSION_KEY, state)
   session = next
+}
+
+async function commitIfCurrent(next: Session, options: SessionCommitOptions): Promise<boolean> {
+  const isCurrent = options.isCurrent ?? (() => true)
+  if (!isCurrent()) return false
+  const state = persisted(next)
+  if (sessionRepository) {
+    await sessionRepository.setState(ACTIVE_SESSION_KEY, state)
+    if (!isCurrent()) {
+      await sessionRepository.setState(ACTIVE_SESSION_KEY, persisted(session))
+      return false
+    }
+  }
+  if (!isCurrent()) return false
+  session = next
+  return true
 }
 
 export function getSession(): Session {
@@ -102,6 +120,14 @@ export async function acknowledgePrivacyDisclosure(): Promise<void> {
 
 export async function setPendingPhoto(input: { uri: string; origin: ScanOrigin }): Promise<void> {
   const parentScanId = session.routeIntent === 'follow-up' ? session.parentScanId : null
+  await commit({
+    routeIntent: 'review', pendingScanId: null, photoUri: input.uri, origin: input.origin,
+    analysis: null, followUp: null, parentScanId, isRetry: parentScanId !== null, isInterrupted: false,
+  })
+}
+
+export async function replacePendingPhoto(input: { uri: string; origin: ScanOrigin }): Promise<void> {
+  const parentScanId = session.routeIntent === 'review' ? session.parentScanId : null
   await commit({
     routeIntent: 'review', pendingScanId: null, photoUri: input.uri, origin: input.origin,
     analysis: null, followUp: null, parentScanId, isRetry: parentScanId !== null, isInterrupted: false,
@@ -148,11 +174,11 @@ export function adoptReviewSession(): void {
   session = reviewSession()
 }
 
-export function startFollowUp(parentScanId: string, followUp: FollowUp): Promise<void> {
-  return commit({
+export function startFollowUp(parentScanId: string, followUp: FollowUp, options: SessionCommitOptions = {}): Promise<boolean> {
+  return commitIfCurrent({
     routeIntent: 'follow-up', pendingScanId: null, photoUri: null, origin: null,
     analysis: null, followUp, parentScanId, isRetry: true, isInterrupted: false,
-  })
+  }, options)
 }
 
 export async function resetSession(options: { preserveDraft?: boolean } = {}): Promise<void> {

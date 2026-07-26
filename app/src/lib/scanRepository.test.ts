@@ -330,6 +330,18 @@ describe('scan repository records', () => {
     expect((await repository.get('parent'))?.followUpStatus).toBe('unresolved')
   })
 
+  it('does not persist a stale parent status update', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+
+    await expect(repository.setFollowUpStatus('parent', 'in-progress', () => false)).rejects.toThrow('follow-up status is no longer current')
+
+    expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
+  })
+
   it('adds a correction revision and switches the active revision atomically', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)

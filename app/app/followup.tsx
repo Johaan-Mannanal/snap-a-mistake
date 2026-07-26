@@ -7,6 +7,7 @@ import { ApiError, requestAlternateFollowUp } from '../src/lib/api'
 import {
   buildAlternateFollowUpContext,
   createFollowUpPracticeState,
+  createFollowUpCheckFence,
   revealFollowUpHint,
   replaceFollowUpProblem,
   type FollowUpPracticeState,
@@ -40,12 +41,27 @@ export default function FollowUp() {
   const [checkingWork, setCheckingWork] = useState(false)
   const alternateRequest = useRef<AbortController | null>(null)
   const checkLock = useRef(false)
+  const checkFence = useRef(createFollowUpCheckFence())
+  const mounted = useRef(true)
 
-  useEffect(() => () => alternateRequest.current?.abort(), [])
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      alternateRequest.current?.abort()
+      void checkFence.current.invalidate()
+    }
+  }, [])
+
+  const leave = (navigate: () => void) => {
+    alternateRequest.current?.abort()
+    void checkFence.current.invalidate().then(() => {
+      if (mounted.current) navigate()
+    })
+  }
 
   const back = () => {
-    alternateRequest.current?.abort()
-    router.back()
+    leave(() => router.back())
   }
 
   const requestAnother = () => {
@@ -88,18 +104,27 @@ export default function FollowUp() {
     alternateRequest.current?.abort()
     setCheckingWork(true)
     setAlternateFailure(null)
-    void (async () => {
+    const run = checkFence.current.begin()
+    const owns = () => mounted.current && checkFence.current.owns(run)
+    const task = (async () => {
       try {
-        await startFollowUp(parentScanId, practice.followUp)
-        await getLocalScanRepository().setFollowUpStatus(parentScanId, 'in-progress')
+        if (!owns()) return
+        const persisted = await startFollowUp(parentScanId, practice.followUp, { isCurrent: owns })
+        if (!persisted || !owns()) return
+        await getLocalScanRepository().setFollowUpStatus(parentScanId, 'in-progress', owns)
+        if (!owns()) return
         router.dismissTo('/')
       } catch {
+        if (!owns()) return
         setAlternateFailure('We couldn’t prepare your follow-up attempt. Your problem is still here; try again.')
       } finally {
-        checkLock.current = false
-        setCheckingWork(false)
+        if (checkFence.current.owns(run)) {
+          checkLock.current = false
+          setCheckingWork(false)
+        }
       }
     })()
+    checkFence.current.track(run, task)
   }
 
   if (practice === null) {

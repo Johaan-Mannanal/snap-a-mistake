@@ -34,7 +34,7 @@ export interface ScanRepository {
   applyCorrection(scanId: string, rejectedRevisionId: string, revision: ScanRevision, durationMs: number, session?: PersistedSession, isCurrent?: () => boolean): Promise<ScanRecord>
   excludeDiagnosis(scanId: string, session?: PersistedSession, isCurrent?: () => boolean): Promise<ScanRecord>
   setFeedback(scanId: string, feedback: FeedbackState): Promise<ScanRecord>
-  setFollowUpStatus(scanId: string, status: FollowUpStatus): Promise<ScanRecord>
+  setFollowUpStatus(scanId: string, status: FollowUpStatus, isCurrent?: () => boolean): Promise<ScanRecord>
   get(scanId: string): Promise<ScanRecord | null>
   list(): Promise<ScanRecord[]>
   loadTrendSources(): Promise<TrendSource[]>
@@ -363,10 +363,17 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       })
     },
 
-    async setFollowUpStatus(scanId, status): Promise<ScanRecord> {
+    async setFollowUpStatus(scanId, status, isCurrent): Promise<ScanRecord> {
       return db.withExclusiveTransactionAsync(async (transaction) => {
-        await requireRecord(transaction, scanId)
+        const requireCurrent = () => {
+          if (isCurrent && !isCurrent()) throw new Error('follow-up status is no longer current')
+        }
+        requireCurrent()
+        const scan = await requireRecord(transaction, scanId)
+        requireCurrent()
+        if (scan.followUpStatus === status) return scan
         await transaction.runAsync('UPDATE scans SET follow_up_status = ?, updated_at = ? WHERE id = ?', [status, now(), scanId])
+        requireCurrent()
         return requireRecord(transaction, scanId)
       })
     },
