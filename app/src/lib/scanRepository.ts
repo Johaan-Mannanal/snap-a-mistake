@@ -16,6 +16,7 @@ import {
   type ScanLifecycle,
   type TrendSource,
   type PersistedSession,
+  PersistedSessionSchema,
 } from './scanTypes'
 
 export interface DatabasePort {
@@ -314,13 +315,16 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
         throw new Error('interrupted analysis must restore its matching review session')
       return db.withExclusiveTransactionAsync(async (transaction) => {
         const scan = await requireRecord(transaction, scanId)
-        const restored = scan.activeRevision === null
+        const restored: PersistedSession = scan.activeRevision === null
           ? session
-          : {
+          : PersistedSessionSchema.parse({
               ...session,
               routeIntent: 'result' as const,
               analysis: scan.activeRevision.response,
-            }
+              followUp: responseFollowUp(scan.activeRevision.response),
+              followUpHintVisible: false,
+              previousFollowUpProblems: [],
+            })
         if (scan.activeRevision === null) {
           await transaction.runAsync(
             'UPDATE scans SET lifecycle = ?, updated_at = ? WHERE id = ?',

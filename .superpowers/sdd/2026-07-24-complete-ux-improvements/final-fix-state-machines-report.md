@@ -21,8 +21,9 @@ New integration tests were then observed RED for the intended reasons:
 - The repository did not persist an accepted alternate on its parent.
 - Atomic follow-up return, follow-up Retake recovery, and reopening the accepted alternate were absent.
 - Cold Result entry did not distinguish a restored terminal result, allowing unmount cleanup to treat it as an active analysis.
+- Review found that committed-revision recovery changed only route/analysis, producing invalid Result state when original and follow-up-child Analyze sessions carried different practice fields. Real-schema tests reproduced both failures through a second hydration.
 
-The final focused state-machine gate passed 99/99 tests across:
+The final focused state-machine gate passed 101/101 tests across:
 
 - `stateMachineIntegration.test.ts`
 - `session.test.ts`
@@ -38,6 +39,7 @@ The final focused state-machine gate passed 99/99 tests across:
 - Persisted Review, Result, and Follow-up sessions restore to `/review`, `/analyze`, and `/followup`; capture produces no redirect.
 - Terminated analysis recovery uses one repository transaction to set the scan lifecycle to `interrupted` and replace `active-session` with its Review state.
 - If a revision committed before the Result session write, that same recovery transaction restores Result from the active revision and preserves the completed lifecycle.
+- Recovered Result state is rebuilt and schema-validated from the committed response: follow-up is derived from that response, hint/history are reset, and follow-up-child `parentScanId` is retained.
 - Result entry initializes from the persisted response and does not auto-run analysis. It reloads the active durable revision for feedback availability.
 - A restored Result immediately marks analysis finalization as a successful handoff, so unmount cleanup cannot interrupt the completed scan or replace its Result session.
 - `setPendingPhoto()` rejects a second unsolicited capture while a recoverable photo/session exists.
@@ -72,6 +74,7 @@ The final focused state-machine gate passed 99/99 tests across:
 - Interruption: scan lifecycle and Review app state roll back together if the state write fails.
 - Hydration: route intent is cleared on first read; React effect re-runs cannot reuse it.
 - Cold Result: analysis auto-run is false, finalization cleanup is terminal/no-op, and active-revision lookup is fenced by mount and scan ID.
+- Committed recovery: original and follow-up-child results both persist schema-valid state and survive a full second hydration/reparse.
 - Same-photo retry: scan ID and URI are stable; no copy/create call occurs; replacement explicitly clears the active ID.
 - Follow-up entry/update: ownership compares the original session before and after parent lookup and inside the exclusive repository transaction.
 - Follow-up Back: invalidates pending practice/check ownership before the atomic parent/session return.
@@ -85,7 +88,7 @@ The final focused state-machine gate passed 99/99 tests across:
   - shared: 23/23
   - server Vitest: 114/114
   - server importer: 4/4
-  - app: 278/278
+  - app: 280/280
 - `npm run typecheck` — PASS for shared, server, and app.
 - `npm run lint -w app` — PASS.
 - `git diff --check` — PASS (no output).

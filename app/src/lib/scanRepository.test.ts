@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AnalyzeResponse } from '@snap/shared'
 import { createScanRepository, type DatabasePort } from './scanRepository'
 import { PersistedSessionSchema, type NewScanDraft, type PersistedSession, type ScanRevision } from './scanTypes'
+import { getSession, hydrateSession, takeHydratedRouteIntent } from './session'
 
 type ScanRow = Record<string, unknown>
 type RevisionRow = Record<string, unknown>
@@ -334,6 +335,73 @@ describe('scan repository records', () => {
     expect((await repository.get('scan-1'))?.lifecycle).toBe('complete')
     await expect(repository.getState('active-session', PersistedSessionSchema))
       .resolves.toMatchObject({ routeIntent: 'result', analysis: savedRevision.response })
+  })
+
+  it('persists a schema-valid original result that survives a second hydration', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.saveRevision('scan-1', diagnosisRevision, 400)
+    await repository.setState('active-session', {
+      routeIntent: 'analyze', pendingScanId: 'scan-1',
+      photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: null, followUp: null, followUpHintVisible: false,
+      previousFollowUpProblems: [], parentScanId: null,
+    } satisfies PersistedSession)
+
+    await hydrateSession(repository)
+    expect(getSession()).toMatchObject({
+      routeIntent: 'result',
+      followUp: diagnosisRevision.response.kind === 'analysis' ? diagnosisRevision.response.followUp : null,
+      followUpHintVisible: false,
+      previousFollowUpProblems: [],
+      parentScanId: null,
+    })
+    expect(takeHydratedRouteIntent()).toBe('result')
+
+    await hydrateSession(repository)
+    expect(takeHydratedRouteIntent()).toBe('result')
+    expect(getSession()).toMatchObject({ routeIntent: 'result', analysis: diagnosisRevision.response })
+  })
+
+  it('persists a schema-valid follow-up child result that survives a second hydration', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+    await repository.createDraft({ ...draft('child'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    const childRevision = revision('child-revision', 'initial')
+    await repository.saveRevision('child', childRevision, 300)
+    const activeProblem = diagnosisRevision.response.kind === 'analysis'
+      ? diagnosisRevision.response.followUp!
+      : null
+    await repository.setState('active-session', {
+      routeIntent: 'analyze', pendingScanId: 'child',
+      photoUri: 'file:///documents/scans/child.jpg', origin: 'camera',
+      analysis: null, followUp: activeProblem, followUpHintVisible: true,
+      previousFollowUpProblems: ['Earlier alternate'], parentScanId: 'parent',
+    } satisfies PersistedSession)
+
+    await hydrateSession(repository)
+    expect(getSession()).toMatchObject({
+      routeIntent: 'result',
+      analysis: childRevision.response,
+      followUp: null,
+      followUpHintVisible: false,
+      previousFollowUpProblems: [],
+      parentScanId: 'parent',
+    })
+    expect(takeHydratedRouteIntent()).toBe('result')
+
+    await hydrateSession(repository)
+    expect(takeHydratedRouteIntent()).toBe('result')
+    expect(getSession()).toMatchObject({
+      routeIntent: 'result',
+      analysis: childRevision.response,
+      parentScanId: 'parent',
+    })
   })
 
   it('rolls back interruption when the restored session cannot be written', async () => {
