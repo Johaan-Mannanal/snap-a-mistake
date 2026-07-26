@@ -16,10 +16,12 @@ import {
   beginFollowUp,
 } from './session'
 import {
+  createReviewTransaction,
   createReviewMutationCoordinator,
   resumeReviewTransaction,
   advanceReviewTransaction,
 } from './reviewTransaction'
+import { createFollowUpHandoffCoordinator, replaceFollowUpProblem, type FollowUpPracticeState } from './followUp'
 import { initialAnalysisEntry } from './analysisEntry'
 import { PersistedSessionSchema } from './scanTypes'
 
@@ -85,7 +87,9 @@ class SessionRepository {
     isCurrent: () => boolean,
   ): Promise<boolean> {
     if (!isCurrent()) return false
-    this.state = value
+    const persisted = PersistedSessionSchema.parse(value)
+    this.state = persisted
+    this.parentFollowUp = persisted.followUp ?? this.parentFollowUp
     return true
   }
 
@@ -235,6 +239,112 @@ describe('same-photo retry and replacement ownership', () => {
       followUp,
       hintVisible: true,
       previousProblems: ['Simplify −(x + 2).'],
+    })
+  })
+
+  it('keeps the checked problem durable when a pending alternate resolves after camera handoff', async () => {
+    const checkedProblem = {
+      problem: 'Simplify −(3x − 4).',
+      concept: 'sign distribution',
+      hint: 'Apply the negative sign to each term.',
+    }
+    const lateAlternate = {
+      problem: 'Simplify −(5x + 1).',
+      concept: 'sign distribution',
+      hint: 'Distribute the negative to both terms.',
+    }
+    const repository = new SessionRepository()
+    repository.state = {
+      routeIntent: 'result', pendingScanId: 'parent-1',
+      photoUri: 'file:///documents/scans/parent-1.jpg', origin: 'camera',
+      analysis: result, followUp: checkedProblem, parentScanId: null,
+    }
+    repository.parentFollowUp = checkedProblem
+    await hydrateSession(repository as unknown as ScanRepository)
+    await startFollowUp('parent-1', checkedProblem)
+    const visiblePractice = getFollowUpPractice()
+    if (visiblePractice === null) throw new Error('expected visible practice')
+    const coordinator = createFollowUpHandoffCoordinator()
+    let resolveAlternate!: (practice: FollowUpPracticeState) => void
+    const pendingAlternate = new Promise<FollowUpPracticeState>((resolve) => { resolveAlternate = resolve })
+    let alternateStarted = false
+    let alternatePersistCalls = 0
+
+    const alternate = coordinator.startAlternate(visiblePractice, {
+      request: async () => {
+        alternateStarted = true
+        return pendingAlternate
+      },
+      persist: (replacement, isCurrent) => {
+        alternatePersistCalls += 1
+        return startFollowUp('parent-1', replacement.followUp, {
+          hintVisible: replacement.hintVisible,
+          previousProblems: replacement.previousProblems,
+          isCurrent,
+        })
+      },
+      isRouteCurrent: () => true,
+    })
+    expect(alternate.started).toBe(true)
+    expect(alternateStarted).toBe(true)
+
+    const check = coordinator.startCheck(visiblePractice, {
+      persist: (snapshot, isCurrent) => startFollowUp('parent-1', snapshot.followUp, {
+        hintVisible: snapshot.hintVisible,
+        previousProblems: snapshot.previousProblems,
+        isCurrent,
+      }),
+      isRouteCurrent: () => true,
+    })
+    expect(check.started).toBe(true)
+    let cameraHandoffs = 0
+    if (await check.promise) cameraHandoffs += 1
+
+    const replacement = replaceFollowUpProblem(visiblePractice, lateAlternate)
+    if (replacement === null) throw new Error('expected distinct late alternate')
+    resolveAlternate(replacement)
+    await expect(alternate.promise).resolves.toEqual({ kind: 'stale' })
+
+    expect(cameraHandoffs).toBe(1)
+    expect(alternatePersistCalls).toBe(0)
+    expect(repository.parentFollowUp).toEqual(checkedProblem)
+    expect(repository.state).toMatchObject({
+      routeIntent: 'follow-up',
+      parentScanId: 'parent-1',
+      followUp: checkedProblem,
+    })
+    expect(getSession()).toMatchObject({
+      routeIntent: 'follow-up',
+      parentScanId: 'parent-1',
+      followUp: checkedProblem,
+    })
+
+    await setPendingPhoto({ uri: 'file:///cache/child.jpg', origin: 'camera' })
+    let childDraft: { parentScanId: string | null } | null = null
+    await advanceReviewTransaction(
+      createReviewTransaction('child-1', true),
+      {
+        origin: 'camera',
+        attemptKind: 'follow-up',
+        parentScanId: 'parent-1',
+        createdAt: '2026-07-26T12:00:00.000Z',
+      },
+      {
+        ownPhoto: async () => 'file:///documents/scans/child-1.jpg',
+        findDraft: async () => false,
+        createDraft: async (draft) => { childDraft = { parentScanId: draft.parentScanId } },
+        persistReviewedPhoto: setReviewedPhoto,
+        acknowledgeDisclosure: async () => {},
+      },
+    )
+
+    expect(childDraft).toEqual({ parentScanId: 'parent-1' })
+    expect(repository.parentFollowUp).toEqual(checkedProblem)
+    expect(getSession()).toMatchObject({
+      routeIntent: 'analyze',
+      pendingScanId: 'child-1',
+      parentScanId: 'parent-1',
+      followUp: checkedProblem,
     })
   })
 

@@ -8,7 +8,7 @@ import {
   buildAlternateFollowUpContext,
   canStartAlternateFollowUp,
   createFollowUpPracticeState,
-  createFollowUpCheckFence,
+  createFollowUpHandoffCoordinator,
   createFollowUpLeaveLock,
   revealFollowUpHint,
   replaceFollowUpProblem,
@@ -44,8 +44,7 @@ export default function FollowUp() {
   const [checkFailure, setCheckFailure] = useState<string | null>(null)
   const [isLeaving, setIsLeaving] = useState(false)
   const [leaveFailure, setLeaveFailure] = useState<string | null>(null)
-  const alternateRequest = useRef<AbortController | null>(null)
-  const checkFence = useRef(createFollowUpCheckFence())
+  const handoff = useRef(createFollowUpHandoffCoordinator())
   const leaveLock = useRef(createFollowUpLeaveLock())
   const mounted = useRef(true)
   const practiceRouteCurrent = useRef(true)
@@ -53,19 +52,17 @@ export default function FollowUp() {
 
   useEffect(() => {
     mounted.current = true
-    const fence = checkFence.current
+    const coordinator = handoff.current
     return () => {
       mounted.current = false
       practiceRouteCurrent.current = false
-      alternateRequest.current?.abort()
-      void fence.invalidate().catch(() => {})
+      void coordinator.invalidate().catch(() => {})
     }
   }, [])
   const leave = () => {
-    alternateRequest.current?.abort()
     practiceRouteCurrent.current = false
     const operation = leaveLock.current.run(async () => {
-      await checkFence.current.invalidate()
+      await handoff.current.invalidate()
       if (parentScanId !== null) {
         const restored = await returnFromFollowUp(parentScanId, { isCurrent: () => mounted.current })
         if (!restored) throw new Error('practice route changed')
@@ -91,44 +88,47 @@ export default function FollowUp() {
     if (!canStartAlternateFollowUp({
       hasPractice: practice !== null,
       hasParent: parentScanId !== null,
-      requestingAlternate: requestingAlternate || alternateRequest.current !== null,
+      requestingAlternate: requestingAlternate || handoff.current.alternateBusy,
       checkingWork,
       isLeaving,
       routeCurrent: practiceRouteCurrent.current,
-      checkOwned: checkFence.current.busy,
+      checkOwned: handoff.current.checkBusy,
       leaveOwned: leaveLock.current.busy,
     }) || practice === null || parentScanId === null) return
-    const controller = new AbortController()
-    alternateRequest.current = controller
+    const operation = handoff.current.startAlternate(practice, {
+      request: async (signal) => {
+        const diagnosis = await diagnosisForParent()
+        const alternate = await requestAlternateFollowUp(
+          buildAlternateFollowUpContext(practice, diagnosis),
+          { signal },
+        )
+        return replaceFollowUpProblem(practice, alternate)
+      },
+      persist: (replacement, isCurrent) => startFollowUp(parentScanId, replacement.followUp, {
+        hintVisible: replacement.hintVisible,
+        previousProblems: replacement.previousProblems,
+        isCurrent: () => mounted.current && practiceRouteCurrent.current && isCurrent(),
+      }),
+      isRouteCurrent: () => mounted.current && practiceRouteCurrent.current,
+    })
+    if (!operation.started) return
     setRequestingAlternate(true)
     setAlternateFailure(null)
-    void (async () => {
-      try {
-        const diagnosis = await diagnosisForParent()
-        const alternate = await requestAlternateFollowUp(buildAlternateFollowUpContext(practice, diagnosis), { signal: controller.signal })
-        if (alternateRequest.current !== controller) return
-        const replacement = replaceFollowUpProblem(practice, alternate)
-        if (replacement === null) {
+    void operation.promise.then(
+      (result) => {
+        if (!mounted.current) return
+        if (result.kind === 'duplicate') {
           setAlternateFailure('That problem was too similar. Try another similar problem.')
-          return
         }
-        const persisted = await startFollowUp(parentScanId, replacement.followUp, {
-          hintVisible: replacement.hintVisible,
-          previousProblems: replacement.previousProblems,
-          isCurrent: () => mounted.current && practiceRouteCurrent.current && alternateRequest.current === controller,
-        })
-        if (!persisted || alternateRequest.current !== controller) return
-        setPractice(replacement)
-      } catch (error) {
-        if (alternateRequest.current !== controller || (error instanceof ApiError && error.failure.kind === 'cancelled')) return
+        if (result.kind === 'updated') setPractice(result.practice)
+      },
+      (error) => {
+        if (!mounted.current || (error instanceof ApiError && error.failure.kind === 'cancelled')) return
         setAlternateFailure('We couldn’t get another problem. Your current problem is still here.')
-      } finally {
-        if (alternateRequest.current === controller) {
-          alternateRequest.current = null
-          setRequestingAlternate(false)
-        }
-      }
-    })()
+      },
+    ).finally(() => {
+      if (mounted.current) setRequestingAlternate(false)
+    })
   }
 
   const checkWork = () => {
@@ -136,7 +136,7 @@ export default function FollowUp() {
       practice === null
       || checkingWork
       || isLeaving
-      || checkFence.current.busy
+      || handoff.current.checkBusy
       || leaveLock.current.busy
       || !practiceRouteCurrent.current
     ) return
@@ -144,36 +144,29 @@ export default function FollowUp() {
       setAlternateFailure('This practice problem is no longer linked to its analysis. Go back and choose it again.')
       return
     }
-    const run = checkFence.current.begin(practice)
-    if (run === null) return
-    const invalidatedAlternate = alternateRequest.current
-    alternateRequest.current = null
-    invalidatedAlternate?.abort()
+    const operation = handoff.current.startCheck(practice, {
+      persist: (snapshot, isCurrent) => startFollowUp(parentScanId, snapshot.followUp, {
+        hintVisible: snapshot.hintVisible,
+        previousProblems: snapshot.previousProblems,
+        isCurrent: () => mounted.current && practiceRouteCurrent.current && isCurrent(),
+      }),
+      isRouteCurrent: () => mounted.current && practiceRouteCurrent.current,
+    })
+    if (!operation.started) return
     setRequestingAlternate(false)
     setCheckingWork(true)
     setCheckFailure(null)
     setAlternateFailure(null)
-    const owns = () => mounted.current && checkFence.current.owns(run)
-    const task = (async () => {
-      try {
-        if (!owns()) return
-        const persisted = await startFollowUp(parentScanId, run.practice.followUp, {
-          hintVisible: run.practice.hintVisible,
-          previousProblems: run.practice.previousProblems,
-          isCurrent: () => practiceRouteCurrent.current && owns(),
-        })
-        if (!persisted || !owns()) return
-        router.dismissTo('/')
-      } catch (error) {
-        if (owns()) setCheckFailure('We couldn’t prepare your follow-up attempt. Your problem is still here; try again.')
-        throw error
-      } finally {
-        if (checkFence.current.owns(run)) {
-          setCheckingWork(false)
-        }
-      }
-    })()
-    checkFence.current.track(run, task)
+    void operation.promise.then(
+      (ownsHandoff) => {
+        if (ownsHandoff && mounted.current) router.dismissTo('/')
+      },
+      () => {
+        if (mounted.current) setCheckFailure('We couldn’t prepare your follow-up attempt. Your problem is still here; try again.')
+      },
+    ).finally(() => {
+      if (mounted.current) setCheckingWork(false)
+    })
   }
 
   const revealHint = () => {
@@ -182,7 +175,7 @@ export default function FollowUp() {
       || parentScanId === null
       || checkingWork
       || isLeaving
-      || checkFence.current.busy
+      || handoff.current.checkBusy
       || leaveLock.current.busy
       || !practiceRouteCurrent.current
     ) return

@@ -26,6 +26,95 @@ export type FollowUpLeaveLock = {
   run(task: () => Promise<void>): { started: boolean; promise: Promise<void> }
 }
 
+export type FollowUpAlternateResult =
+  | { kind: 'updated'; practice: FollowUpPracticeState }
+  | { kind: 'duplicate' }
+  | { kind: 'stale' }
+
+type FollowUpOperation<T> = {
+  started: boolean
+  promise: Promise<T>
+}
+
+export type FollowUpHandoffCoordinator = {
+  readonly alternateBusy: boolean
+  readonly checkBusy: boolean
+  startAlternate(
+    practice: FollowUpPracticeState,
+    dependencies: {
+      request(signal: AbortSignal): Promise<FollowUpPracticeState | null>
+      persist(practice: FollowUpPracticeState, isCurrent: () => boolean): Promise<boolean>
+      isRouteCurrent(): boolean
+    },
+  ): FollowUpOperation<FollowUpAlternateResult>
+  startCheck(
+    practice: FollowUpPracticeState,
+    dependencies: {
+      persist(practice: FollowUpPracticeState, isCurrent: () => boolean): Promise<boolean>
+      isRouteCurrent(): boolean
+    },
+  ): FollowUpOperation<boolean>
+  invalidate(): Promise<void>
+}
+
+export function createFollowUpHandoffCoordinator(): FollowUpHandoffCoordinator {
+  const checkFence = createFollowUpCheckFence()
+  let alternateController: AbortController | null = null
+
+  return {
+    get alternateBusy() { return alternateController !== null },
+    get checkBusy() { return checkFence.busy },
+    startAlternate(practice, dependencies) {
+      if (alternateController !== null || checkFence.busy)
+        return { started: false, promise: Promise.resolve({ kind: 'stale' as const }) }
+      const controller = new AbortController()
+      alternateController = controller
+      const owns = () => (
+        alternateController === controller
+        && !checkFence.busy
+        && dependencies.isRouteCurrent()
+      )
+      const promise = (async (): Promise<FollowUpAlternateResult> => {
+        try {
+          const replacement = await dependencies.request(controller.signal)
+          if (!owns()) return { kind: 'stale' }
+          if (replacement === null) return { kind: 'duplicate' }
+          const persisted = await dependencies.persist(replacement, owns)
+          if (!persisted || !owns()) return { kind: 'stale' }
+          return { kind: 'updated', practice: replacement }
+        } catch (error) {
+          if (!owns()) return { kind: 'stale' }
+          throw error
+        } finally {
+          if (alternateController === controller) alternateController = null
+        }
+      })()
+      return { started: true, promise }
+    },
+    startCheck(practice, dependencies) {
+      const run = checkFence.begin(practice)
+      if (run === null) return { started: false, promise: Promise.resolve(false) }
+      const invalidatedAlternate = alternateController
+      alternateController = null
+      invalidatedAlternate?.abort()
+      const owns = () => checkFence.owns(run) && dependencies.isRouteCurrent()
+      const promise = (async () => {
+        if (!owns()) return false
+        const persisted = await dependencies.persist(run.practice, owns)
+        return persisted && owns()
+      })()
+      checkFence.track(run, promise.then(() => undefined))
+      return { started: true, promise }
+    },
+    async invalidate() {
+      const invalidatedAlternate = alternateController
+      alternateController = null
+      invalidatedAlternate?.abort()
+      await checkFence.invalidate()
+    },
+  }
+}
+
 export type AlternateFollowUpStartState = {
   hasPractice: boolean
   hasParent: boolean
