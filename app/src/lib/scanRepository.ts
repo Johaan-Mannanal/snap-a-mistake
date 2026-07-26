@@ -32,7 +32,7 @@ export interface ScanRepository {
   setLifecycle(scanId: string, lifecycle: Extract<ScanLifecycle, 'analyzing' | 'interrupted' | 'unsaved'>): Promise<ScanRecord>
   saveRevision(scanId: string, revision: ScanRevision, durationMs: number): Promise<ScanRecord>
   applyCorrection(scanId: string, rejectedRevisionId: string, revision: ScanRevision, durationMs: number, session?: PersistedSession, isCurrent?: () => boolean): Promise<ScanRecord>
-  excludeDiagnosis(scanId: string, session?: PersistedSession): Promise<ScanRecord>
+  excludeDiagnosis(scanId: string, session?: PersistedSession, isCurrent?: () => boolean): Promise<ScanRecord>
   setFeedback(scanId: string, feedback: FeedbackState): Promise<ScanRecord>
   setFollowUpStatus(scanId: string, status: FollowUpStatus): Promise<ScanRecord>
   get(scanId: string): Promise<ScanRecord | null>
@@ -311,20 +311,29 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       })
     },
 
-    async excludeDiagnosis(scanId, persistedSession): Promise<ScanRecord> {
+    async excludeDiagnosis(scanId, persistedSession, isCurrent): Promise<ScanRecord> {
       return db.withExclusiveTransactionAsync(async (transaction) => {
+        const requireCurrent = () => {
+          if (isCurrent && !isCurrent()) throw new Error('exclusion is no longer current')
+        }
+        requireCurrent()
         await requireRecord(transaction, scanId)
+        requireCurrent()
         await transaction.runAsync(
           `UPDATE scans SET active_revision_id = ?, lifecycle = ?, analysis_duration_ms = ?, follow_up_json = ?,
            follow_up_status = ?, feedback = ?, updated_at = ? WHERE id = ?`,
           [null, 'review', null, null, 'none', 'excluded', now(), scanId],
         )
+        requireCurrent()
         if (persistedSession) await transaction.runAsync(
           `INSERT INTO app_state (key, value_json) VALUES (?, ?)
            ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
           [ACTIVE_SESSION_KEY, JSON.stringify(persistedSession)],
         )
-        return requireRecord(transaction, scanId)
+        requireCurrent()
+        const record = await requireRecord(transaction, scanId)
+        requireCurrent()
+        return record
       })
     },
 

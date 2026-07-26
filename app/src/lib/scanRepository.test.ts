@@ -326,6 +326,22 @@ describe('scan repository records', () => {
     await expect(repository.loadTrendSources()).resolves.toEqual([])
   })
 
+  it('rolls back an exclusion when its ownership guard is invalidated', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.saveRevision('scan-1', diagnosisRevision, 400)
+
+    await expect(repository.excludeDiagnosis('scan-1', undefined, () => false)).rejects.toThrow('exclusion is no longer current')
+
+    expect(await repository.get('scan-1')).toMatchObject({
+      lifecycle: 'complete',
+      feedback: 'unreviewed',
+      activeRevision: { id: 'revision-with-follow-up' },
+    })
+  })
+
   it('deletes a scan, cascades its revisions, and queues its owned image', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)

@@ -8,6 +8,7 @@ import { adoptResultSession, adoptReviewSession, getSession, persistAnalysis, re
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
 import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
 import { createCorrectionFence, type CorrectionRun } from '../src/lib/correctionAsync'
+import { createCorrectionBusyState } from '../src/lib/correctionBusy'
 import { createAnalysisFinalization, createCompletedReviewReturn } from '../src/lib/analysisFinalization'
 import type { ScanRevision } from '../src/lib/scanTypes'
 import { tagLabel } from '../src/lib/labels'
@@ -62,6 +63,7 @@ export default function Analyze() {
   const resetTransition = useRef<(() => Promise<void>) | null>(null)
   const activeRequest = useRef<AbortController | null>(null)
   const correctionFence = useRef(createCorrectionFence())
+  const correctionBusy = useRef(createCorrectionBusyState())
   const feedbackLock = useRef(createAsyncLock<void>())
   const retryCorrection = useRef<(() => void) | null>(null)
   const requestInFlight = useRef(false)
@@ -90,6 +92,15 @@ export default function Analyze() {
     && getSession().pendingScanId === run.scanId
     && JSON.stringify(getSession().analysis) === JSON.stringify(analysis)
   ), [])
+
+  const beginCorrectionBusy = useCallback((run: CorrectionRun) => {
+    correctionBusy.current.begin(run.token)
+    setFeedbackBusy(true)
+  }, [])
+
+  const finishCorrectionBusy = useCallback((run: CorrectionRun) => {
+    if (correctionBusy.current.finish(run.token)) setFeedbackBusy(false)
+  }, [])
 
   const persistPendingSave = useCallback(async (pending: PendingSave, token: number) => {
     await saveLock.current.run(async () => {
@@ -275,27 +286,32 @@ export default function Analyze() {
   const acceptDiagnosis = useCallback(() => {
     if (!scanId || feedbackLock.current.busy) return
     retryCorrection.current = acceptDiagnosis
-    void feedbackLock.current.run(async () => {
-      setFeedbackBusy(true)
+    const correction = correctionFence.current.begin(scanId)
+    beginCorrectionBusy(correction)
+    const task = feedbackLock.current.run(async () => {
       try {
+        if (!correctionFence.current.owns(correction)) return
         await getLocalScanRepository().setFeedback(scanId, 'accepted')
+        if (!correctionFence.current.owns(correction)) return
         setFeedbackAccepted(true)
         retryCorrection.current = null
       } catch {
+        if (!correctionFence.current.owns(correction)) return
         setCorrectionFailure({ kind: 'network' })
       } finally {
-        setFeedbackBusy(false)
+        finishCorrectionBusy(correction)
       }
     })
-  }, [scanId])
+    correctionFence.current.track(correction, task)
+  }, [beginCorrectionBusy, finishCorrectionBusy, scanId])
 
   const submitCorrection = useCallback((analysis: Extract<AnalyzeResponse, { kind: 'analysis' }>, selectedStepIndex: number, replacement?: Extract<AnalyzeResponse, { kind: 'analysis' }>) => {
     if (!scanId || !uri || durableResultRevisionId === null || feedbackLock.current.busy) return
     const execute = () => {
       const correction = correctionFence.current.begin(scanId)
+      beginCorrectionBusy(correction)
       const task = feedbackLock.current.run(async () => {
         if (!ownsCorrection(correction, analysis)) return
-        setFeedbackBusy(true)
         setCorrectionFailure(null)
         const startedAt = Date.now()
         try {
@@ -325,36 +341,53 @@ export default function Analyze() {
           if (!ownsCorrection(correction, analysis) || (error instanceof ApiError && error.failure.kind === 'cancelled')) return
           setCorrectionFailure(error instanceof ApiError ? error.failure : { kind: 'network' })
         } finally {
-          if (ownsCorrection(correction, analysis)) setFeedbackBusy(false)
+          finishCorrectionBusy(correction)
         }
       })
       correctionFence.current.track(correction, task)
     }
     retryCorrection.current = execute
     execute()
-  }, [durableResultRevisionId, ownsCorrection, scanId, uri])
+  }, [beginCorrectionBusy, durableResultRevisionId, finishCorrectionBusy, ownsCorrection, scanId, uri])
 
-  const excludeDiagnosis = useCallback(() => {
-    if (!scanId || feedbackLock.current.busy) return
-    retryCorrection.current = excludeDiagnosis
-    void feedbackLock.current.run(async () => {
-      setFeedbackBusy(true)
-      try {
-        await correctionFence.current.invalidate()
-        await getLocalScanRepository().excludeDiagnosis(scanId, reviewSession())
-        adoptReviewSession()
-        retryCorrection.current = null
-        router.replace('/review')
-      } catch {
-        setCorrectionFailure({ kind: 'network' })
-      } finally {
-        setFeedbackBusy(false)
-      }
-    })
-  }, [scanId])
+  const excludeDiagnosis = useCallback((analysis: Extract<AnalyzeResponse, { kind: 'analysis' }>) => {
+    if (!scanId || durableResultRevisionId === null || feedbackLock.current.busy) return
+    const execute = () => {
+      const correction = correctionFence.current.begin(scanId)
+      beginCorrectionBusy(correction)
+      const task = feedbackLock.current.run(async () => {
+        if (!ownsCorrection(correction, analysis)) return
+        setCorrectionFailure(null)
+        try {
+          const activeScan = await getLocalScanRepository().get(scanId)
+          if (!ownsCorrection(correction, analysis)) return
+          const activeRevision = activeScan?.activeRevision
+          if (!activeRevision || activeRevision.id !== durableResultRevisionId || JSON.stringify(activeRevision.response) !== JSON.stringify(analysis)) return
+          const nextSession = reviewSession()
+          if (!ownsCorrection(correction, analysis)) return
+          await getLocalScanRepository().excludeDiagnosis(scanId, nextSession, () => ownsCorrection(correction, analysis))
+          if (!ownsCorrection(correction, analysis)) return
+          adoptReviewSession()
+          if (!ownsCorrection(correction, analysis)) return
+          retryCorrection.current = null
+          router.replace('/review')
+        } catch {
+          if (ownsCorrection(correction, analysis)) setCorrectionFailure({ kind: 'network' })
+        } finally {
+          finishCorrectionBusy(correction)
+        }
+      })
+      correctionFence.current.track(correction, task)
+    }
+    retryCorrection.current = execute
+    execute()
+  }, [beginCorrectionBusy, durableResultRevisionId, finishCorrectionBusy, ownsCorrection, scanId])
 
   const cancelCorrection = useCallback(() => {
-    void correctionFence.current.invalidate()
+    const token = correctionBusy.current.currentToken
+    void correctionFence.current.invalidate().then(() => {
+      if (token !== null && correctionBusy.current.finish(token)) setFeedbackBusy(false)
+    })
     setCorrectionFailure(null)
   }, [])
 
@@ -563,7 +596,7 @@ export default function Analyze() {
           onAccept={acceptDiagnosis}
           onCorrectStep={(index) => submitCorrection(result, index)}
           onAllCorrect={() => submitCorrection(result, result.errorStepIndex!, synthesizeAllCorrectResponse(result))}
-          onNotCaptured={excludeDiagnosis}
+          onNotCaptured={() => excludeDiagnosis(result)}
           onRetry={() => retryCorrection.current?.()}
           onCancelRequest={cancelCorrection}
           reduceMotion={reduceMotion}
