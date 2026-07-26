@@ -6,6 +6,7 @@ import { AppScreen } from '../src/components/AppScreen'
 import { ApiError, requestAlternateFollowUp } from '../src/lib/api'
 import {
   buildAlternateFollowUpContext,
+  canStartAlternateFollowUp,
   createFollowUpPracticeState,
   createFollowUpCheckFence,
   createFollowUpLeaveLock,
@@ -44,7 +45,6 @@ export default function FollowUp() {
   const [isLeaving, setIsLeaving] = useState(false)
   const [leaveFailure, setLeaveFailure] = useState<string | null>(null)
   const alternateRequest = useRef<AbortController | null>(null)
-  const checkLock = useRef(false)
   const checkFence = useRef(createFollowUpCheckFence())
   const leaveLock = useRef(createFollowUpLeaveLock())
   const mounted = useRef(true)
@@ -88,7 +88,16 @@ export default function FollowUp() {
   }
 
   const requestAnother = () => {
-    if (practice === null || parentScanId === null || alternateRequest.current !== null) return
+    if (!canStartAlternateFollowUp({
+      hasPractice: practice !== null,
+      hasParent: parentScanId !== null,
+      requestingAlternate: requestingAlternate || alternateRequest.current !== null,
+      checkingWork,
+      isLeaving,
+      routeCurrent: practiceRouteCurrent.current,
+      checkOwned: checkFence.current.busy,
+      leaveOwned: leaveLock.current.busy,
+    }) || practice === null || parentScanId === null) return
     const controller = new AbortController()
     alternateRequest.current = controller
     setRequestingAlternate(true)
@@ -123,24 +132,34 @@ export default function FollowUp() {
   }
 
   const checkWork = () => {
-    if (practice === null || checkLock.current) return
+    if (
+      practice === null
+      || checkingWork
+      || isLeaving
+      || checkFence.current.busy
+      || leaveLock.current.busy
+      || !practiceRouteCurrent.current
+    ) return
     if (parentScanId === null) {
       setAlternateFailure('This practice problem is no longer linked to its analysis. Go back and choose it again.')
       return
     }
-    checkLock.current = true
-    alternateRequest.current?.abort()
+    const run = checkFence.current.begin(practice)
+    if (run === null) return
+    const invalidatedAlternate = alternateRequest.current
+    alternateRequest.current = null
+    invalidatedAlternate?.abort()
+    setRequestingAlternate(false)
     setCheckingWork(true)
     setCheckFailure(null)
     setAlternateFailure(null)
-    const run = checkFence.current.begin()
     const owns = () => mounted.current && checkFence.current.owns(run)
     const task = (async () => {
       try {
         if (!owns()) return
-        const persisted = await startFollowUp(parentScanId, practice.followUp, {
-          hintVisible: practice.hintVisible,
-          previousProblems: practice.previousProblems,
+        const persisted = await startFollowUp(parentScanId, run.practice.followUp, {
+          hintVisible: run.practice.hintVisible,
+          previousProblems: run.practice.previousProblems,
           isCurrent: () => practiceRouteCurrent.current && owns(),
         })
         if (!persisted || !owns()) return
@@ -150,7 +169,6 @@ export default function FollowUp() {
         throw error
       } finally {
         if (checkFence.current.owns(run)) {
-          checkLock.current = false
           setCheckingWork(false)
         }
       }
@@ -159,7 +177,15 @@ export default function FollowUp() {
   }
 
   const revealHint = () => {
-    if (practice === null || parentScanId === null) return
+    if (
+      practice === null
+      || parentScanId === null
+      || checkingWork
+      || isLeaving
+      || checkFence.current.busy
+      || leaveLock.current.busy
+      || !practiceRouteCurrent.current
+    ) return
     const revealed = revealFollowUpHint(practice)
     void startFollowUp(parentScanId, revealed.followUp, {
       hintVisible: true,
@@ -214,21 +240,26 @@ export default function FollowUp() {
         </View>
       </View>
       <View style={styles.actions}>
-        {!practice.hintVisible ? <AppButton label="Show a hint" onPress={revealHint} variant="secondary" /> : null}
-        <AppButton label={requestingAlternate ? 'Finding another problem…' : 'Try another similar problem'} onPress={requestAnother} disabled={requestingAlternate} variant="secondary" />
+        {!practice.hintVisible ? <AppButton label="Show a hint" onPress={revealHint} disabled={checkingWork || isLeaving} variant="secondary" /> : null}
+        <AppButton
+          label={requestingAlternate ? 'Finding another problem…' : 'Try another similar problem'}
+          onPress={requestAnother}
+          disabled={requestingAlternate || checkingWork || isLeaving}
+          variant="secondary"
+        />
         {alternateFailure ? (
           <View style={styles.failure}>
             <Text accessibilityRole="alert" style={styles.failureCopy}>{alternateFailure}</Text>
-            {!checkingWork ? <AppButton label="Retry another problem" onPress={requestAnother} disabled={requestingAlternate} variant="tertiary" /> : null}
+            {!checkingWork ? <AppButton label="Retry another problem" onPress={requestAnother} disabled={requestingAlternate || isLeaving} variant="tertiary" /> : null}
           </View>
         ) : null}
         {checkFailure ? (
           <View style={styles.failure}>
             <Text accessibilityRole="alert" style={styles.failureCopy}>{checkFailure}</Text>
-            <AppButton label="Try checking my work again" onPress={checkWork} disabled={checkingWork} variant="tertiary" />
+            <AppButton label="Try checking my work again" onPress={checkWork} disabled={checkingWork || isLeaving} variant="tertiary" />
           </View>
         ) : null}
-        <AppButton label={checkingWork ? 'Preparing camera…' : 'Check my work'} onPress={checkWork} disabled={checkingWork} />
+        <AppButton label={checkingWork ? 'Preparing camera…' : 'Check my work'} onPress={checkWork} disabled={checkingWork || isLeaving} />
       </View>
     </AppScreen>
   )

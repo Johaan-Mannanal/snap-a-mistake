@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FollowUp } from '@snap/shared'
 import {
   buildAlternateFollowUpContext,
+  canStartAlternateFollowUp,
   createFollowUpPracticeState,
   createFollowUpCheckFence,
   createFollowUpLeaveLock,
@@ -60,11 +61,45 @@ describe('follow-up practice state', () => {
 })
 
 describe('follow-up check fence', () => {
+  it('keeps the checked problem and rejects a stale alternate press after check owns the handoff', async () => {
+    const visible = createFollowUpPracticeState(initial)
+    const alternate = replaceFollowUpProblem(visible, {
+      ...initial,
+      problem: 'Simplify −(3x − 4).',
+      hint: 'Apply the negative sign to each term.',
+    })
+    if (alternate === null) throw new Error('expected a distinct alternate')
+    const fence = createFollowUpCheckFence()
+    const run = fence.begin(visible)
+    if (run === null) throw new Error('expected check ownership')
+    let submittedProblem: string | null = null
+    const task = Promise.resolve().then(() => {
+      submittedProblem = run.practice.followUp.problem
+    })
+    fence.track(run, task)
+
+    expect(canStartAlternateFollowUp({
+      hasPractice: true,
+      hasParent: true,
+      requestingAlternate: false,
+      checkingWork: false,
+      isLeaving: false,
+      routeCurrent: true,
+      checkOwned: fence.busy,
+      leaveOwned: false,
+    })).toBe(false)
+    expect(run.practice.followUp).toEqual(visible.followUp)
+    expect(run.practice.followUp).not.toEqual(alternate.followUp)
+    await task
+    expect(submittedProblem).toBe('Simplify −(x + 2).')
+  })
+
   it('invalidates a check before its first durable boundary and waits for it to settle', async () => {
     let release!: () => void
     const boundary = new Promise<void>((resolve) => { release = resolve })
     const fence = createFollowUpCheckFence()
-    const run = fence.begin()
+    const run = fence.begin(createFollowUpPracticeState(initial))
+    if (run === null) throw new Error('expected check ownership')
     const effects: string[] = []
     const task = (async () => {
       await boundary
@@ -83,7 +118,8 @@ describe('follow-up check fence', () => {
     let release!: () => void
     const boundary = new Promise<void>((resolve) => { release = resolve })
     const fence = createFollowUpCheckFence()
-    const run = fence.begin()
+    const run = fence.begin(createFollowUpPracticeState(initial))
+    if (run === null) throw new Error('expected check ownership')
     const effects: string[] = []
     const task = (async () => {
       if (fence.owns(run)) effects.push('persist-session')
@@ -102,7 +138,8 @@ describe('follow-up check fence', () => {
 
   it('consumes a rejecting tracked task during unmount-style invalidation', async () => {
     const fence = createFollowUpCheckFence()
-    const run = fence.begin()
+    const run = fence.begin(createFollowUpPracticeState(initial))
+    if (run === null) throw new Error('expected check ownership')
     const task = Promise.reject(new Error('state unavailable'))
     fence.track(run, task)
 

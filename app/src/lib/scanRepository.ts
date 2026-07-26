@@ -375,7 +375,11 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
         if (existingRevision && JSON.stringify(existingRevision) !== JSON.stringify(savedRevision))
           throw new Error(`revision ${savedRevision.id} does not match the saved revision`)
         const followUp = responseFollowUp(savedRevision.response)
-        const feedback: FeedbackState = savedRevision.reason === 'student-correction' ? 'corrected' : scan.feedback
+        const feedback: FeedbackState = savedRevision.reason === 'student-correction'
+          ? 'corrected'
+          : existingRevision
+            ? scan.feedback
+            : 'unreviewed'
         const priorFollowUpStatus = existingRevision?.id === scan.activeRevision?.id ? scan.followUpStatus : 'none'
         const updatedAt = now()
         if (!existingRevision)

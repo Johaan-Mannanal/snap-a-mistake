@@ -22,8 +22,10 @@ export default function Home() {
   const [{ cameraMountKey, cameraReady, isCapturing, cameraError }, dispatchCamera] = useReducer(cameraUiReducer, initialCameraUiState)
   const [topControlsHeight, setTopControlsHeight] = useState<number | undefined>()
   const [bottomControlsHeight, setBottomControlsHeight] = useState<number | undefined>()
-  const isRetry = getSession().isRetry
-  const followUp = isRetry ? getSession().followUp : null
+  const activeSession = getSession()
+  const isRetry = activeSession.isRetry
+  const followUp = isRetry ? activeSession.followUp : null
+  const followUpHintVisible = isRetry && activeSession.followUpHintVisible
   const presentation = cameraPresentation(isRetry)
 
   const savePhoto = async (uri: string, origin: 'camera' | 'library') => {
@@ -145,7 +147,7 @@ export default function Home() {
 
       <SafeAreaView style={styles.bottomSafe} pointerEvents="box-none">
         <View onLayout={(event) => setBottomControlsHeight(event.nativeEvent.layout.height)}>
-          {followUp ? <CurrentProblemCard followUp={followUp} /> : null}
+          {followUp ? <CurrentProblemCard followUp={followUp} hintVisible={followUpHintVisible} /> : null}
           <View style={styles.captureRow}>
             <Pressable
               accessibilityLabel="Choose from library"

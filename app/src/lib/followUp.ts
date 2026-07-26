@@ -8,10 +8,14 @@ export type FollowUpPracticeState = {
   previousProblems: string[]
 }
 
-export type FollowUpCheckRun = { readonly token: number }
+export type FollowUpCheckRun = {
+  readonly token: number
+  readonly practice: FollowUpPracticeState
+}
 
 export type FollowUpCheckFence = {
-  begin(): FollowUpCheckRun
+  readonly busy: boolean
+  begin(practice: FollowUpPracticeState): FollowUpCheckRun | null
   owns(run: FollowUpCheckRun): boolean
   track(run: FollowUpCheckRun, task: Promise<void>): void
   invalidate(): Promise<void>
@@ -20,6 +24,28 @@ export type FollowUpCheckFence = {
 export type FollowUpLeaveLock = {
   readonly busy: boolean
   run(task: () => Promise<void>): { started: boolean; promise: Promise<void> }
+}
+
+export type AlternateFollowUpStartState = {
+  hasPractice: boolean
+  hasParent: boolean
+  requestingAlternate: boolean
+  checkingWork: boolean
+  isLeaving: boolean
+  routeCurrent: boolean
+  checkOwned: boolean
+  leaveOwned: boolean
+}
+
+export function canStartAlternateFollowUp(state: AlternateFollowUpStartState): boolean {
+  return state.hasPractice
+    && state.hasParent
+    && !state.requestingAlternate
+    && !state.checkingWork
+    && !state.isLeaving
+    && state.routeCurrent
+    && !state.checkOwned
+    && !state.leaveOwned
 }
 
 export function createFollowUpLeaveLock(): FollowUpLeaveLock {
@@ -43,9 +69,18 @@ export function createFollowUpCheckFence(): FollowUpCheckFence {
   let pending: Promise<void> = Promise.resolve()
 
   return {
-    begin() {
+    get busy() { return activeRun !== null },
+    begin(practice) {
+      if (activeRun !== null) return null
       generation += 1
-      const run = { token: generation }
+      const run = {
+        token: generation,
+        practice: {
+          followUp: { ...practice.followUp },
+          hintVisible: practice.hintVisible,
+          previousProblems: [...practice.previousProblems],
+        },
+      }
       activeRun = run
       return run
     },

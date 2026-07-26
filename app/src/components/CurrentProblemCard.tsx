@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native'
 import type { FollowUp } from '@snap/shared'
+import { currentProblemCardPresentation } from '../ui/presentation'
 import { colors, spacing, typeScale } from '../ui/theme'
 
-export function CurrentProblemCard({ followUp }: { followUp: FollowUp }) {
+export function CurrentProblemCard({ followUp, hintVisible }: { followUp: FollowUp; hintVisible: boolean }) {
   const [expanded, setExpanded] = useState(false)
+  const presentation = currentProblemCardPresentation(followUp, hintVisible, expanded)
 
   const toggle = () => {
     const next = !expanded
     setExpanded(next)
-    if (next) AccessibilityInfo.announceForAccessibility(`Current problem. ${followUp.problem}. Hint: ${followUp.hint}`)
+    const announcement = currentProblemCardPresentation(followUp, hintVisible, next).announcement
+    if (announcement !== null) AccessibilityInfo.announceForAccessibility(announcement)
   }
 
   return (
@@ -17,7 +20,7 @@ export function CurrentProblemCard({ followUp }: { followUp: FollowUp }) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Current problem"
-        accessibilityHint={expanded ? 'Hides the current practice problem.' : 'Shows the current practice problem and hint.'}
+        accessibilityHint={presentation.accessibilityHint}
         accessibilityState={{ expanded }}
         onPress={toggle}
         style={styles.trigger}
@@ -27,8 +30,9 @@ export function CurrentProblemCard({ followUp }: { followUp: FollowUp }) {
       </Pressable>
       {expanded ? (
         <View style={styles.detail}>
-          <Text style={styles.problem}>{followUp.problem}</Text>
-          <Text style={styles.hint}>Hint: {followUp.hint}</Text>
+          <Text style={styles.concept}>{presentation.concept.toUpperCase()}</Text>
+          <Text style={styles.problem}>{presentation.problem}</Text>
+          {presentation.hint === null ? null : <Text style={styles.hint}>Hint: {presentation.hint}</Text>}
         </View>
       ) : null}
     </View>
@@ -41,6 +45,7 @@ const styles = StyleSheet.create({
   label: { color: colors.chalk, fontSize: typeScale.caption, fontWeight: '700', letterSpacing: 1.3 },
   chevron: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '700' },
   detail: { borderTopWidth: 1, borderTopColor: colors.graphite, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.xs },
+  concept: { color: colors.muted, fontSize: typeScale.caption, fontWeight: '700', letterSpacing: 1.2 },
   problem: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '700' },
   hint: { color: colors.muted, fontSize: typeScale.caption },
 })

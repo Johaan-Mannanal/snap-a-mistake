@@ -3,10 +3,11 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { announce, createProgressAnnouncementGate } from '../lib/feedback.native'
 import { colors, spacing } from '../ui/theme'
-import { analysisProgressPresentation } from '../ui/presentation'
+import { analysisPhotoPresentation, analysisProgressPresentation } from '../ui/presentation'
 
 export function AnalysisProgress(props: { uri: string; elapsedSeconds: number; descriptionIndex: number; onCancel: () => void }) {
   const presentation = analysisProgressPresentation(props.elapsedSeconds, props.descriptionIndex)
+  const photoPresentation = analysisPhotoPresentation()
   const announcements = useRef(createProgressAnnouncementGate())
   const insets = useSafeAreaInsets()
   const panelStyle = useMemo(() => ({ bottom: Math.max(24, insets.bottom + 24) }), [insets.bottom])
@@ -16,8 +17,8 @@ export function AnalysisProgress(props: { uri: string; elapsedSeconds: number; d
   }, [props.elapsedSeconds])
 
   return (
-    <View style={styles.root}>
-      <Image accessible={false} source={{ uri: props.uri }} resizeMode="cover" style={StyleSheet.absoluteFill} />
+    <View style={[styles.root, { backgroundColor: photoPresentation.backgroundColor }]}>
+      <Image accessible={false} source={{ uri: props.uri }} resizeMode={photoPresentation.resizeMode} style={StyleSheet.absoluteFill} />
       <View style={[StyleSheet.absoluteFill, styles.scrim]} />
       <View style={[styles.panel, panelStyle]}>
         <Text style={styles.eyebrow}>ANALYZING</Text>

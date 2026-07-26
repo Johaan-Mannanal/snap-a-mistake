@@ -113,6 +113,29 @@ describe('insights presentation', () => {
     })
   })
 
+  it('shows an excluded scan as saved and unreviewed after a new retry', () => {
+    const prior = scan().activeRevision
+    if (prior === null) throw new Error('expected prior revision')
+    if (prior.response.kind !== 'analysis') throw new Error('expected analysis revision')
+    const retry: ScanRevision = {
+      ...prior,
+      id: 'retry-revision',
+      reason: 'retry',
+      response: { ...prior.response, misconceptionTag: 'dropped-term' },
+    }
+    const presentation = insightsPresentation({
+      kind: 'ready',
+      patterns: [],
+      scans: [scan({ feedback: 'unreviewed', activeRevision: retry, revisions: [prior, retry] })],
+    })
+
+    if (presentation.kind !== 'ready' || presentation.scans.kind !== 'list') throw new Error('expected scan list')
+    expect(presentation.scans.items[0]).toMatchObject({
+      statusLabel: 'Saved',
+      tagLabel: 'Dropped term',
+    })
+  })
+
   const statusCases: [Partial<ScanRecord>, string][] = [
     [{ lifecycle: 'review', feedback: 'excluded', activeRevision: null, revisions: [], followUp: null, followUpStatus: 'none' }, 'Diagnosis excluded'],
     [{ feedback: 'rejected' }, 'Diagnosis rejected'],

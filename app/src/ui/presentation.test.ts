@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { AnalyzeResponse, Step } from '@snap/shared'
 import {
   analysisPresentation,
+  analysisPhotoPresentation,
   analysisProgressPresentation,
   analysisRecoveryPresentation,
   cameraPresentation,
   cameraPermissionPresentation,
+  currentProblemCardPresentation,
   stepCardPresentation,
   stepAccessibilityLabel,
   trendPresentation,
@@ -19,6 +21,34 @@ describe('cameraPresentation', () => {
 
   it('labels a follow-up attempt without changing the instruction', () => {
     expect(cameraPresentation(true)).toEqual({ eyebrow: 'FOLLOW-UP', instruction: 'Keep one problem inside the frame' })
+  })
+})
+
+describe('current problem card presentation', () => {
+  const followUp = {
+    problem: 'Simplify −(x + 2).',
+    concept: 'sign distribution',
+    hint: 'Distribute the negative to both terms.',
+  }
+
+  it('does not render or announce a persisted hidden hint when expanded', () => {
+    expect(currentProblemCardPresentation(followUp, false, true)).toEqual({
+      problem: followUp.problem,
+      concept: followUp.concept,
+      hint: null,
+      announcement: `Current problem. ${followUp.problem}`,
+      accessibilityHint: 'Hides the current practice problem.',
+    })
+  })
+
+  it('renders and announces a persisted revealed hint accessibly', () => {
+    expect(currentProblemCardPresentation(followUp, true, true)).toEqual({
+      problem: followUp.problem,
+      concept: followUp.concept,
+      hint: followUp.hint,
+      announcement: `Current problem. ${followUp.problem}. Hint: ${followUp.hint}`,
+      accessibilityHint: 'Hides the current practice problem.',
+    })
   })
 })
 
@@ -95,6 +125,13 @@ describe('analysisPresentation', () => {
 })
 
 describe('analysis progress presentation', () => {
+  it('fits the full handwritten photo inside a deliberate black background', () => {
+    expect(analysisPhotoPresentation()).toEqual({
+      resizeMode: 'contain',
+      backgroundColor: '#000000',
+    })
+  })
+
   it('shows the initial honest description without duplicating the screen announcement', () => {
     expect(analysisProgressPresentation(0, 0)).toEqual({
       description: 'Looking at the photo…',

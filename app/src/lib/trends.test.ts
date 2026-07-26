@@ -66,6 +66,21 @@ describe('summarize', () => {
     ])
   })
 
+  it('counts a new unreviewed retry after the prior diagnosis was excluded', () => {
+    const excludedRevision = revision('scan-1-excluded', 'sign-error', atDaysAgo(2))
+    const retry = { ...revision('scan-1-retry', 'dropped-term', atDaysAgo(1)), reason: 'retry' as const }
+    const record = scan('scan-1', 'dropped-term', 2, {
+      lifecycle: 'complete',
+      feedback: 'unreviewed',
+      activeRevision: retry,
+      revisions: [excludedRevision, retry],
+    })
+
+    expect(summarize([source(record)], now)).toEqual([
+      { tag: 'dropped-term', thisWeek: 1, lastWeek: 0, trend: 'not-enough-data', resolvedFollowUps: 0 },
+    ])
+  })
+
   it('excludes rejected, excluded, unsaved, interrupted, draft, and non-analysis scans', () => {
     const rejected = revision('rejected', 'sign-error', atDaysAgo(1), 'rejected')
     const excluded = scan('excluded', 'sign-error', 1, { lifecycle: 'review', activeRevision: null, revisions: [rejected], feedback: 'excluded', followUp: null, followUpStatus: 'none' })

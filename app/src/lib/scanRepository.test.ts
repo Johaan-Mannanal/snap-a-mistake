@@ -624,6 +624,38 @@ describe('scan repository records', () => {
     await expect(repository.loadTrendSources()).resolves.toEqual([])
   })
 
+  it('returns an excluded scan to unreviewed when a genuinely new retry becomes active', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    const reviewedRevision: ScanRevision = { ...diagnosisRevision, feedback: 'accepted' }
+    await repository.saveRevision('scan-1', reviewedRevision, 400)
+    await repository.setFeedback('scan-1', 'accepted')
+    await repository.excludeDiagnosis('scan-1')
+    const retryRevision: ScanRevision = {
+      ...diagnosisRevision,
+      id: 'retry-revision',
+      reason: 'retry',
+      createdAt: '2026-07-24T12:02:00.000Z',
+    }
+
+    const retried = await repository.saveRevision('scan-1', retryRevision, 420)
+
+    expect(retried).toMatchObject({
+      lifecycle: 'complete',
+      feedback: 'unreviewed',
+      activeRevision: { id: 'retry-revision', feedback: 'unreviewed' },
+    })
+    expect(retried.revisions.map((item) => [item.id, item.feedback])).toEqual([
+      ['revision-with-follow-up', 'accepted'],
+      ['retry-revision', 'unreviewed'],
+    ])
+    await expect(repository.loadTrendSources()).resolves.toEqual([
+      { kind: 'scan', scan: retried },
+    ])
+  })
+
   it('rolls back an exclusion when its ownership guard is invalidated', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)

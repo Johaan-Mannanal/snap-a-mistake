@@ -1,4 +1,4 @@
-import type { AnalyzeResponse, Step } from '@snap/shared'
+import type { AnalyzeResponse, FollowUp, Step } from '@snap/shared'
 import type { ApiFailure } from '../lib/api'
 import { tagLabel } from '../lib/labels'
 import { colors } from './theme'
@@ -7,6 +7,23 @@ const ORDINAL = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight',
 
 export function cameraPresentation(isRetry: boolean) {
   return { eyebrow: isRetry ? 'FOLLOW-UP' : 'SNAP', instruction: 'Keep one problem inside the frame' } as const
+}
+
+export function currentProblemCardPresentation(followUp: FollowUp, hintVisible: boolean, expanded: boolean) {
+  const hint = hintVisible ? followUp.hint : null
+  return {
+    problem: followUp.problem,
+    concept: followUp.concept,
+    hint,
+    announcement: expanded
+      ? `Current problem. ${followUp.problem}${hint === null ? '' : `. Hint: ${hint}`}`
+      : null,
+    accessibilityHint: expanded
+      ? 'Hides the current practice problem.'
+      : hintVisible
+        ? 'Shows the current practice problem and hint.'
+        : 'Shows the current practice problem.',
+  }
 }
 
 export function cameraPermissionPresentation(permission: { granted: boolean; canAskAgain: boolean } | null) {
@@ -58,6 +75,10 @@ export function analysisPresentation(response: Extract<AnalyzeResponse, { kind: 
 }
 
 const ANALYSIS_DESCRIPTIONS = ['Looking at the photo…', 'Checking the math…', 'Preparing your explanation…'] as const
+
+export function analysisPhotoPresentation() {
+  return { resizeMode: 'contain', backgroundColor: '#000000' } as const
+}
 
 export function analysisProgressPresentation(elapsedSeconds: number, descriptionIndex: number) {
   const description = ANALYSIS_DESCRIPTIONS[descriptionIndex % ANALYSIS_DESCRIPTIONS.length] ?? ANALYSIS_DESCRIPTIONS[0]
