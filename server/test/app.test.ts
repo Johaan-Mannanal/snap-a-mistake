@@ -93,6 +93,21 @@ describe('POST /follow-up', () => {
     expect(called).toBe(false)
   })
 
+  it.each([
+    ['concept', { ...context, concept: 'c'.repeat(121) }],
+    ['diagnosis', { ...context, diagnosis: 'd'.repeat(1001) }],
+    ['previous problem', { ...context, previousProblems: ['p'.repeat(501)] }],
+  ])('rejects an oversized %s before invoking the model', async (_field, oversized) => {
+    let called = false
+    const app = buildApp(appDeps({ generateFollowUp: async () => { called = true; throw new Error('unexpected') } }))
+
+    const response = await app.inject({ method: 'POST', url: '/follow-up', payload: oversized })
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: 'invalid follow-up request' })
+    expect(called).toBe(false)
+  })
+
   it('returns 502 for follow-up model JSON failures', async () => {
     const app = buildApp(appDeps({ generateFollowUp: async () => { throw new ModelJsonError('bad') } }))
 

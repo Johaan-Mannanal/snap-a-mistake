@@ -23,6 +23,13 @@ describe('Stage1Schema', () => {
       steps: [{ ...step(0), yBandTopPct: 80, yBandBottomPct: 20 }],
     })).toThrow('yBandTopPct must not exceed yBandBottomPct')
   })
+  it('rejects duplicate transcription step indexes', () => {
+    expect(() => Stage1Schema.parse({
+      isMath: true,
+      legibility: 0.9,
+      steps: [step(3), { ...step(3), yBandTopPct: 30, yBandBottomPct: 40 }],
+    })).toThrow('step indexes must be unique')
+  })
 })
 
 describe('Stage2Schema', () => {
@@ -123,6 +130,57 @@ describe('AnalyzeResponseSchema', () => {
       followUp: { problem: 'Simplify x\\, y.', concept: 'multiplication', hint: 'Multiply the factors.' },
     })).toThrow('raw LaTeX')
   })
+
+  it('rejects duplicate analysis step indexes', () => {
+    expect(() => AnalysisResultSchema.parse({
+      kind: 'analysis',
+      steps: [
+        { ...step(2), verdict: 'ok' },
+        { ...step(2), yBandTopPct: 30, yBandBottomPct: 40, verdict: 'wrong' },
+      ],
+      errorStepIndex: 2,
+      misconceptionTag: 'sign-error',
+      explanation: 'The sign changed.',
+      followUp: { problem: 'Simplify −2x + x.', concept: 'signs', hint: 'Keep the negative sign.' },
+      verifierAgreed: true,
+    })).toThrow('step indexes must be unique')
+  })
+
+  it('requires an error step index to identify an included step', () => {
+    expect(() => AnalysisResultSchema.parse({
+      kind: 'analysis',
+      steps: [{ ...step(2), verdict: 'ok' }, { ...step(5), verdict: 'wrong' }],
+      errorStepIndex: 4,
+      misconceptionTag: 'sign-error',
+      explanation: 'The sign changed.',
+      followUp: { problem: 'Simplify −2x + x.', concept: 'signs', hint: 'Keep the negative sign.' },
+      verifierAgreed: true,
+    })).toThrow('error step must exist')
+  })
+
+  it('accepts unique non-sequential indexes and all-correct results', () => {
+    const result = AnalysisResultSchema.parse({
+      kind: 'analysis',
+      steps: [{ ...step(2), verdict: 'ok' }, { ...step(5), verdict: 'ok' }, { ...step(9), verdict: 'wrong' }],
+      errorStepIndex: 9,
+      misconceptionTag: 'sign-error',
+      explanation: 'The sign changed.',
+      followUp: { problem: 'Simplify −2x + x.', concept: 'signs', hint: 'Keep the negative sign.' },
+      verifierAgreed: true,
+    })
+    const correct = AnalysisResultSchema.parse({
+      kind: 'analysis',
+      steps: [{ ...step(2), verdict: 'ok' }, { ...step(9), verdict: 'ok' }],
+      errorStepIndex: null,
+      misconceptionTag: null,
+      explanation: null,
+      followUp: null,
+      verifierAgreed: true,
+    })
+
+    expect(result.errorStepIndex).toBe(9)
+    expect(correct.errorStepIndex).toBeNull()
+  })
 })
 
 describe('correction and alternate follow-up contracts', () => {
@@ -163,6 +221,19 @@ describe('correction and alternate follow-up contracts', () => {
       diagnosis: 'Keep the negative sign with the term.',
       previousProblems: ['−2 + 1', '−3 + 2', '−4 + 3', '−5 + 4', '−6 + 5', '−7 + 6'],
     })).toThrow()
+  })
+
+  it('bounds all client-controlled follow-up prompt fields without rejecting Unicode math', () => {
+    const context = {
+      concept: 'integration by parts',
+      diagnosis: 'The remaining integral kept an extra x while preserving eˣ.',
+      previousProblems: ['Evaluate ∫ x eˣ dx.'],
+    }
+
+    expect(AlternateFollowUpContextSchema.parse(context)).toEqual(context)
+    expect(() => AlternateFollowUpContextSchema.parse({ ...context, concept: 'c'.repeat(121) })).toThrow()
+    expect(() => AlternateFollowUpContextSchema.parse({ ...context, diagnosis: 'd'.repeat(1001) })).toThrow()
+    expect(() => AlternateFollowUpContextSchema.parse({ ...context, previousProblems: ['p'.repeat(501)] })).toThrow()
   })
 })
 

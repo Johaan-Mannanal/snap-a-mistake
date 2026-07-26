@@ -8,10 +8,19 @@ export const MISCONCEPTION_TAGS = [
 ] as const
 export type MisconceptionTag = (typeof MISCONCEPTION_TAGS)[number]
 
-const StudentFacingMathTextSchema = z.string().min(1).refine(
-  (value) => !/[\\$^]/.test(value),
-  { message: 'must use Unicode or prose without raw LaTeX, math delimiters, or caret notation' },
-)
+function studentFacingMathText(maxLength?: number) {
+  const text = maxLength === undefined ? z.string().min(1) : z.string().min(1).max(maxLength)
+  return text.refine(
+    (value) => !/[\\$^]/.test(value),
+    { message: 'must use Unicode or prose without raw LaTeX, math delimiters, or caret notation' },
+  )
+}
+
+const StudentFacingMathTextSchema = studentFacingMathText()
+
+const FollowUpConceptSchema = z.string().min(1).max(120)
+const FollowUpDiagnosisSchema = studentFacingMathText(1000)
+const FollowUpProblemSchema = studentFacingMathText(500)
 
 export const FollowUpSchema = z.object({
   problem: StudentFacingMathTextSchema,
@@ -47,11 +56,28 @@ export const StepSchema = StepFieldsSchema.extend({
 }).superRefine(validateVerticalBand)
 export type Step = z.infer<typeof StepSchema>
 
+function validateUniqueStepIndexes(
+  value: { steps: Array<{ index: number }> },
+  ctx: z.RefinementCtx,
+) {
+  const indexes = new Set<number>()
+  value.steps.forEach((step, position) => {
+    if (indexes.has(step.index)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['steps', position, 'index'],
+        message: 'step indexes must be unique',
+      })
+    }
+    indexes.add(step.index)
+  })
+}
+
 export const Stage1Schema = z.object({
   isMath: z.boolean(),
   legibility: z.number().min(0).max(1),
   steps: z.array(TranscribedStepSchema),
-})
+}).superRefine(validateUniqueStepIndexes)
 export type Stage1Result = z.infer<typeof Stage1Schema>
 
 const DiagnosisFieldsSchema = z.object({
@@ -81,7 +107,17 @@ export const AnalysisResultSchema = DiagnosisFieldsSchema.extend({
   kind: z.literal('analysis'),
   steps: z.array(StepSchema),
   verifierAgreed: z.boolean(),
-}).superRefine(validateAnalysisConsistency)
+}).superRefine((value, ctx) => {
+  validateAnalysisConsistency(value, ctx)
+  validateUniqueStepIndexes(value, ctx)
+  if (value.errorStepIndex !== null && !value.steps.some((step) => step.index === value.errorStepIndex)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['errorStepIndex'],
+      message: 'error step must exist in steps',
+    })
+  }
+})
 export type AnalysisResult = z.infer<typeof AnalysisResultSchema>
 
 export const CorrectionContextSchema = z.object({
@@ -100,9 +136,9 @@ export const CorrectedDiagnosisSchema = z.object({
 })
 
 export const AlternateFollowUpContextSchema = z.object({
-  concept: z.string().min(1),
-  diagnosis: StudentFacingMathTextSchema,
-  previousProblems: z.array(StudentFacingMathTextSchema).min(1).max(5),
+  concept: FollowUpConceptSchema,
+  diagnosis: FollowUpDiagnosisSchema,
+  previousProblems: z.array(FollowUpProblemSchema).min(1).max(5),
 })
 export type AlternateFollowUpContext = z.infer<typeof AlternateFollowUpContextSchema>
 
