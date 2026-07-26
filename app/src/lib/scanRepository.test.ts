@@ -677,6 +677,40 @@ describe('scan repository records', () => {
     expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
   })
 
+  it('does not retain a resolved parent from a scan-level rejected child after a sibling deletion', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+    await repository.createDraft({ ...draft('rejected'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    await repository.saveRevision('rejected', revision('rejected-correct', 'initial'), 410)
+    await repository.setFeedback('rejected', 'rejected')
+    await repository.createDraft({ ...draft('sibling'), attemptKind: 'follow-up', parentScanId: 'parent' })
+
+    await repository.delete('sibling')
+
+    expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
+  })
+
+  it('keeps accepted and corrected surviving children eligible to resolve their parent', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+    await repository.createDraft({ ...draft('accepted'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    await repository.saveRevision('accepted', revision('accepted-correct', 'initial'), 410)
+    await repository.setFeedback('accepted', 'accepted')
+    await repository.createDraft({ ...draft('corrected'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    await repository.saveRevision('corrected', { ...revision('corrected-correct', 'student-correction'), feedback: 'corrected' }, 410)
+    await repository.createDraft({ ...draft('sibling'), attemptKind: 'follow-up', parentScanId: 'parent' })
+
+    await repository.delete('sibling')
+
+    expect((await repository.get('parent'))?.followUpStatus).toBe('resolved')
+  })
+
   it('retains prior and newly queued cleanup obligations through clear-all until acknowledged', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)

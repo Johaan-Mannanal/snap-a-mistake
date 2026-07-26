@@ -206,7 +206,7 @@ async function clearActiveSessionForDeletedScans(db: DatabasePort, deletedScanId
 
 function hasUsableCompletedOutcome(scan: ScanRecord): scan is ScanRecord & { activeRevision: ScanRevision } {
   if (scan.lifecycle !== 'complete' || scan.activeRevision === null) return false
-  if (scan.feedback === 'excluded' || scan.activeRevision.feedback === 'rejected') return false
+  if (scan.feedback === 'excluded' || scan.feedback === 'rejected' || scan.activeRevision.feedback === 'rejected') return false
   const createdAt = Date.parse(scan.activeRevision.createdAt)
   return Number.isFinite(createdAt) && createdAt <= Date.now()
 }
