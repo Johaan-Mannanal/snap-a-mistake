@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ApiError, analyzePhoto, correctDiagnosis, requestAlternateFollowUp } from './api'
+import { analyzePhoto, correctDiagnosis, requestAlternateFollowUp } from './api'
 
 vi.mock('expo-file-system', () => ({
   File: class MockFile extends Blob {

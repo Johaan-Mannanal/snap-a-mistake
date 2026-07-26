@@ -10,7 +10,7 @@ Snap-a-Mistake is a mobile app that analyzes a photo of handwritten algebra or c
 
 It then creates a similar practice problem focused on the same idea. The goal is not just to correct one answer. It is to give the student a short learning loop: find the first break, understand it in context, try the concept again, and check the new work.
 
-The diagnosis is shown alongside the original page so the feedback stays connected to what the student actually wrote. The app also records misconception categories locally on the device, allowing recurring patterns to become visible over time without requiring an account.
+The diagnosis is shown alongside the original page so the feedback stays connected to what the student actually wrote. The app records misconception categories, scan revisions, follow-up links, and owned scan photos locally on the device until the student deletes them, without requiring an account.
 
 ## How I built it
 
@@ -34,7 +34,7 @@ Model reliability also required more than prompt tuning. Responses can be malfor
 
 The biggest thing I learned is that building a useful AI product is not the same as making one impressive model call. Reliability comes from the system around the model: clear interfaces, validation, disagreement handling, good fallback states, and tests that represent real inputs.
 
-I created a 25-case validation set with 15 synthetic cases and 10 licensed FERMAT handwriting images, and the repository now has 155 passing automated tests across the app, server, shared schemas, and dataset importer. That process taught me to treat model behavior as something that needs evaluation, not something I should assume will stay consistent.
+I created a 25-case validation set with 15 synthetic cases and 10 licensed FERMAT handwriting images, and the repository now has 391 passing automated tests across the app, server, shared schemas, and dataset importer. That process taught me to treat model behavior as something that needs evaluation, not something I should assume will stay consistent.
 
 I also learned that educational feedback needs restraint. When the verifier is uncertain, admitting that uncertainty is better than giving a confident but incorrect diagnosis.
 

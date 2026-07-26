@@ -1,4 +1,4 @@
-# Devpost Submission Copy
+# Devpost submission copy
 
 ## Project
 
@@ -6,82 +6,41 @@
 
 **Tagline:** Photograph handwritten math and find the first step where the reasoning broke—not just the final wrong answer.
 
-## What it does
+## What I built
 
-Snap-a-Mistake turns a photo of handwritten algebra or calculus into step-level
-feedback. It transcribes the work, identifies the first incorrect step, names
-the misconception, explains why it failed, and creates an easier follow-up
-problem. The mobile app overlays the diagnosis on the original page and tracks
-recurring misconception patterns locally on the student’s device.
+I built Snap-a-Mistake because “wrong answer” is usually the least useful feedback a student can receive. The app takes a photo of handwritten algebra or calculus, turns it into positioned steps, identifies the first unsupported step, names the likely misconception, and explains why that transition failed.
 
-## The educational problem
+The student keeps the original page in view while navigating a linked photo overlay and step timeline. They can accept, reject, or correct the diagnosis; a correction becomes a revision of the same scan rather than a separate mistake record. The app then offers a similar follow-up problem, a hint, and an alternate similar problem. Follow-up attempts remain linked to the original scan.
 
-Students often learn that an answer is wrong without learning where their
-reasoning first diverged. A final-answer checker cannot distinguish a sign slip
-from a misunderstood rule, and generic explanations do not create a focused
-next practice step.
-
-## Exact-first-break learning loop
-
-Snap-a-Mistake focuses feedback on the earliest unsupported step rather than
-only the final answer. It explains the misconception in the student's original
-context, then creates a smaller targeted problem. The student can retry and see
-that all steps check out, turning diagnosis into an immediate learning loop.
+Patterns and Previous scans are stored locally on the device. The app retains its owned scan photos, all revisions, and follow-up links until the student deletes one scan or clears all history.
 
 ## How it works
 
-1. A multimodal transcription pass converts the page into ordered steps and
-   vertical positions.
-2. A reasoning diagnosis pass finds the first broken step, applies a controlled
-   misconception label, and generates a targeted explanation and follow-up.
-3. An independent verifier checks the diagnosis; disagreement becomes a softer
-   “suspect” state instead of a confident accusation.
-4. The Expo app renders the line overlay, step cards, retry loop, and local
-   misconception insights.
+1. The Expo app captures or selects a photo and asks the Fastify API to analyze it.
+2. A multimodal transcription pass returns ordered handwritten steps and vertical position bands.
+3. A diagnosis pass identifies the earliest error and selects one controlled misconception tag.
+4. An independent verifier can soften a disputed diagnosis into a suspect state.
+5. Shared Zod schemas validate the response before the app renders Unicode math such as ∫, √, ×, −, eˣ, and x². Student-facing text does not expose raw LaTeX.
 
-## Why it is different
-
-The product focuses on the earliest reasoning failure and closes the learning
-loop with easier targeted practice. It combines the original handwritten
-context, a controlled misconception vocabulary, independent verification, and
-private on-device trend tracking rather than acting as another answer generator.
+The server is stateless: it has no account system, database, or history store. A submitted photo and the request context are sent to the configured external AI service for the requested analysis, correction, or follow-up. The server does not retain those inputs or outputs after responding. Provider retention is governed by the provider’s applicable terms.
 
 ## Technical evidence
 
-- TypeScript monorepo with Expo, Fastify, Zod, SQLite, and shared API schemas.
-- Three-stage model pipeline with structured-output validation and correction retry.
-- 150 automated tests were passing as of July 22, including four stock-Python
-  importer regressions.
-- Twenty-five golden cases, including ten licensed FERMAT handwriting images.
-- Owner-reported latest paid FERMAT gate: 8/10; the two reported misses were one
-  strict canonical-tag mismatch and one truncated JSON response. The raw
-  provider artifact is not committed, so this result is not independently
-  reconstructable from the repository.
+- TypeScript npm-workspace monorepo: Expo/React Native app, Fastify API, Zod shared contracts, and device-local SQLite.
+- 391 automated tests passed on this branch on July 25, 2026: 18 shared Vitest, 109 server Vitest, 4 stock-Python importer, and 260 app Vitest tests.
+- All three workspaces typechecked and Expo lint completed with zero warnings and zero errors on that same run.
+- The repository includes an inspectable 25-case golden manifest: 15 synthetic cases and 10 licensed FERMAT handwriting photographs.
+- The paid live-model golden command remains deliberately separate: it requires an API key and makes external requests. No current paid-pass rate is claimed without a recorded run artifact.
 - Public repository: https://github.com/Johaan-Mannanal/snap-a-mistake
 
-## Potential impact
+## Why it matters
 
-Snap-a-Mistake gives students actionable feedback while the reasoning is still
-fresh and gives recurring mistakes a visible pattern. The same workflow could
-support teachers reviewing common misconceptions without requiring student
-accounts or server-side storage of learning history.
+The goal is not to make a general tutor chat or another final-answer checker. I wanted a small feedback loop that stays connected to what the student wrote: locate the first break, explain the idea in context, and give them a similar next attempt.
 
-## Privacy posture
+## Submission checklist
 
-Misconception trend records remain on-device in SQLite. Each photo and its
-transcribed work are transiently processed by the backend and the configured
-external model API. The app server has no database and does not persist those
-photos or transcriptions. Provider handling is governed by the provider's
-applicable data terms; Snap-a-Mistake does not promise provider retention
-behavior. HTTPS is required before any hosted use.
-
-## Prometheus submission checklist
-
-- [ ] Record and upload the narrated video using `DEMO-SCRIPT.md`. Its core
-  diagnosis is a real live-model result; label any mock footage as canned.
-- [ ] Confirm the Google form required for the submission is complete.
-- [ ] Confirm all eligibility requirements in the official rules.
-- [ ] Confirm the repository is public.
-- [ ] Open the submitted video in a signed-out browser and verify full playback,
-  audio, and captions.
-- [ ] Submit by July 29 operationally, ahead of the official July 30, 2026, 8:45 p.m. PDT deadline.
+- [ ] Complete the physical-phone and live-model checks in the validation record.
+- [ ] Record the live-model core diagnosis using the demo script.
+- [ ] Label any deterministic mock footage as canned throughout.
+- [ ] Review the export for secrets, notifications, unrelated photos, audio, captions, and signed-out playback.
+- [ ] Complete the required Google form, eligibility review, public-repository check, and submission before the official deadline.

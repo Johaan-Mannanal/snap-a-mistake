@@ -1,46 +1,36 @@
-# Welcome to your Expo app 👋
+# Snap-a-Mistake mobile app
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The Expo app captures or selects a handwritten-math photo, preserves its local scan history, and presents first-break feedback from the API. It uses Expo Router, strict TypeScript, device-local SQLite, and app-owned photo files.
 
-## Get started
+## Start it
 
-1. Install dependencies
+From the repository root, install npm workspaces once:
 
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
-2. Start the app
+Use a deterministic mock server for UI work:
 
-   ```bash
-   npx expo start
-   ```
+```bash
+MOCK=error npm run mock -w server
+cd app && EXPO_PUBLIC_API_URL=http://<MAC-LAN-IP>:3000 npx expo start --go
+```
 
-In the output, you'll find options to open the app in a
+Use `http://localhost:3000` only for an iOS simulator. A physical phone must use the Mac’s LAN IP and be on the same network. Available mock modes are `correct`, `error`, `suspect`, `unreadable`, `not-math`, `timeout`, `server-error`, `correction`, and `alternate-follow-up`.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+For a live model, create `server/.env` from `server/.env.example`, set `OPENAI_API_KEY`, start `npm run dev -w server`, and use the same Expo command. The live path sends the chosen photo to the configured AI service; mock responses are canned and must not be represented as live results.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Local data
 
-### Other setup steps
+The app copies approved photos into its own document storage. SQLite keeps the scan, all diagnosis revisions, linked follow-up state, and session recovery state on the device until the student deletes that scan or clears all history. The backend is stateless and does not retain app history or photos.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Checks
 
-## Learn more
+```bash
+npm test -w app
+npm run typecheck -w app
+npm run lint -w app
+```
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+`expo lint` uses the SDK 57-compatible `eslint` and `eslint-config-expo` flat configuration in `eslint.config.js`. The small file-scoped exceptions cover React Native ref forwarding and Reanimated shared-value worklets; other Expo rules stay enabled.

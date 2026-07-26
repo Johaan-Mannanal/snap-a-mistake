@@ -1,177 +1,94 @@
 # Snap-a-Mistake
 
-Snap a photo of handwritten algebra or calculus work. Snap-a-Mistake finds the
-first step where the reasoning broke, names the misconception, explains why it
-broke, and creates an easier problem to try next. Recurring mistake patterns
-are tracked locally over time.
+I built Snap-a-Mistake to make handwritten-math feedback more useful than a final-answer check. Take a photo of algebra or calculus work and the app tries to identify the first unsupported step, explain the likely misconception, and offer a similar problem to try next.
 
-<p align="center">
-  <img src="docs/assets/readme/analysis-error.png" alt="Snap-a-Mistake locating the first broken step in handwritten calculus work" width="31%" />
-  <img src="docs/assets/readme/follow-up.png" alt="Snap-a-Mistake generating a targeted follow-up problem" width="31%" />
-  <img src="docs/assets/readme/insights.png" alt="Snap-a-Mistake showing a recurring misconception pattern" width="31%" />
-</p>
+The app is an in-progress learning tool, not a guarantee that a model’s diagnosis is right. When independent verification disagrees, it uses a softer “suspect” state instead of presenting the result as certain.
 
-<p align="center"><sub>Locate the first break · generate targeted practice · track recurring patterns locally</sub></p>
+## What the app does
 
-The screens above are captured from the iOS app. The analysis screen uses the
-deterministic mock response so the public UI preview is reproducible; live-model
-validation results are reported below.
+1. Capture a photo with the camera or choose one from the library, then review, zoom, retake, or replace it.
+2. Send the reviewed image to the analysis service for transcription, first-break diagnosis, and independent verification.
+3. Show the page with a linked step timeline and readable Unicode math such as ∫, √, ×, ÷, −, eˣ, and x². Student-facing copy does not render raw LaTeX.
+4. Let the student accept, reject, or correct a diagnosis. A correction creates a revision for the same scan; it does not create another Pattern attempt.
+5. Offer a similar follow-up problem, optional hint, and alternate similar problem. A checked follow-up remains linked to its parent scan.
+6. Show private Patterns and Previous scans, including each scan’s active revision and its retained history.
 
-## The learning loop
-
-Students often learn only that a final answer is wrong. That does not tell them
-which assumption or rule changed their reasoning. Snap-a-Mistake is built around
-an exact-first-break loop: preserve the original work, identify the earliest
-unsupported step, explain the misconception in context, then give the student a
-smaller targeted problem. The next attempt can close the loop when all steps
-check out.
-
-> **Current Prometheus submission:** the public package is this repository and
-> a narrated video. Complete the required Google form, confirm eligibility,
-> verify public signed-out video playback, and submit by July 29 operationally
-> ahead of the official July 30, 2026, 8:45 p.m. PDT deadline. See the
-> [Devpost checklist](docs/submission/DEVPOST.md) and
-> [recording plan](docs/submission/DEMO-SCRIPT.md).
-
-## Architecture (three workspaces, npm monorepo)
+## Architecture and data flow
 
 ```
-photo → app (Expo/RN) → POST /analyze → server (Fastify, stateless)
-  → multimodal transcription — indexed handwritten steps + y-position bands
-  → reasoning diagnosis — first wrong step, tag misconception, explanation, follow-up problem
-  → independent verification — disagreement softens "wrong" to "suspect"
-  → typed AnalyzeResponse → app renders photo overlay + step cards → history saved to on-device SQLite
+phone photo
+  → Expo / React Native app
+  → POST /analyze, /correct-diagnosis, or /follow-up
+  → stateless Fastify server
+  → configured external AI service
+  → shared Zod-validated response
+  → photo overlay, step cards, and device-local SQLite history
 ```
 
-- **`shared/`** — the API contract: Zod schemas (`AnalyzeResponse`, `Step`, stage results) and the 13-tag misconception vocabulary. Both server and app import from here; types are not re-declared.
-- **`server/`** — Fastify. `POST /analyze` accepts a multipart photo, normalizes it, runs the three-stage model pipeline, and returns JSON. Stateless by design: no database and no accounts. All model calls flow through one wrapper (`src/llm/client.ts`: Zod-validated JSON with one correction retry; transport errors propagate untouched).
-- **`app/`** — Expo (expo-router, strict TS). Screens: camera home → analyzing (staged progress) → result (red-band photo overlay + ✓/⚠️/✗/↓ step cards) → follow-up loop → insights (weekly misconception trends). Pure logic lives in `app/src/lib/` (no RN imports — vitest-tested in node); screens are thin components over it. History is device-local SQLite.
+- `shared/` defines the Zod request/response contracts and misconception tags.
+- `server/` normalizes a submitted image and runs transcription, diagnosis, and verification. It has no accounts, database, or photo/history store.
+- `app/` owns reviewed photos in its application document storage and stores scans, revisions, follow-up links, and session recovery state in SQLite on the device. A photo and its scan history remain local until that scan (or Clear all history) is deleted; delete queues the owned photo for safe cleanup.
 
-## Product AI and safeguards
+The configured external AI service receives the submitted photo and the text needed for its analysis, correction, or follow-up request. The server intentionally does not retain those inputs or outputs after responding. This repository does not make claims about the AI provider’s retention practices; review the provider’s applicable terms before using a live service. Use HTTPS for any hosted server.
 
-The configured pipeline uses a multimodal transcription pass, a
-reasoning diagnosis pass, and an independent verification pass. Current model
-IDs live in `server/src/config.ts`. The verifier favors uncertainty over a false
-accusation: when it disagrees with the diagnosis, the app renders a softer
-“suspect” state.
+## Run locally
 
-Key product decisions:
-
-- semantic math anchors instead of segmentation-dependent step numbers;
-- one exact canonical misconception tag per error;
-- a verifier that prefers uncertainty over a false accusation;
-- a stateless backend and on-device-only learning history;
-- a zero-cost mock path so the UI can be inspected without keys.
-
-Misconception trend records remain on-device in SQLite. Each photo and its
-transcribed work are transiently processed by the backend and the configured
-external model API. The app server has no database and does not persist those
-photos or transcriptions. Provider handling is governed by the provider's
-applicable data terms; this repository does not promise provider retention
-behavior. HTTPS is required before any hosted use. The mock path is for
-reproducible UI inspection and must be labeled as canned whenever it is shown.
-
-## Data and validation references
-
-| What | Where |
-|------|-------|
-| Dated readiness evidence and reproducibility boundary | [`docs/validation/2026-07-22-prometheus-readiness.md`](docs/validation/2026-07-22-prometheus-readiness.md) |
-| FERMAT license, citation, and attribution | [`server/golden/FERMAT-ATTRIBUTION.md`](server/golden/FERMAT-ATTRIBUTION.md) |
-| FERMAT source records, labels, pinned revision, and shard checksums | [`server/golden/fermat-provenance.json`](server/golden/fermat-provenance.json) |
-| Optional FERMAT subset importer (requires accepted FERMAT access and `HF_TOKEN`) | [`server/scripts/import-fermat.py`](server/scripts/import-fermat.py) |
-
-## Submission kit
-
-The [ready-to-paste Devpost form copy](docs/submission/DEVPOST.md) and
-[1:50–1:55 recording plan](docs/submission/DEMO-SCRIPT.md) are prepared for the
-current submission. The demo leads with a real live-model diagnosis; any mock
-footage is explicitly labeled as canned UI coverage.
-
-## Running things
-
-### Judge quickstart — no API key (iOS)
+Install the npm workspaces once:
 
 ```bash
 npm install
-npm run mock -w server
-# In a second terminal, use localhost for the iOS simulator:
+```
+
+### Mock server — deterministic UI and phone checks
+
+Run one terminal:
+
+```bash
+MOCK=error npm run mock -w server
+```
+
+Then run Expo on a simulator:
+
+```bash
 cd app && EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --go
 ```
 
-Press `i` for the iOS simulator. For a physical iPhone, keep the phone and Mac
-on the same network and use the Mac's LAN address instead—its `localhost` points
-to the phone, not this server:
+For a physical phone, use the Mac’s LAN address, not `localhost`:
 
 ```bash
-cd app && EXPO_PUBLIC_API_URL=http://<Mac-LAN-IP>:3000 npx expo start --go
+cd app && EXPO_PUBLIC_API_URL=http://<MAC-LAN-IP>:3000 npx expo start --go
 ```
 
-Use `MOCK=correct npm run mock -w server` or replace `correct` with `error`,
-`suspect`, `unreadable`, or `not-math` to exercise every response state.
+The deterministic modes are `correct`, `error`, `suspect`, `unreadable`, `not-math`, `timeout`, `server-error`, `correction`, and `alternate-follow-up`. Normal content modes wait four seconds. `timeout` waits 181 seconds and ends without an analysis response so the app’s 180-second timeout path is exercised; `server-error` returns a generic server failure. `correction` provides a deterministic corrected diagnosis at `/correct-diagnosis`, and `alternate-follow-up` returns a distinct answer from `/follow-up`. These responses are canned, schema-valid fixtures and contain no raw-LaTeX student-facing text.
+
+### Live server — real-model checks
+
+Create `server/.env` from `server/.env.example`, add `OPENAI_API_KEY`, then run:
 
 ```bash
-npm install                  # root — installs all three workspaces
-npm test                     # all workspace Vitest suites + 4 stock-Python importer tests
-npm run typecheck            # all workspaces
-
-# Server (needs server/.env — copy server/.env.example, add OPENAI_API_KEY)
-npm run dev -w server        # live pipeline on :3000
-npm run mock -w server       # NO API key needed — canned fixtures, 4s delay
-MOCK=correct npm run mock -w server   # fixtures: correct|error|suspect|unreadable|not-math
-
-# Paid golden regression suite (the gate for ALL prompt tuning — run after any prompt change)
-npm run gen-synthetic -w server   # regenerates the 15 synthetic test images
-npm run golden -w server          # paid combined 25-case gate; exits 1 on failure
-npm run golden:fermat -w server   # paid ten-case handwriting-only gate
-
-# App (device/simulator)
-cd app && npx expo start --go   # Expo Go; phone needs EXPO_PUBLIC_API_URL=http://<Mac-LAN-IP>:3000
+npm run dev -w server
+cd app && EXPO_PUBLIC_API_URL=http://<MAC-LAN-IP>:3000 npx expo start --go
 ```
 
-The root `npm test` command runs both the workspace Vitest suites and the four
-stock-`python3` importer regression tests; no third-party Python packages are
-needed for the importer tests.
+Live analysis transmits the chosen photo to the configured AI service and may incur API charges. Do not use mock footage as though it were a live result.
 
-**Conventions that matter:** the `app` workspace uses extensionless relative
-imports (Metro cannot resolve `.js` to `.ts`); `server` and `shared` use
-`.js`-suffixed imports (Node ESM requires them). Model IDs and the legibility
-threshold live in `server/src/config.ts`. JSON-mode prompts must include the
-literal word “JSON.”
+## Automated verification
 
-## Current evidence (as of July 22)
+```bash
+npm test
+npm run typecheck
+npm run lint -w app
+npm run golden -w server
+```
 
-- Reproducible on this branch: **150 automated tests** (12 shared, 85 server
-  Vitest, 4 Python importer, and 49 app), clean workspace typechecking, Expo
-  Doctor **20/20**, and a 25-case manifest with 15 synthetic cases plus 10
-  licensed FERMAT photographs (2 correct and 8 intentional-error cases).
-- Owner-observed: a physical-iPhone development-build workflow and a live-model
-  smoke run with real handwritten math.
-- Owner-reported paid FERMAT validation: **8/10**. The raw provider artifact was
-  not committed; the two reported misses were one strict canonical-tag mismatch
-  and one truncated JSON response.
+The first three commands completed on this branch on July 25, 2026: **391 automated tests** (18 shared Vitest, 109 server Vitest, 4 stock-Python importer, and 260 app Vitest), all-workspace typechecking, and Expo lint with no warnings or errors. `npm run golden -w server` is the paid 25-image live-model gate and requires `OPENAI_API_KEY`; it cannot be treated as a local mock test. Its result is recorded honestly in the [validation record](docs/validation/2026-07-22-prometheus-readiness.md).
 
-These are engineering validation results, not claims about a deployed service,
-users, or learning outcomes. See the
-[dated validation summary](docs/validation/2026-07-22-prometheus-readiness.md)
-for commands, provenance, and the boundary between reproducible and
-owner-reported evidence.
+## Submission and manual verification
 
-## Next submission actions
+The exact pending physical-phone and rehearsal checks, clean mock/live commands, and recording-security checklist are in the [validation record](docs/validation/2026-07-22-prometheus-readiness.md) and [demo script](docs/submission/DEMO-SCRIPT.md). They are intentionally unchecked: they require a physical phone, a live API key for live-model checks, and a human-run rehearsal.
 
-1. Record the narrated demo using [`docs/submission/DEMO-SCRIPT.md`](docs/submission/DEMO-SCRIPT.md): real diagnosis first, then clearly labeled mock footage only for reproducible UI states the live run does not show.
-2. Upload the video and verify full playback, audio, and captions in a signed-out browser.
-3. Complete the required Google form and Devpost entry, confirm eligibility and the public repository, then submit by July 29 ahead of the official deadline.
+The project story and ready-to-paste submission material are in [PROMETHEUS-ABOUT.md](docs/submission/PROMETHEUS-ABOUT.md) and [DEVPOST.md](docs/submission/DEVPOST.md).
 
-## Things intentionally NOT done
+## License and attribution
 
-- No auth/accounts/server-side storage (stateless by design — nothing to break in a demo).
-- No math-notation renderer in the app (plain-English + monospace LaTeX text was the deliberate YAGNI call).
-- Screens/components have no unit tests by design — pure logic is fully tested; UI is verified via the mock-server manual scripts in the app plan's task steps.
-
-## License and data attribution
-
-Original Snap-a-Mistake code is available under the [MIT License](LICENSE).
-The curated FERMAT photographs remain under CC BY 4.0; see
-[FERMAT attribution](server/golden/FERMAT-ATTRIBUTION.md) and
-[provenance](server/golden/fermat-provenance.json). The Expo-derived app
-template retains its notice in [app/LICENSE](app/LICENSE).
+Original Snap-a-Mistake code is available under the [MIT License](LICENSE). The committed FERMAT handwriting photographs are licensed CC BY 4.0; see the [attribution](server/golden/FERMAT-ATTRIBUTION.md) and [provenance](server/golden/fermat-provenance.json).

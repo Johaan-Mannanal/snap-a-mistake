@@ -51,10 +51,11 @@ export default function FollowUp() {
 
   useEffect(() => {
     mounted.current = true
+    const fence = checkFence.current
     return () => {
       mounted.current = false
       alternateRequest.current?.abort()
-      void checkFence.current.invalidate().catch(() => {})
+      void fence.invalidate().catch(() => {})
     }
   }, [])
 

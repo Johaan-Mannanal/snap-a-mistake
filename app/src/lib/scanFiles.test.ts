@@ -11,7 +11,7 @@ vi.mock('expo-file-system', () => ({
 class MemoryFiles implements FilePort {
   readonly scanDirectoryUri = 'file:///documents/scans/'
   readonly files = new Set<string>()
-  readonly copied: Array<{ source: string; destination: string }> = []
+  readonly copied: { source: string; destination: string }[] = []
   readonly deleted: string[] = []
   createdDirectories = 0
   failDeletesFor = new Set<string>()

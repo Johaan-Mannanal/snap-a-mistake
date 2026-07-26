@@ -13,7 +13,7 @@ class MemoryDatabase implements DatabasePort {
   readonly revisions = new Map<string, RevisionRow>()
   readonly appState = new Map<string, string>()
   readonly cleanup = new Set<string>()
-  readonly analyses: Array<{ tag: string | null; correct: number; createdAt: string }> = []
+  readonly analyses: { tag: string | null; correct: number; createdAt: string }[] = []
   userVersion = 0
   failActiveSessionDeletion = false
   failActiveSessionWrite = false

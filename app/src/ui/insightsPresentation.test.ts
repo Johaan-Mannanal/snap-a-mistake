@@ -106,7 +106,7 @@ describe('insights presentation', () => {
     })
   })
 
-  const statusCases: Array<[Partial<ScanRecord>, string]> = [
+  const statusCases: [Partial<ScanRecord>, string][] = [
     [{ lifecycle: 'review', feedback: 'excluded', activeRevision: null, revisions: [], followUp: null, followUpStatus: 'none' }, 'Diagnosis excluded'],
     [{ feedback: 'rejected' }, 'Diagnosis rejected'],
     [{ feedback: 'corrected' }, 'Saved · corrected'],
@@ -127,7 +127,7 @@ describe('insights presentation', () => {
     expect(item.statusLabel).toBe(expectedStatus)
   })
 
-  const recoveryCases: Array<[ScanRevision['response'], string]> = [
+  const recoveryCases: [ScanRevision['response'], string][] = [
     [{ kind: 'not-math' }, 'Not math'],
     [{ kind: 'unreadable', tips: ['Use more light.'] }, 'Photo unreadable'],
   ]

@@ -17,7 +17,7 @@ import {
   runExclusiveReviewAction,
   type ReviewTransaction,
 } from '../src/lib/reviewTransaction'
-import { acknowledgePrivacyDisclosure, clearSessionAfterAtomicDiscard, getSession, isPrivacyDisclosureAcknowledged, replacePendingPhoto, resetSession, setPendingPhoto, setReviewedPhoto } from '../src/lib/session'
+import { acknowledgePrivacyDisclosure, clearSessionAfterAtomicDiscard, getSession, isPrivacyDisclosureAcknowledged, replacePendingPhoto, resetSession, setReviewedPhoto } from '../src/lib/session'
 import type { ScanOrigin } from '../src/lib/scanTypes'
 import { reviewPresentation } from '../src/ui/reviewScreen'
 import { colors, spacing } from '../src/ui/theme'

@@ -1,76 +1,55 @@
-# Snap-a-Mistake Demo Script — 1:50–1:55 Target
+# Snap-a-Mistake demo script — two-minute rehearsal
 
-Record vertically from the phone when showing the app. The core diagnosis is a
-**real live-model result** recorded from the live pipeline. If a deterministic
-mock is needed to show a separate UI state, it must carry a persistent,
-unmistakable on-screen label: **“DETERMINISTIC MOCK MODE — CANNED RESPONSE
-(NOT LIVE MODEL).”** Do not present canned footage as a live diagnosis.
+This is a rehearsal plan, not evidence that a phone recording has been completed. The pending rehearsal and security checklist is in the [validation record](../validation/2026-07-22-prometheus-readiness.md).
 
-## 0:00–0:12 — The educational problem
+## Before recording
 
-**On screen:** Handwritten work, then Snap-a-Mistake home screen.
+- Use a physical phone in portrait orientation.
+- Record the core diagnosis through the live server only. Create `server/.env` from `server/.env.example`, set `OPENAI_API_KEY`, then run `npm run dev -w server`.
+- For a phone, run Expo with `EXPO_PUBLIC_API_URL=http://<MAC-LAN-IP>:3000`; the phone and Mac must be on the same network.
+- If deterministic UI footage is needed, run `MOCK=<mode> npm run mock -w server`. Add the persistent edit overlay **“DETERMINISTIC MOCK MODE — CANNED RESPONSE (NOT LIVE MODEL)”**. The app itself does not add that video label.
+- Before opening the recorder, close terminals, hide notifications, remove unrelated photos, and verify no secret is visible.
 
-**Say:** “A wrong answer tells a student almost nothing. Snap-a-Mistake finds
-the first handwritten step where the reasoning broke, explains the
-misconception, and gives the student a smaller problem to try next.”
+## 0:00–0:14 — The problem and capture
 
-## 0:12–0:34 — Real capture and diagnosis
+**On screen:** A single handwritten problem, then camera capture and the review screen.
 
-**On screen:** Capture an intentionally incorrect problem and show Reading,
-Checking, and Verifying. Keep a visible **“REAL LIVE-MODEL RUN”** label through
-the resulting diagnosis. For every cut or speed-up between capture and the real
-result, also keep the exact visible caption **“Analysis time condensed”**.
+**Say:** “A wrong answer does not tell a student where their reasoning changed. I built Snap-a-Mistake to keep the original page in view, identify the first unsupported step, and give the student a similar problem to try next.”
 
-**Say:** “This is a real live-model run. A multimodal transcription pass reads
-the page into positioned steps, a reasoning diagnosis finds the earliest error,
-and an independent verifier checks the result before the app displays it.”
+## 0:14–0:42 — Live analysis
 
-## 0:34–0:58 — Exact-step feedback
+**On screen:** Start a real live-model analysis. Keep a visible **“REAL LIVE-MODEL RUN”** overlay until its result is shown. If the segment is cut or sped up, keep **“Analysis time condensed”** visible too.
 
-**On screen:** The real-result overlay, wrong step card, misconception, and
-explanation.
+**Say:** “This is a real live-model run. The server reads the handwritten steps, diagnoses the earliest break, and sends the result through an independent verification pass. If that verifier disagrees, the app shows a softer suspect state rather than treating the diagnosis as certain.”
 
-**Say:** “The app keeps the student's page in view, highlights the exact line,
-and names the underlying misconception—not merely the final answer. If the
-verifier disagrees, the red error becomes a softer uncertain state.”
+## 0:42–1:05 — First-break feedback
 
-## 0:58–1:18 — Close the learning loop
+**On screen:** The original photo overlay, selected step, misconception label, and explanation. Expand a timeline card and use the linked overlay once.
 
-**On screen:** Follow-up problem, retry action, then a correct state. Use the
-real result where possible. If mock footage is needed for this additional UI
-state, show the persistent canned-response label.
+**Say:** “The feedback is attached to the student’s actual line, not just the final answer. I use readable Unicode math in the mobile UI so the explanation and follow-up are legible without exposing raw LaTeX.”
 
-**Say:** “Feedback becomes targeted practice. The student tries an easier
-version, snaps again, and closes the loop when all steps check out.”
+## 1:05–1:27 — Correction and similar follow-up
 
-## 1:18–1:34 — Local insights
+**On screen:** Accept the diagnosis or select a corrected step, then show the saved revision and the similar follow-up with hint. If showing deterministic correction or alternate-problem UI, keep the canned-response label visible.
 
-**On screen:** Insights screen with local trend cards. If this is a mock state,
-keep the persistent canned-response label visible.
+**Say:** “A student can accept, reject, or correct the diagnosis. Corrections replace the active diagnosis for the same saved scan. Then the app offers a similar problem and a hint, and a new attempt stays linked to the original scan.”
 
-**Say:** “Recurring misconception tags become private on-device trends, so a
-student can see whether sign errors or rule mistakes are improving over time.”
+## 1:27–1:46 — Patterns and Previous scans
 
-## 1:34–1:50 — Technical trust and close
+**On screen:** Open Patterns, then Previous scans; open one saved scan and show its retained active revision.
 
-**On screen:** Repository architecture, shared API schema, and a card labeled
-**“OWNER-REPORTED REAL-HANDWRITING VALIDATION — PAID FERMAT GATE: 8/10.”** Then
-return to the product name.
+**Say:** “Patterns and scan history stay on the device. The server has no database or account store, and saved photos, revisions, and follow-up links remain local until the student deletes them.”
 
-**Say:** “The system combines multimodal transcription, reasoning diagnosis,
-and independent verification. In the owner-reported latest paid FERMAT gate,
-eight of ten real-handwriting cases passed; the two remaining misses are
-documented. Snap-a-Mistake helps students understand where their thinking
-changed, then gives them the next achievable step.”
+## 1:46–2:00 — Close
 
-## Recording safety
+**On screen:** Return to the photo and a concise architecture card.
 
-- Record the live-model core diagnosis before adding any mock cutaway.
-- For every cut or speed-up between capture and the real result, show the exact
-  visible caption **“Analysis time condensed”** while keeping **“REAL
-  LIVE-MODEL RUN”** visible.
-- Use a persistent canned-response label for every mock segment; do not imply
-  it is live.
-- Keep the final export at or below 1:55.
-- Upload publicly or unlisted as the rules allow, then verify playback in a
-  signed-out browser with audio and captions enabled.
+**Say:** “Snap-a-Mistake is my attempt to turn ‘wrong answer’ into a useful next step: find the first break, explain it in context, and let the student practice the same idea again.”
+
+## After recording — pending checklist
+
+- [ ] Rewatch the whole recording for keys, terminals, notifications, account data, and unrelated photos.
+- [ ] Verify every mock segment has the persistent canned-response label.
+- [ ] Verify every cut or speed-up in a live-analysis segment has both required live/condensed labels.
+- [ ] Verify audio, captions, portrait framing, and final duration.
+- [ ] Upload as the rules permit and check signed-out playback before submitting.

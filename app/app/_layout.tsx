@@ -20,7 +20,9 @@ export default function RootLayout() {
     }).then(setStartup)
   }, [])
 
-  useEffect(initialize, [initialize])
+  useEffect(() => {
+    queueMicrotask(initialize)
+  }, [initialize])
 
   if (startup === null) {
     return <View style={styles.launch} />

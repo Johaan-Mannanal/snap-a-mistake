@@ -40,7 +40,7 @@ export default function Insights() {
   }, [])
 
   useEffect(() => {
-    loadHistory()
+    queueMicrotask(loadHistory)
     return () => { requestId.current += 1 }
   }, [loadHistory])
 
@@ -119,8 +119,6 @@ export default function Insights() {
       </ScrollView>
     </SafeAreaView>
   )
-
-  return null
 }
 
 function InsightsHeader(props: { section: InsightsSection; onSectionChange: (section: InsightsSection) => void }) {

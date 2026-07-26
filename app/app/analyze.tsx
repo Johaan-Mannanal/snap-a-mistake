@@ -67,6 +67,7 @@ export default function Analyze() {
   const correctionBusy = useRef(createCorrectionBusyState())
   const feedbackLock = useRef(createAsyncLock<void>())
   const retryCorrection = useRef<(() => void) | null>(null)
+  const acceptDiagnosisRef = useRef<() => void>(() => {})
   const requestInFlight = useRef(false)
   const runFence = useRef(createRunFence())
   const saveLock = useRef(createAsyncLock<void>())
@@ -248,12 +249,15 @@ export default function Analyze() {
   }, [])
   useEffect(() => {
     if (!result || result.kind !== 'analysis') return
-    const initialStep = result.errorStepIndex ?? result.steps[0]?.index ?? null
-    setSelectedStepIndex(initialStep)
-    setExpandedStepIndexes(initialExpandedStepIndexes(result.errorStepIndex))
-    setShowAllSteps(result.errorStepIndex === null)
-    setPendingPhotoFocusIndex(null)
-    setFeedbackAccepted(false)
+    const update = setTimeout(() => {
+      const initialStep = result.errorStepIndex ?? result.steps[0]?.index ?? null
+      setSelectedStepIndex(initialStep)
+      setExpandedStepIndexes(initialExpandedStepIndexes(result.errorStepIndex))
+      setShowAllSteps(result.errorStepIndex === null)
+      setPendingPhotoFocusIndex(null)
+      setFeedbackAccepted(false)
+    }, 0)
+    return () => clearTimeout(update)
   }, [result])
   useEffect(() => {
     if (result || failure) return
@@ -308,7 +312,7 @@ export default function Analyze() {
 
   const acceptDiagnosis = useCallback(() => {
     if (!scanId || feedbackLock.current.busy) return
-    retryCorrection.current = acceptDiagnosis
+    retryCorrection.current = () => acceptDiagnosisRef.current()
     const correction = correctionFence.current.begin(scanId)
     beginCorrectionBusy(correction)
     const task = feedbackLock.current.run(async () => {
@@ -327,6 +331,9 @@ export default function Analyze() {
     })
     correctionFence.current.track(correction, task)
   }, [beginCorrectionBusy, finishCorrectionBusy, scanId])
+  useEffect(() => {
+    acceptDiagnosisRef.current = acceptDiagnosis
+  }, [acceptDiagnosis])
 
   const submitCorrection = useCallback((analysis: Extract<AnalyzeResponse, { kind: 'analysis' }>, selectedStepIndex: number, replacement?: Extract<AnalyzeResponse, { kind: 'analysis' }>) => {
     if (!scanId || !uri || durableResultRevisionId === null || feedbackLock.current.busy) return
@@ -373,7 +380,7 @@ export default function Analyze() {
     }
     retryCorrection.current = execute
     execute()
-  }, [announceForCurrentRun, beginCorrectionBusy, durableResultRevisionId, finishCorrectionBusy, ownsCorrection, scanId, uri])
+  }, [beginCorrectionBusy, durableResultRevisionId, finishCorrectionBusy, ownsCorrection, scanId, uri])
 
   const excludeDiagnosis = useCallback((analysis: Extract<AnalyzeResponse, { kind: 'analysis' }>) => {
     if (!scanId || durableResultRevisionId === null || feedbackLock.current.busy) return

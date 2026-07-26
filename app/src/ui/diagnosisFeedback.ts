@@ -14,7 +14,7 @@ export function isDurableFeedbackAvailable(
   return canRequestDiagnosisFeedback(response) && state.revisionId !== null && !state.isSaving && !state.unsaved
 }
 
-export function correctionStepOptions(response: AnalysisResponse): Array<{ index: number; label: string }> {
+export function correctionStepOptions(response: AnalysisResponse): { index: number; label: string }[] {
   return response.steps.map((step) => ({ index: step.index, label: readableStep(step) }))
 }
 

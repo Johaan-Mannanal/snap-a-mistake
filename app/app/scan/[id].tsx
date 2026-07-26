@@ -74,7 +74,7 @@ export default function ScanDetail() {
   }, [scanId])
 
   useEffect(() => {
-    load()
+    queueMicrotask(load)
     return () => { requestId.current += 1 }
   }, [load])
 

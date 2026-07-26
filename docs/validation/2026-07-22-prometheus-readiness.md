@@ -1,67 +1,66 @@
-# Prometheus readiness evidence — July 22, 2026
+# Prometheus readiness and final verification record — July 25, 2026
 
-This summary separates evidence that a reviewer can reproduce from the public
-branch from observations and paid-run results reported by the project owner. It
-does not include prompts, student work, API keys, raw provider payloads, or
-private device identifiers.
+This record separates repository-reproducible evidence from paid, device, and rehearsal work that still needs a human operator. It does not contain API keys, private photos, raw provider responses, device identifiers, or recording artifacts.
 
-## Reproducible on the branch
+## Automated evidence recorded on this branch
 
-### Automated checks
+The following commands completed on July 25, 2026:
 
-- `npm test` runs **150 tests**: 12 shared Vitest tests, 85 server Vitest tests,
-  4 stock-Python importer tests, and 49 app Vitest tests.
-- `npm run typecheck` checks all three workspaces: shared, server, and app.
-- Expo Doctor reported **20/20 checks passed** for the app. Reviewers can rerun
-  the project check from `app/` with `npx expo-doctor`.
+```bash
+npm test
+npm run typecheck
+npm run lint -w app
+```
 
-### Golden-set composition
+- `npm test`: **391 tests passed** — 18 shared Vitest, 109 server Vitest, 4 stock-Python importer tests, and 260 app Vitest tests.
+- `npm run typecheck`: shared, server, and app each completed `tsc --noEmit`.
+- `npm run lint -w app`: Expo lint completed with zero warnings and zero errors.
+- The app’s lint setup uses SDK 57-compatible `eslint` and `eslint-config-expo`. Its only targeted configuration exceptions are for React Native object-ref forwarding and Reanimated shared-value mutation; ordinary Expo lint rules remain enabled.
 
-`server/golden/manifest.json` contains **25 cases**:
+The committed golden manifest still contains 25 inspectable cases: 15 synthetic cases and 10 CC BY 4.0 FERMAT handwriting photographs (2 correct and 8 intentional-error cases). Attribution and provenance are in [FERMAT-ATTRIBUTION.md](../../server/golden/FERMAT-ATTRIBUTION.md) and [fermat-provenance.json](../../server/golden/fermat-provenance.json).
 
-- 15 synthetic cases;
-- 10 FERMAT photographs;
-- within the FERMAT subset, 2 correct cases and 8 intentional-error cases.
+## Paid golden gate
 
-The manifest, committed FERMAT photographs, and tests make that composition
-inspectable without a paid model run. This summary does not claim that the
-generated 15-case paid pipeline achieved any particular pass rate.
+```bash
+npm run golden -w server
+```
 
-### License and provenance
+This is a paid live-model gate, not a mock check. It requires `OPENAI_API_KEY` in `server/.env` and makes external model calls. It was not run in this environment because no API key was available. No paid-pass rate is claimed here.
 
-- [`server/golden/FERMAT-ATTRIBUTION.md`](../../server/golden/FERMAT-ATTRIBUTION.md)
-  records the FERMAT citation and CC BY 4.0 license.
-- [`server/golden/fermat-provenance.json`](../../server/golden/fermat-provenance.json)
-  records source IDs, labels, the pinned dataset revision, source URLs, and
-  shard checksums for the selected cases.
-- The optional importer and its four stock-Python regression tests are in
-  `server/scripts/import-fermat.py` and `server/test/test_import_fermat.py`.
+## Physical-phone checklist — pending, not automated
 
-## Owner-observed or owner-reported
+Start a clean mock phone run for deterministic states:
 
-The following evidence is not independently reproducible from repository
-contents alone.
+```bash
+MOCK=error npm run mock -w server
+cd app && EXPO_PUBLIC_API_URL=http://<MAC-LAN-IP>:3000 npx expo start --go
+```
 
-### Owner-observed device and live-model checks
+Use `MOCK=timeout`, `server-error`, `unreadable`, `not-math`, `correction`, and `alternate-follow-up` as needed. The phone and Mac must share a network; do not use the phone’s `localhost`.
 
-- A physical-iPhone development-build workflow exercised camera and gallery
-  input, staged analysis, result overlays, follow-up practice, local insights,
-  non-math and unreadable responses, and network recovery.
-- A real live-model smoke run processed real handwritten math after the
-  long-running request path was hardened.
+Start a clean live phone run only with an approved API key:
 
-These are owner-observed workflow checks; no device recording or raw model
-exchange is committed as repository evidence.
+```bash
+npm run dev -w server
+cd app && EXPO_PUBLIC_API_URL=http://<MAC-LAN-IP>:3000 npx expo start --go
+```
 
-### Owner-reported paid FERMAT result
+- [ ] Camera and gallery both reach review.
+- [ ] Cancel returns to review with the photo intact.
+- [ ] Offline, timeout, server, unreadable, and not-math states offer the correct actions.
+- [ ] Correction replaces the active diagnosis and does not add a Pattern attempt.
+- [ ] Follow-up remains visible on camera and links to its parent.
+- [ ] App restart restores review, result, and follow-up states.
+- [ ] Previous scan opens, deletes individually, and clear-all removes every owned image.
+- [ ] VoiceOver and maximum Dynamic Type complete the core journey.
 
-The latest paid FERMAT result is **8/10**, as reported by the project owner. The
-reported two misses were:
+## Two-minute demo rehearsal and security checklist — pending, not automated
 
-1. one strict canonical-tag mismatch, despite selection of the correct error
-   step; and
-2. one truncated JSON response.
+- [ ] Record one uninterrupted rehearsal: capture and review, a real live-model analysis, first-break explanation, diagnosis acceptance or correction, a similar follow-up, Patterns, and a Previous scan.
+- [ ] Keep any mock footage visually labeled throughout as “DETERMINISTIC MOCK MODE — CANNED RESPONSE (NOT LIVE MODEL).”
+- [ ] If a real analysis is cut or sped up, keep “REAL LIVE-MODEL RUN” and “Analysis time condensed” visible through that segment.
+- [ ] Check the entire recording for API keys, terminal windows, personal notifications, account information, and unrelated photos.
+- [ ] Check audio, captions, vertical framing, and public or permitted-unlisted playback in a signed-out browser.
+- [ ] Confirm the final export stays within the competition’s permitted duration.
 
-The raw paid-run provider artifact was not committed and cannot be independently
-reconstructed from the repository. The 8/10 figure must therefore be presented
-as owner-reported, not as repository-reproducible evidence.
+These unchecked items deliberately remain pending. They require a physical phone, a live API key for the real-model portion, and a human recording review.

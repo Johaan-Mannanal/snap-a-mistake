@@ -26,7 +26,7 @@ export default function Home() {
   const followUp = isRetry ? getSession().followUp : null
   const presentation = cameraPresentation(isRetry)
 
-  const usePhoto = async (uri: string, origin: 'camera' | 'library') => {
+  const savePhoto = async (uri: string, origin: 'camera' | 'library') => {
     await setPendingPhoto({ uri, origin })
     router.push('/review')
   }
@@ -37,7 +37,7 @@ export default function Home() {
       ready: cameraReady,
       lock: captureLock.current,
       onPhoto: async (uri) => {
-        await usePhoto(uri, 'camera')
+        await savePhoto(uri, 'camera')
         void captureFeedback(systemHaptics)
       },
       onError: (message) => dispatchCamera({ type: 'captureFailed', message }),
@@ -54,7 +54,7 @@ export default function Home() {
         dispatchCamera({ type: 'captureFailed', message: 'Could not choose that photo. Try again or take a new photo.' })
         return
       }
-      await usePhoto(uri, 'library')
+      await savePhoto(uri, 'library')
     } catch {
       dispatchCamera({ type: 'captureFailed', message: 'Could not open your library. Try again or take a new photo.' })
     }

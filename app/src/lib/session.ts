@@ -1,7 +1,6 @@
 import type { AnalyzeResponse, FollowUp } from '@snap/shared'
 import { z } from 'zod'
-import type { ScanOrigin } from './scanTypes'
-import { PersistedSessionSchema, type PersistedSession } from './scanTypes'
+import { PersistedSessionSchema, type PersistedSession, type ScanOrigin } from './scanTypes'
 import type { ScanRepository } from './scanRepository'
 
 const PRIVACY_DISCLOSURE_KEY = 'privacy-disclosure-v1'
