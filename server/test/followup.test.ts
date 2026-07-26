@@ -67,4 +67,45 @@ describe('generateFollowUp', () => {
     expect(result.problem).toBe('Evaluate ∫ 2x eˣ dx.')
     expect(client.chat.completions.create).toHaveBeenCalledTimes(2)
   })
+
+  it('returns the requested concept identity when model casing and whitespace vary', async () => {
+    const client = fakeClient(JSON.stringify({
+      problem: 'Evaluate ∫ 2x eˣ dx.',
+      concept: '  Integration   By Parts ',
+      hint: 'Choose u before differentiating.',
+    }))
+
+    const result = await generateFollowUp(client, 'gpt-5.6-sol', {
+      concept: 'integration by parts',
+      diagnosis: 'The remaining integral kept an extra x.',
+      previousProblems: ['Evaluate ∫ x eˣ dx.'],
+    })
+
+    expect(result.concept).toBe('integration by parts')
+    expect(client.chat.completions.create).toHaveBeenCalledOnce()
+  })
+
+  it('retries when the model changes to a genuinely different concept', async () => {
+    const client = fakeClient(
+      JSON.stringify({
+        problem: 'Evaluate ∫ 2x eˣ dx.',
+        concept: 'u-substitution',
+        hint: 'Choose an inner expression.',
+      }),
+      JSON.stringify({
+        problem: 'Evaluate ∫ 2x eˣ dx.',
+        concept: 'Integration by Parts',
+        hint: 'Choose u before differentiating.',
+      }),
+    )
+
+    const result = await generateFollowUp(client, 'gpt-5.6-sol', {
+      concept: 'integration by parts',
+      diagnosis: 'The remaining integral kept an extra x.',
+      previousProblems: ['Evaluate ∫ x eˣ dx.'],
+    })
+
+    expect(result.concept).toBe('integration by parts')
+    expect(client.chat.completions.create).toHaveBeenCalledTimes(2)
+  })
 })

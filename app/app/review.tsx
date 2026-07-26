@@ -232,9 +232,7 @@ export default function Review() {
       {retakeError ? <Text accessibilityRole="alert" style={styles.error}>{retakeError}</Text> : null}
       <View style={styles.actions}>
         <AppButton label={presentation.primaryLabel} disabled={presentation.actionsDisabled} onPress={analyze} />
-        {presentation.actions.retake ? (
-          <AppButton label={presentation.actions.retake} disabled={presentation.actionsDisabled} onPress={retake} variant="secondary" />
-        ) : null}
+        <AppButton label={presentation.actions.retake} disabled={presentation.actionsDisabled} onPress={retake} variant="secondary" />
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: presentation.actionsDisabled }}

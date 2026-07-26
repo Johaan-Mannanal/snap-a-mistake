@@ -27,7 +27,7 @@ The server is stateless: it has no account system, database, or history store. A
 ## Technical evidence
 
 - TypeScript npm-workspace monorepo: Expo/React Native app, Fastify API, Zod shared contracts, and device-local SQLite.
-- 508 automated tests passed on this branch on July 26, 2026: 42 shared Vitest, 120 server Vitest, 4 stock-Python importer, and 342 app Vitest tests.
+- 512 automated tests passed on this branch on July 26, 2026: 42 shared Vitest, 122 server Vitest, 4 stock-Python importer, and 344 app Vitest tests.
 - All three workspaces typechecked and Expo lint completed with zero warnings and zero errors on that same run.
 - The repository includes an inspectable 25-case golden manifest: 15 synthetic cases and 10 licensed FERMAT handwriting photographs.
 - The paid live-model golden command remains deliberately separate: it requires an API key and makes external requests. No current paid-pass rate is claimed without a recorded run artifact.

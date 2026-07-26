@@ -2,7 +2,7 @@ import type { ScanOrigin } from '../lib/scanTypes'
 
 export type ReviewActions = {
   primary: 'Analyze'
-  retake: 'Retake' | null
+  retake: 'Retake' | 'Back to camera'
   replace: 'Choose another'
 }
 
@@ -27,7 +27,7 @@ export function reviewPresentation(input: {
   return {
     sourceLabel: input.origin === 'camera' ? 'Captured with camera' : 'Selected from library',
     privacyCopy: input.disclosureAcknowledged ? null : FIRST_USE_PRIVACY_COPY,
-    actions: { primary: 'Analyze', retake: input.origin === 'camera' ? 'Retake' : null, replace: 'Choose another' },
+    actions: { primary: 'Analyze', retake: input.origin === 'camera' ? 'Retake' : 'Back to camera', replace: 'Choose another' },
     primaryLabel: input.isCopying ? 'Saving photo…' : 'Analyze',
     actionsDisabled: input.isCopying,
     errorCopy: input.copyFailed ? COPY_FAILURE_COPY : null,

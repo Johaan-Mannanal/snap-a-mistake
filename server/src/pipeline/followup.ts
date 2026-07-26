@@ -16,7 +16,7 @@ Respond with ONLY a JSON object:
 Rules:
 - Create one slightly easier problem that exercises the same concept.
 - The new problem must differ from every previous problem supplied by the student. Do not repeat, rephrase, or make only cosmetic changes to a previous problem.
-- Use a concise 2-4 word concept label.
+- Copy the supplied Concept label exactly, including its capitalization and spacing.
 - Include one hint that makes the first productive move clearer without solving the problem.
 - Write problem and hint in student-facing Unicode math with no raw LaTeX, math delimiters, or caret notation. Use polished Unicode symbols such as ∫, √, ×, ÷, −, eˣ, and x²; if Unicode is impractical, use clear prose.`
 
@@ -28,6 +28,10 @@ function normalizeProblem(problem: string): string {
   return problem.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
 }
 
+function normalizeConceptIdentity(concept: string): string {
+  return concept.trim().toLocaleLowerCase().replace(/\s+/g, ' ')
+}
+
 export async function generateFollowUp(
   client: OpenAI,
   model: string,
@@ -37,8 +41,10 @@ export async function generateFollowUp(
   const schema = FollowUpSchema.superRefine((followUp, issue) => {
     if (previousProblems.has(normalizeProblem(followUp.problem)))
       issue.addIssue({ code: 'custom', path: ['problem'], message: 'problem must differ from previous problems' })
+    if (normalizeConceptIdentity(followUp.concept) !== normalizeConceptIdentity(context.concept))
+      issue.addIssue({ code: 'custom', path: ['concept'], message: 'concept must match the requested concept' })
   })
-  return callModelJson({
+  const followUp = await callModelJson({
     client,
     model,
     system: SYSTEM,
@@ -46,6 +52,7 @@ export async function generateFollowUp(
     maxTokens: 600,
     content: [{ type: 'text', text: renderContext(context) }],
   })
+  return { ...followUp, concept: context.concept }
 }
 
 export function makeGenerateFollowUp(client: OpenAI, model: string): GenerateFollowUpFn {

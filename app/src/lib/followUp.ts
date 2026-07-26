@@ -212,10 +212,18 @@ export function revealFollowUpHint(state: FollowUpPracticeState): FollowUpPracti
   return { ...state, hintVisible: true }
 }
 
+function normalizeConceptIdentity(concept: string): string {
+  return concept.trim().toLocaleLowerCase().replace(/\s+/g, ' ')
+}
+
 export function replaceFollowUpProblem(state: FollowUpPracticeState, alternate: FollowUp): FollowUpPracticeState | null {
-  if (state.followUp.concept !== alternate.concept || state.followUp.problem === alternate.problem || state.previousProblems.includes(alternate.problem)) return null
+  if (
+    normalizeConceptIdentity(state.followUp.concept) !== normalizeConceptIdentity(alternate.concept)
+    || state.followUp.problem === alternate.problem
+    || state.previousProblems.includes(alternate.problem)
+  ) return null
   return {
-    followUp: alternate,
+    followUp: { ...alternate, concept: state.followUp.concept },
     hintVisible: false,
     previousProblems: [...state.previousProblems, state.followUp.problem].slice(-(MAX_PREVIOUS_PROBLEMS - 1)),
   }

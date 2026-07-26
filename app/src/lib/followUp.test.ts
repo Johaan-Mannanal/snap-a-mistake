@@ -37,6 +37,31 @@ describe('follow-up practice state', () => {
     expect(replaceFollowUpProblem(state, { ...initial })).toBeNull()
   })
 
+  it('accepts case and whitespace variations without changing the requested concept identity', () => {
+    const state = createFollowUpPracticeState(initial)
+    const replacement = replaceFollowUpProblem(state, {
+      concept: '  SIGN   Distribution ',
+      problem: 'Simplify −(3x − 4).',
+      hint: 'Apply the negative sign to each term.',
+    })
+
+    expect(replacement?.followUp).toEqual({
+      concept: 'sign distribution',
+      problem: 'Simplify −(3x − 4).',
+      hint: 'Apply the negative sign to each term.',
+    })
+  })
+
+  it('still rejects a genuinely different concept', () => {
+    const state = createFollowUpPracticeState(initial)
+
+    expect(replaceFollowUpProblem(state, {
+      concept: 'combining like terms',
+      problem: 'Simplify −(3x − 4).',
+      hint: 'Apply the negative sign to each term.',
+    })).toBeNull()
+  })
+
   it('keeps the alternate request history bounded while including the current problem', () => {
     let state = createFollowUpPracticeState(initial)
     for (let index = 1; index <= 7; index += 1) {

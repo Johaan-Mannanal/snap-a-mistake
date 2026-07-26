@@ -11,13 +11,13 @@ describe('review presentation', () => {
     expect(presentation.actions).toEqual({ primary: 'Analyze', retake: 'Retake', replace: 'Choose another' })
   })
 
-  it('labels a library photo without offering retake', () => {
+  it('labels a library photo and offers a visible safe exit to camera', () => {
     const presentation = reviewPresentation({
       origin: 'library', disclosureAcknowledged: true, isCopying: false, copyFailed: false,
     })
 
     expect(presentation.sourceLabel).toBe('Selected from library')
-    expect(presentation.actions).toEqual({ primary: 'Analyze', retake: null, replace: 'Choose another' })
+    expect(presentation.actions).toEqual({ primary: 'Analyze', retake: 'Back to camera', replace: 'Choose another' })
   })
 
   it('shows privacy context before the first analysis only', () => {
@@ -36,6 +36,7 @@ describe('review presentation', () => {
     })
 
     expect(presentation.primaryLabel).toBe('Saving photo…')
+    expect(presentation.actions.retake).toBe('Back to camera')
     expect(presentation.actionsDisabled).toBe(true)
     expect(presentation.errorCopy).toBe('We couldn’t save this photo on your device. Try analyzing again or choose another photo.')
   })
