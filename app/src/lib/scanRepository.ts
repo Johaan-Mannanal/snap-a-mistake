@@ -103,6 +103,27 @@ function statusForResponse(response: AnalyzeResponse, current: FollowUpStatus): 
   return 'none'
 }
 
+function followUpStatusForChild(parent: ScanRecord, response: AnalyzeResponse): FollowUpStatus {
+  const parentAnalysis = parent.activeRevision?.response
+  const resolved = response.kind === 'analysis'
+    && parentAnalysis?.kind === 'analysis'
+    && (response.errorStepIndex === null || response.misconceptionTag !== parentAnalysis.misconceptionTag)
+  return resolved ? 'resolved' : 'unresolved'
+}
+
+async function updateParentFollowUpStatus(
+  db: DatabasePort,
+  child: ScanRecord,
+  response: AnalyzeResponse,
+): Promise<void> {
+  if (child.parentScanId === null) return
+  const parent = await requireRecord(db, child.parentScanId)
+  if (parent.followUp === null) return
+  const status = followUpStatusForChild(parent, response)
+  if (parent.followUpStatus === status) return
+  await db.runAsync('UPDATE scans SET follow_up_status = ?, updated_at = ? WHERE id = ?', [status, now(), parent.id])
+}
+
 function draftRecord(input: NewScanDraft): ScanRecord {
   return ScanRecordSchema.parse({
     ...input,
@@ -253,6 +274,7 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
           [savedRevision.id, 'complete', durationMs, followUp === null ? null : JSON.stringify(followUp),
             statusForResponse(validatedRevision.response, scan.followUpStatus), feedback, updatedAt, scanId],
         )
+        await updateParentFollowUpStatus(transaction, scan, validatedRevision.response)
         return requireRecord(transaction, scanId)
       })
     },
@@ -291,6 +313,8 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
             statusForResponse(correctedRevision.response, scan.followUpStatus), 'corrected', now(), scanId],
         )
         requireCurrent()
+        await updateParentFollowUpStatus(transaction, scan, correctedRevision.response)
+        requireCurrent()
         if (persistedSession) await transaction.runAsync(
           `INSERT INTO app_state (key, value_json) VALUES (?, ?)
            ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
@@ -317,13 +341,15 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
           if (isCurrent && !isCurrent()) throw new Error('exclusion is no longer current')
         }
         requireCurrent()
-        await requireRecord(transaction, scanId)
+        const scan = await requireRecord(transaction, scanId)
         requireCurrent()
         await transaction.runAsync(
           `UPDATE scans SET active_revision_id = ?, lifecycle = ?, analysis_duration_ms = ?, follow_up_json = ?,
            follow_up_status = ?, feedback = ?, updated_at = ? WHERE id = ?`,
           [null, 'review', null, null, 'none', 'excluded', now(), scanId],
         )
+        requireCurrent()
+        await updateParentFollowUpStatus(transaction, scan, { kind: 'not-math' })
         requireCurrent()
         if (persistedSession) await transaction.runAsync(
           `INSERT INTO app_state (key, value_json) VALUES (?, ?)

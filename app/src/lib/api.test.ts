@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ApiError, analyzePhoto, correctDiagnosis } from './api'
+import { ApiError, analyzePhoto, correctDiagnosis, requestAlternateFollowUp } from './api'
 
 vi.mock('expo-file-system', () => ({
   File: class MockFile extends Blob {
@@ -156,5 +156,38 @@ describe('correctDiagnosis', () => {
     await expect(correctDiagnosis('file:///photo.jpg', { analysis: diagnosis, selectedStepIndex: 2 }, {
       fetchFn: vi.fn().mockResolvedValue(ok({ kind: 'bad' })) as typeof fetch,
     })).rejects.toMatchObject({ failure: { kind: 'invalid-response', status: 200 } })
+  })
+})
+
+describe('requestAlternateFollowUp', () => {
+  const context = {
+    concept: 'sign distribution',
+    diagnosis: 'You lost the negative sign.',
+    previousProblems: ['Simplify −(x + 2).'],
+  }
+  const followUp = { problem: 'Simplify −(3x − 4).', concept: 'sign distribution', hint: 'Apply the negative sign to each term.' }
+
+  it('posts the shared context and parses a shared follow-up response', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(ok(followUp))
+
+    await expect(requestAlternateFollowUp(context, { fetchFn })).resolves.toEqual(followUp)
+    const [url, init] = fetchFn.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/follow-up')
+    expect(init.method).toBe('POST')
+    expect(init.headers).toEqual({ 'content-type': 'application/json' })
+    expect(init.body).toBe(JSON.stringify(context))
+  })
+
+  it('uses the same cancellation and invalid-response failures as diagnosis requests', async () => {
+    const controller = new AbortController()
+    const fetchFn = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      ;(init?.signal as AbortSignal).addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+    }))
+    const pending = requestAlternateFollowUp(context, { fetchFn: fetchFn as typeof fetch, signal: controller.signal })
+    controller.abort()
+
+    await expect(pending).rejects.toMatchObject({ failure: { kind: 'cancelled' } })
+    await expect(requestAlternateFollowUp(context, { fetchFn: vi.fn().mockResolvedValue(ok({ problem: '', concept: '', hint: '' })) as typeof fetch }))
+      .rejects.toMatchObject({ failure: { kind: 'invalid-response', status: 200 } })
   })
 })

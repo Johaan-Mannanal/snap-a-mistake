@@ -34,7 +34,7 @@ function allocateScanId(): string {
 }
 
 export default function Review() {
-  const [photo, setPhoto] = useState<PendingPhoto | null>(initialPendingPhoto)
+  const [photo, setReviewPhoto] = useState<PendingPhoto | null>(initialPendingPhoto)
   const [disclosureAcknowledged, setDisclosureAcknowledged] = useState(isPrivacyDisclosureAcknowledged)
   const [isCopying, setIsCopying] = useState(false)
   const [copyFailed, setCopyFailed] = useState(false)
@@ -116,7 +116,7 @@ export default function Review() {
           deleteOwnedPhoto,
         }),
       })
-      setPhoto({ uri, origin: 'library' })
+      setReviewPhoto({ uri, origin: 'library' })
       transaction.current = null
       cleanupTransaction.current = replacement.cleanupFailed ? priorTransaction : null
       if (replacement.cleanupFailed)

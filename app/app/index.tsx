@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppButton } from '../src/components/AppButton'
 import { CameraCorners } from '../src/components/CameraCorners'
 import { AppIcon } from '../src/components/AppIcon'
+import { CurrentProblemCard } from '../src/components/CurrentProblemCard'
 import { capturePhoto, runIfCaptureIdle, type CaptureLock } from '../src/lib/cameraCapture'
 import { cameraUiReducer, initialCameraUiState } from '../src/lib/cameraUiState'
 import { getSession, setPendingPhoto } from '../src/lib/session'
@@ -19,6 +20,7 @@ export default function Home() {
   const [permission, requestPermission] = useCameraPermissions()
   const [{ cameraMountKey, cameraReady, isCapturing, cameraError }, dispatchCamera] = useReducer(cameraUiReducer, initialCameraUiState)
   const isRetry = getSession().isRetry
+  const followUp = isRetry ? getSession().followUp : null
   const presentation = cameraPresentation(isRetry)
 
   const usePhoto = async (uri: string, origin: 'camera' | 'library') => {
@@ -135,6 +137,7 @@ export default function Home() {
       </View>
 
       <SafeAreaView style={styles.bottomSafe} pointerEvents="box-none">
+        {followUp ? <CurrentProblemCard followUp={followUp} /> : null}
         <View style={styles.captureRow}>
           <Pressable
             accessibilityLabel="Choose from library"

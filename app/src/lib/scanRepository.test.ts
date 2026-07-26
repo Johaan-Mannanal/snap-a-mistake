@@ -276,6 +276,60 @@ describe('scan repository records', () => {
     expect(saved.followUpStatus).toBe('none')
   })
 
+  it('resolves a parent follow-up atomically when its child is correct', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+    await repository.createDraft({ ...draft('child'), attemptKind: 'follow-up', parentScanId: 'parent' })
+
+    await repository.saveRevision('child', revision('child-correct', 'initial'), 410)
+
+    expect((await repository.get('child'))).toMatchObject({ attemptKind: 'follow-up', parentScanId: 'parent', lifecycle: 'complete' })
+    expect((await repository.get('parent'))?.followUpStatus).toBe('resolved')
+  })
+
+  it('leaves a parent unresolved when the child retains the original misconception', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+    await repository.createDraft({ ...draft('child'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    const sameDiagnosis: ScanRevision = {
+      ...diagnosisRevision,
+      id: 'child-same-diagnosis',
+      response: {
+        kind: 'analysis', steps: [], errorStepIndex: 0, misconceptionTag: 'sign-error',
+        explanation: 'The sign changed without distributing the negative.',
+        followUp: { problem: 'Simplify −(x + 2).', concept: 'sign distribution', hint: 'Distribute the negative to both terms.' },
+        verifierAgreed: true,
+      },
+    }
+
+    await repository.saveRevision('child', sameDiagnosis, 410)
+
+    expect((await repository.get('parent'))?.followUpStatus).toBe('unresolved')
+  })
+
+  it('never resolves a parent from an unreadable child result', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+    await repository.createDraft({ ...draft('child'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    const unreadable: ScanRevision = {
+      id: 'child-unreadable', reason: 'initial', feedback: 'unreviewed', createdAt: '2026-07-24T12:02:00.000Z',
+      response: { kind: 'unreadable', tips: ['Use more light.'] },
+    }
+
+    await repository.saveRevision('child', unreadable, 410)
+
+    expect((await repository.get('parent'))?.followUpStatus).toBe('unresolved')
+  })
+
   it('adds a correction revision and switches the active revision atomically', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)

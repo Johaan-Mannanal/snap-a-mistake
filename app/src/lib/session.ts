@@ -101,9 +101,10 @@ export async function acknowledgePrivacyDisclosure(): Promise<void> {
 }
 
 export async function setPendingPhoto(input: { uri: string; origin: ScanOrigin }): Promise<void> {
+  const parentScanId = session.routeIntent === 'follow-up' ? session.parentScanId : null
   await commit({
     routeIntent: 'review', pendingScanId: null, photoUri: input.uri, origin: input.origin,
-    analysis: null, followUp: null, parentScanId: null, isRetry: false, isInterrupted: false,
+    analysis: null, followUp: null, parentScanId, isRetry: parentScanId !== null, isInterrupted: false,
   })
 }
 
@@ -147,13 +148,7 @@ export function adoptReviewSession(): void {
   session = reviewSession()
 }
 
-export function startFollowUp(): void
-export function startFollowUp(parentScanId: string, followUp: FollowUp): Promise<void>
-export function startFollowUp(parentScanId?: string, followUp?: FollowUp): void | Promise<void> {
-  if (parentScanId === undefined || followUp === undefined) {
-    session = { ...session, isRetry: true, photoUri: null, analysis: null, isInterrupted: false }
-    return
-  }
+export function startFollowUp(parentScanId: string, followUp: FollowUp): Promise<void> {
   return commit({
     routeIntent: 'follow-up', pendingScanId: null, photoUri: null, origin: null,
     analysis: null, followUp, parentScanId, isRetry: true, isInterrupted: false,
@@ -180,15 +175,4 @@ export async function resetSession(options: { preserveDraft?: boolean } = {}): P
 
 export function clearSessionAfterAtomicDiscard(): void {
   session = emptySession()
-}
-
-// Temporary compatibility wrapper. Task 6 migrates capture routes to setPendingPhoto.
-export function setPhoto(uri: string): void {
-  session = { ...session, photoUri: uri, analysis: null, isRetry: false }
-}
-
-// Temporary compatibility wrapper. Task 7 migrates analysis routes to persistAnalysis.
-export function setAnalysis(a: AnalyzeResponse): void {
-  const followUp = a.kind === 'analysis' ? a.followUp : null
-  session = { ...session, analysis: a, followUp }
 }

@@ -1,4 +1,12 @@
-import { AnalyzeResponseSchema, type AnalyzeResponse, type CorrectionContext } from '@snap/shared'
+import {
+  AlternateFollowUpContextSchema,
+  AnalyzeResponseSchema,
+  FollowUpSchema,
+  type AlternateFollowUpContext,
+  type AnalyzeResponse,
+  type CorrectionContext,
+  type FollowUp,
+} from '@snap/shared'
 import { File } from 'expo-file-system'
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000'
@@ -23,16 +31,12 @@ export class ApiError extends Error {
 
 type RequestOptions = { signal?: AbortSignal; fetchFn?: typeof fetch }
 
-async function requestDiagnosis(
-  endpoint: '/analyze' | '/correct-diagnosis',
-  uri: string,
-  context: CorrectionContext | null,
+async function requestApi<T>(
+  endpoint: string,
+  init: Pick<RequestInit, 'body' | 'headers'>,
+  parse: (body: unknown) => { success: true; data: T } | { success: false },
   options: RequestOptions,
-): Promise<AnalyzeResponse> {
-  const form = new FormData()
-  form.append('photo', new File(uri), 'photo.jpg')
-  if (context !== null) form.append('context', JSON.stringify(context))
-
+): Promise<T> {
   const timeoutController = new AbortController()
   const requestController = new AbortController()
   let abortReason: 'timeout' | 'cancelled' | null = null
@@ -54,7 +58,7 @@ async function requestDiagnosis(
     const fetchFn = options.fetchFn ?? fetch
     let res: Response
     try {
-      res = await fetchFn(`${API_URL}${endpoint}`, { method: 'POST', body: form, signal: requestController.signal })
+      res = await fetchFn(`${API_URL}${endpoint}`, { method: 'POST', ...init, signal: requestController.signal })
     } catch {
       if (abortReason === 'cancelled') throw new ApiError({ kind: 'cancelled' })
       if (abortReason === 'timeout') throw new ApiError({ kind: 'timeout' })
@@ -66,13 +70,25 @@ async function requestDiagnosis(
     const body = await res.json().catch(() => null)
     if (abortReason === 'cancelled') throw new ApiError({ kind: 'cancelled' })
     if (abortReason === 'timeout') throw new ApiError({ kind: 'timeout' })
-    const parsed = AnalyzeResponseSchema.safeParse(body)
+    const parsed = parse(body)
     if (!parsed.success) throw new ApiError({ kind: 'invalid-response', status: res.status })
     return parsed.data
   } finally {
     clearTimeout(timer)
     options.signal?.removeEventListener('abort', abortForCallerCancellation)
   }
+}
+
+async function requestDiagnosis(
+  endpoint: '/analyze' | '/correct-diagnosis',
+  uri: string,
+  context: CorrectionContext | null,
+  options: RequestOptions,
+): Promise<AnalyzeResponse> {
+  const form = new FormData()
+  form.append('photo', new File(uri), 'photo.jpg')
+  if (context !== null) form.append('context', JSON.stringify(context))
+  return requestApi(endpoint, { body: form }, AnalyzeResponseSchema.safeParse, options)
 }
 
 export async function analyzePhoto(uri: string, options: RequestOptions = {}): Promise<AnalyzeResponse> {
@@ -85,4 +101,15 @@ export async function correctDiagnosis(
   options: RequestOptions = {},
 ): Promise<AnalyzeResponse> {
   return requestDiagnosis('/correct-diagnosis', uri, context, options)
+}
+
+export async function requestAlternateFollowUp(
+  context: AlternateFollowUpContext,
+  options: RequestOptions = {},
+): Promise<FollowUp> {
+  const validated = AlternateFollowUpContextSchema.parse(context)
+  return requestApi('/follow-up', {
+    body: JSON.stringify(validated),
+    headers: { 'content-type': 'application/json' },
+  }, FollowUpSchema.safeParse, options)
 }

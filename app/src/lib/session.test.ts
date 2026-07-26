@@ -9,9 +9,7 @@ import {
   isPrivacyDisclosureAcknowledged,
   persistAnalysis,
   resetSession,
-  setAnalysis,
   setPendingPhoto,
-  setPhoto,
   setReviewedPhoto,
   startFollowUp,
 } from './session'
@@ -51,46 +49,7 @@ beforeEach(async () => {
 })
 
 describe('session', () => {
-  it('setPhoto stores the uri and clears any prior analysis', () => {
-    setAnalysis(withFollowUp)
-    setPhoto('file:///a.jpg')
-    expect(getSession().photoUri).toBe('file:///a.jpg')
-    expect(getSession().analysis).toBeNull()
-  })
-  it('setAnalysis captures the followUp problem', () => {
-    setAnalysis(withFollowUp)
-    expect(getSession().followUp?.problem).toBe('p')
-  })
-  it('setAnalysis clears an old followUp when the new analysis has none', () => {
-    const noFollowUp: AnalyzeResponse = {
-      kind: 'analysis', steps: [], errorStepIndex: null, misconceptionTag: null,
-      explanation: null, followUp: null, verifierAgreed: true,
-    }
-    setAnalysis(withFollowUp)
-    setAnalysis(noFollowUp)
-    expect(getSession().followUp).toBeNull()
-  })
-  it('startFollowUp flags a retry and clears photo/analysis but keeps the followUp', () => {
-    setPhoto('file:///a.jpg')
-    setAnalysis(withFollowUp)
-    startFollowUp()
-    const s = getSession()
-    expect(s.isRetry).toBe(true)
-    expect(s.photoUri).toBeNull()
-    expect(s.analysis).toBeNull()
-    expect(s.followUp?.problem).toBe('p')
-  })
-  it('setPhoto consumes retry mode', () => {
-    setPhoto('file:///a.jpg')
-    setAnalysis(withFollowUp)
-    startFollowUp()
-    setPhoto('file:///b.jpg')
-    expect(getSession().isRetry).toBe(false)
-    expect(getSession().followUp?.problem).toBe('p')
-  })
   it('resetSession clears everything', async () => {
-    setPhoto('file:///a.jpg')
-    startFollowUp()
     await resetSession()
     expect(getSession()).toMatchObject({
       routeIntent: 'capture', pendingScanId: null, photoUri: null, origin: null,
@@ -159,6 +118,20 @@ describe('session', () => {
       analysis: null, followUp: withFollowUp.followUp, parentScanId: 'scan-1',
     })
     expect(getSession()).toMatchObject({ routeIntent: 'follow-up', parentScanId: 'scan-1', followUp: withFollowUp.followUp })
+  })
+
+  it('keeps the parent link when a follow-up moves from camera capture into review', async () => {
+    const repository = new MemorySessionRepository()
+    await hydrateSession(repository as unknown as ScanRepository)
+    await startFollowUp('scan-1', withFollowUp.followUp!)
+
+    await setPendingPhoto({ uri: 'file:///cache/follow-up.jpg', origin: 'camera' })
+
+    expect(repository.state).toEqual({
+      routeIntent: 'review', pendingScanId: null, photoUri: 'file:///cache/follow-up.jpg', origin: 'camera',
+      analysis: null, followUp: null, parentScanId: 'scan-1',
+    })
+    expect(getSession()).toMatchObject({ routeIntent: 'review', parentScanId: 'scan-1', isRetry: true })
   })
 
   it('discards invalid persisted state and falls back to capture', async () => {
