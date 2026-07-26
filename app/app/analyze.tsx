@@ -8,7 +8,12 @@ import { adoptResultSession, adoptReviewSession, beginFollowUp, getSession, pers
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
 import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
 import { analysisRevisionReason, beginAnalysisReset, persistAnalysisRun } from '../src/lib/analysisPersistence'
-import { createCorrectionFence, type CorrectionRun } from '../src/lib/correctionAsync'
+import {
+  CorrectionStorageError,
+  createCorrectionFence,
+  createGeneratedCorrectionRetry,
+  type CorrectionRun,
+} from '../src/lib/correctionAsync'
 import { createCorrectionBusyState } from '../src/lib/correctionBusy'
 import { createAnalysisFinalization, createCompletedReviewReturn } from '../src/lib/analysisFinalization'
 import { announce, createFeedbackEventGate, systemHaptics } from '../src/lib/feedback.native'
@@ -390,41 +395,68 @@ export default function Analyze() {
 
   const submitCorrection = useCallback((analysis: Extract<AnalyzeResponse, { kind: 'analysis' }>, selectedStepIndex: number, replacement?: Extract<AnalyzeResponse, { kind: 'analysis' }>) => {
     if (!scanId || !uri || durableResultRevisionId === null || feedbackLock.current.busy) return
+    let activeCorrection: CorrectionRun | null = null
+    const retry = createGeneratedCorrectionRetry({
+      generate: async () => {
+        const correction = activeCorrection
+        if (!correction || !ownsCorrection(correction, analysis))
+          throw new ApiError({ kind: 'cancelled' })
+        const startedAt = Date.now()
+        const next = replacement ?? await correctDiagnosis(uri, { analysis, selectedStepIndex }, { signal: correction.controller.signal })
+        if (!ownsCorrection(correction, analysis))
+          throw new ApiError({ kind: 'cancelled' })
+        if (next.kind !== 'analysis') throw new ApiError({ kind: 'invalid-response', status: 200 })
+        return {
+          activeRevisionId: durableResultRevisionId,
+          next,
+          revision: {
+            id: allocateRevisionId(),
+            reason: 'student-correction' as const,
+            response: next,
+            feedback: 'corrected' as const,
+            createdAt: new Date().toISOString(),
+          },
+          durationMs: Math.max(0, Date.now() - startedAt),
+          resultState: resultSession(scanId, next),
+        }
+      },
+      apply: async (generated) => {
+        const correction = activeCorrection
+        if (!correction || !ownsCorrection(correction, analysis)) return
+        await getLocalScanRepository().applyCorrection(
+          scanId,
+          generated.activeRevisionId,
+          generated.revision,
+          generated.durationMs,
+          generated.resultState,
+          () => ownsCorrection(correction, analysis),
+        )
+        if (!ownsCorrection(correction, analysis)) return
+        adoptResultSession(scanId, generated.next)
+        if (!ownsCorrection(correction, analysis)) return
+        setDurableResultRevisionId(generated.revision.id)
+        setResult(generated.next)
+        retryCorrection.current = null
+        feedbackEvents.current.announceOnce(`correction:${generated.revision.id}`, 'Correction completed.', announce)
+        void feedbackEvents.current.completeOnce(generated.revision.id, systemHaptics)
+      },
+    })
     const execute = () => {
       const correction = correctionFence.current.begin(scanId)
+      activeCorrection = correction
       beginCorrectionBusy(correction)
       const task = feedbackLock.current.run(async () => {
         if (!ownsCorrection(correction, analysis)) return
         setCorrectionFailure(null)
-        const startedAt = Date.now()
         try {
-          const activeScan = await getLocalScanRepository().get(scanId)
-          if (!ownsCorrection(correction, analysis)) return
-          const activeRevision = activeScan?.activeRevision
-          if (!activeRevision || activeRevision.id !== durableResultRevisionId || activeRevision.feedback === 'rejected' || JSON.stringify(activeRevision.response) !== JSON.stringify(analysis)) return
-          const next = replacement ?? await correctDiagnosis(uri, { analysis, selectedStepIndex }, { signal: correction.controller.signal })
-          if (!ownsCorrection(correction, analysis)) return
-          if (next.kind !== 'analysis') throw new ApiError({ kind: 'invalid-response', status: 200 })
-          const revision: ScanRevision = {
-            id: allocateRevisionId(), reason: 'student-correction', response: next, feedback: 'corrected', createdAt: new Date().toISOString(),
-          }
-          if (!ownsCorrection(correction, analysis)) return
-          const resultState = resultSession(scanId, next)
-          if (!ownsCorrection(correction, analysis)) return
-          await getLocalScanRepository().applyCorrection(
-            scanId, activeRevision.id, revision, Math.max(0, Date.now() - startedAt), resultState,
-            () => ownsCorrection(correction, analysis),
-          )
-          if (!ownsCorrection(correction, analysis)) return
-          adoptResultSession(scanId, next)
-          if (!ownsCorrection(correction, analysis)) return
-          setDurableResultRevisionId(revision.id)
-          setResult(next)
-          feedbackEvents.current.announceOnce(`correction:${revision.id}`, 'Correction completed.', announce)
-          void feedbackEvents.current.completeOnce(revision.id, systemHaptics)
+          await retry.run()
         } catch (error) {
           if (!ownsCorrection(correction, analysis) || (error instanceof ApiError && error.failure.kind === 'cancelled')) return
-          setCorrectionFailure(error instanceof ApiError ? error.failure : { kind: 'network' })
+          setCorrectionFailure(error instanceof CorrectionStorageError
+            ? { kind: 'storage' }
+            : error instanceof ApiError
+              ? error.failure
+              : { kind: 'network' })
         } finally {
           finishCorrectionBusy(correction)
         }
@@ -457,7 +489,7 @@ export default function Analyze() {
           retryCorrection.current = null
           router.replace('/review')
         } catch {
-          if (ownsCorrection(correction, analysis)) setCorrectionFailure({ kind: 'network' })
+          if (ownsCorrection(correction, analysis)) setCorrectionFailure({ kind: 'storage' })
         } finally {
           finishCorrectionBusy(correction)
         }

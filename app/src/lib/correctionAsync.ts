@@ -11,6 +11,37 @@ export type CorrectionFence = {
   invalidate(): Promise<void>
 }
 
+export class CorrectionStorageError extends Error {
+  readonly cause: unknown
+
+  constructor(cause: unknown) {
+    super('generated correction could not be saved locally')
+    this.name = 'CorrectionStorageError'
+    this.cause = cause
+  }
+}
+
+export function createGeneratedCorrectionRetry<T>(dependencies: {
+  generate(): Promise<T>
+  apply(generated: T): Promise<void>
+}): { run(): Promise<void> } {
+  let generated: T
+  let hasGenerated = false
+  return {
+    async run() {
+      if (!hasGenerated) {
+        generated = await dependencies.generate()
+        hasGenerated = true
+      }
+      try {
+        await dependencies.apply(generated)
+      } catch (error) {
+        throw new CorrectionStorageError(error)
+      }
+    },
+  }
+}
+
 export function createCorrectionFence(): CorrectionFence {
   let generation = 0
   let active: CorrectionRun | null = null

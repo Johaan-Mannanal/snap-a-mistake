@@ -1,10 +1,18 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AnalyzeResponse } from '@snap/shared'
 import { createScanRepository, type DatabasePort } from './scanRepository'
 import { PersistedSessionSchema, type NewScanDraft, type PersistedSession, type ScanRevision } from './scanTypes'
 import { getSession, hydrateSession, persistAnalysis, recoverAnalysis, resetSession, setPendingPhoto, setReviewedPhoto, takeHydratedRouteIntent } from './session'
 import { createRunFence } from './analysisAsync'
 import { analysisRevisionReason, beginAnalysisReset, persistAnalysisRun } from './analysisPersistence'
+import { flushCleanupQueue, ownScanPhoto, type FilePort } from './scanFiles'
+import { CorrectionStorageError, createGeneratedCorrectionRetry } from './correctionAsync'
+
+vi.mock('expo-file-system', () => ({
+  Directory: class {},
+  File: class {},
+  Paths: { document: 'file:///documents/' },
+}))
 
 type ScanRow = Record<string, unknown>
 type RevisionRow = Record<string, unknown>
@@ -21,6 +29,8 @@ class MemoryDatabase implements DatabasePort {
   userVersion = 0
   failActiveSessionDeletion = false
   failActiveSessionWrite = false
+  failScanInsert = false
+  failRevisionInsert = false
   failScanDelete = false
   failClearAll = false
   failCleanupRead = false
@@ -45,11 +55,13 @@ class MemoryDatabase implements DatabasePort {
   async runAsync(sql: string, params: unknown[] = []): Promise<{ changes: number }> {
     const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase()
     if (normalized.startsWith('insert into scans')) {
+      if (this.failScanInsert) throw new Error('database unavailable')
       const [id, imageUri, origin, attemptKind, parentScanId, lifecycle, feedback, duration, followUp, followUpStatus, createdAt, updatedAt] = params
       this.scans.set(String(id), { id, image_uri: imageUri, origin, attempt_kind: attemptKind, parent_scan_id: parentScanId, lifecycle, active_revision_id: null, feedback, analysis_duration_ms: duration, follow_up_json: followUp, follow_up_status: followUpStatus, created_at: createdAt, updated_at: updatedAt })
       return { changes: 1 }
     }
     if (normalized.startsWith('insert into scan_revisions')) {
+      if (this.failRevisionInsert) throw new Error('database unavailable')
       const [id, scanId, reason, response] = params
       const feedback = params.length === 6 ? params[4] : 'unreviewed'
       const createdAt = params.length === 6 ? params[5] : params[4]
@@ -213,6 +225,34 @@ class MemoryDatabase implements DatabasePort {
       this.cleanup.clear(); cleanup.forEach((value) => this.cleanup.add(value))
       throw error
     }
+  }
+}
+
+class ProcessFiles implements FilePort {
+  readonly scanDirectoryUri = 'file:///documents/scans/'
+  readonly files = new Set<string>()
+  readonly copies: string[] = []
+  readonly deleted: string[] = []
+
+  async createScanDirectory(): Promise<void> {}
+
+  async copy(sourceUri: string, destinationUri: string): Promise<void> {
+    if (!this.files.has(sourceUri)) throw new Error('source file is missing')
+    this.files.add(destinationUri)
+    this.copies.push(destinationUri)
+  }
+
+  parentDirectoryUri(uri: string): string {
+    return new URL('.', uri).toString()
+  }
+
+  exists(uri: string): boolean {
+    return this.files.has(uri)
+  }
+
+  async delete(uri: string): Promise<void> {
+    this.files.delete(uri)
+    this.deleted.push(uri)
   }
 }
 
@@ -1330,5 +1370,141 @@ describe('atomic follow-up starts', () => {
       routeIntent: 'result',
       pendingScanId: 'parent',
     })
+  })
+})
+
+describe('owned photo crash recovery', () => {
+  it('drains a durable reservation after process death before the copy begins', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    const files = new ProcessFiles()
+    await repository.migrate()
+
+    await repository.reserveOwnedPhoto('file:///documents/scans/scan-before-copy.jpg')
+
+    const restarted = createScanRepository(db)
+    await restarted.migrate()
+    await flushCleanupQueue(restarted, files)
+
+    expect(await restarted.getCleanupQueue()).toEqual([])
+    expect(files.deleted).toEqual([])
+  })
+
+  it('deletes an orphaned owned photo after process death immediately after copy', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    const files = new ProcessFiles()
+    files.files.add('file:///cache/camera.jpg')
+    await repository.migrate()
+
+    await ownScanPhoto('scan-after-copy', 'file:///cache/camera.jpg', repository, files)
+
+    const restarted = createScanRepository(db)
+    await restarted.migrate()
+    await flushCleanupQueue(restarted, files)
+
+    expect(files.files.has('file:///documents/scans/scan-after-copy.jpg')).toBe(false)
+    expect(files.deleted).toEqual(['file:///documents/scans/scan-after-copy.jpg'])
+    expect(await restarted.getCleanupQueue()).toEqual([])
+  })
+
+  it('keeps the reservation through a rolled-back draft insertion and drains it after restart', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    const files = new ProcessFiles()
+    files.files.add('file:///cache/camera.jpg')
+    await repository.migrate()
+    await ownScanPhoto('scan-before-commit', 'file:///cache/camera.jpg', repository, files)
+    db.failScanInsert = true
+
+    await expect(repository.createDraft(draft('scan-before-commit'))).rejects.toThrow('database unavailable')
+
+    const restarted = createScanRepository(db)
+    await flushCleanupQueue(restarted, files)
+    expect(files.files.has('file:///documents/scans/scan-before-commit.jpg')).toBe(false)
+    expect(await restarted.getCleanupQueue()).toEqual([])
+  })
+
+  it('atomically adopts the owned photo with its draft and leaves restart cleanup unable to delete it', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    const files = new ProcessFiles()
+    files.files.add('file:///cache/camera.jpg')
+    await repository.migrate()
+    await ownScanPhoto('scan-committed', 'file:///cache/camera.jpg', repository, files)
+
+    await repository.createDraft(draft('scan-committed'))
+
+    const restarted = createScanRepository(db)
+    await flushCleanupQueue(restarted, files)
+    expect(files.files.has('file:///documents/scans/scan-committed.jpg')).toBe(true)
+    expect(files.deleted).toEqual([])
+    expect(await restarted.getCleanupQueue()).toEqual([])
+  })
+
+  it('lets Clear all drain a copied orphan that never reached draft commit', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    const files = new ProcessFiles()
+    files.files.add('file:///cache/library.jpg')
+    await repository.migrate()
+    await ownScanPhoto('clear-all-orphan', 'file:///cache/library.jpg', repository, files)
+
+    const restarted = createScanRepository(db)
+    await restarted.clearAll()
+    await flushCleanupQueue(restarted, files)
+
+    expect(files.files.has('file:///documents/scans/clear-all-orphan.jpg')).toBe(false)
+    expect(await restarted.getCleanupQueue()).toEqual([])
+  })
+})
+
+describe('correction generation and local application', () => {
+  it('persists the originally validated correction after a storage-only retry without another AI call', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.saveRevision('scan-1', diagnosisRevision, 400)
+    const diagnosedResponse = diagnosisRevision.response
+    if (diagnosedResponse.kind !== 'analysis') throw new Error('expected diagnosis fixture')
+    const originalResponse: AnalyzeResponse = {
+      ...diagnosedResponse,
+      explanation: 'The originally validated correction.',
+      misconceptionTag: 'dropped-term',
+    }
+    const laterResponse: AnalyzeResponse = {
+      ...diagnosedResponse,
+      explanation: 'A later response that must never be requested.',
+      misconceptionTag: 'sign-error',
+    }
+    let aiCalls = 0
+    const retry = createGeneratedCorrectionRetry({
+      generate: async () => {
+        aiCalls += 1
+        const response = aiCalls === 1 ? originalResponse : laterResponse
+        return {
+          response,
+          revision: {
+            id: 'correction-1',
+            reason: 'student-correction' as const,
+            response,
+            feedback: 'corrected' as const,
+            createdAt: '2026-07-26T12:00:00.000Z',
+          },
+        }
+      },
+      apply: async ({ revision: correctedRevision }) => {
+        await repository.applyCorrection('scan-1', diagnosisRevision.id, correctedRevision, 425)
+      },
+    })
+    db.failRevisionInsert = true
+
+    await expect(retry.run()).rejects.toBeInstanceOf(CorrectionStorageError)
+    db.failRevisionInsert = false
+    await retry.run()
+
+    expect(aiCalls).toBe(1)
+    expect((await repository.get('scan-1'))?.activeRevision?.response).toEqual(originalResponse)
   })
 })

@@ -83,7 +83,7 @@ export default function Review() {
         parentScanId: currentSession.parentScanId,
         createdAt: new Date().toISOString(),
       }, {
-        ownPhoto: (scanId) => ownScanPhoto(scanId, photo.uri),
+        ownPhoto: (scanId) => ownScanPhoto(scanId, photo.uri, repository),
         findDraft: async (scanId) => (await repository.get(scanId)) !== null,
         createDraft: (input) => repository.createDraft(input),
         persistReviewedPhoto: setReviewedPhoto,

@@ -43,9 +43,15 @@ function createExpoFilePort(): FilePort {
   }
 }
 
-export async function ownScanPhoto(scanId: string, sourceUri: string, files: FilePort = createExpoFilePort()): Promise<string> {
+export async function ownScanPhoto(
+  scanId: string,
+  sourceUri: string,
+  repository: Pick<ScanRepository, 'reserveOwnedPhoto'>,
+  files: FilePort = createExpoFilePort(),
+): Promise<string> {
   const destination = destinationUri(scanId, files)
   await files.createScanDirectory()
+  await repository.reserveOwnedPhoto(destination)
   await files.copy(sourceUri, destination)
   return destination
 }

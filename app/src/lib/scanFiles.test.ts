@@ -13,6 +13,7 @@ class MemoryFiles implements FilePort {
   readonly files = new Set<string>()
   readonly copied: { source: string; destination: string }[] = []
   readonly deleted: string[] = []
+  readonly operations: string[] = []
   createdDirectories = 0
   failDeletesFor = new Set<string>()
 
@@ -22,6 +23,7 @@ class MemoryFiles implements FilePort {
 
   async copy(sourceUri: string, destinationUri: string): Promise<void> {
     if (!this.files.has(sourceUri)) throw new Error('source file is missing')
+    this.operations.push(`copy:${destinationUri}`)
     this.files.add(destinationUri)
     this.copied.push({ source: sourceUri, destination: destinationUri })
   }
@@ -73,20 +75,31 @@ describe('scan file ownership', () => {
   it('creates the owned directory and copies a source image into its scan-specific destination', async () => {
     const files = new MemoryFiles()
     files.files.add('file:///cache/camera.jpg')
+    const repository = {
+      reserveOwnedPhoto: async (uri: string) => { files.operations.push(`reserve:${uri}`) },
+    }
 
-    await expect(ownScanPhoto('scan-1', 'file:///cache/camera.jpg', files))
+    await expect(ownScanPhoto('scan-1', 'file:///cache/camera.jpg', repository, files))
       .resolves.toBe('file:///documents/scans/scan-1.jpg')
 
     expect(files.createdDirectories).toBe(1)
+    expect(files.operations).toEqual([
+      'reserve:file:///documents/scans/scan-1.jpg',
+      'copy:file:///documents/scans/scan-1.jpg',
+    ])
     expect(files.copied).toEqual([{ source: 'file:///cache/camera.jpg', destination: 'file:///documents/scans/scan-1.jpg' }])
   })
 
   it('does not claim an owned destination when the source image is missing', async () => {
     const files = new MemoryFiles()
+    const reserved: string[] = []
 
-    await expect(ownScanPhoto('scan-1', 'file:///cache/missing.jpg', files))
+    await expect(ownScanPhoto('scan-1', 'file:///cache/missing.jpg', {
+      reserveOwnedPhoto: async (uri) => { reserved.push(uri) },
+    }, files))
       .rejects.toThrow('source file is missing')
 
+    expect(reserved).toEqual(['file:///documents/scans/scan-1.jpg'])
     expect(files.files.has('file:///documents/scans/scan-1.jpg')).toBe(false)
   })
 

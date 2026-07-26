@@ -29,6 +29,7 @@ export interface DatabasePort {
 
 export interface ScanRepository {
   migrate(): Promise<void>
+  reserveOwnedPhoto(imageUri: string): Promise<void>
   createDraft(input: NewScanDraft): Promise<ScanRecord>
   setLifecycle(scanId: string, lifecycle: Extract<ScanLifecycle, 'analyzing' | 'interrupted' | 'unsaved'>): Promise<ScanRecord>
   interruptAnalysisAndRestoreSession(scanId: string, session: PersistedSession): Promise<PersistedSession>
@@ -309,6 +310,15 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       })
     },
 
+    async reserveOwnedPhoto(imageUri): Promise<void> {
+      await db.withExclusiveTransactionAsync(async (transaction) => {
+        await transaction.runAsync(
+          'INSERT OR IGNORE INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)',
+          [imageUri, now()],
+        )
+      })
+    },
+
     async createDraft(input): Promise<ScanRecord> {
       const scan = draftRecord(input)
       await db.withExclusiveTransactionAsync(async (transaction) => {
@@ -320,6 +330,7 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
           [scan.id, scan.imageUri, scan.origin, scan.attemptKind, scan.parentScanId, scan.lifecycle,
             scan.feedback, scan.analysisDurationMs, null, scan.followUpStatus, scan.createdAt, scan.updatedAt],
         )
+        await transaction.runAsync('DELETE FROM cleanup_queue WHERE image_uri = ?', [scan.imageUri])
       })
       return scan
     },
