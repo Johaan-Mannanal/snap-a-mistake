@@ -4,6 +4,7 @@ import {
   canRequestDiagnosisFeedback,
   correctionFailurePresentation,
   correctionStepOptions,
+  DIAGNOSIS_FEEDBACK_PROMPT,
   isDurableFeedbackAvailable,
   synthesizeAllCorrectResponse,
 } from './diagnosisFeedback'
@@ -22,6 +23,10 @@ const diagnosis: Extract<AnalyzeResponse, { kind: 'analysis' }> = {
 }
 
 describe('diagnosis feedback', () => {
+  it('uses the approved student prompt verbatim', () => {
+    expect(DIAGNOSIS_FEEDBACK_PROMPT).toBe('Is this the right first break?')
+  })
+
   it('is available only for an active error diagnosis and describes every OCR step readably', () => {
     expect(canRequestDiagnosisFeedback(diagnosis)).toBe(true)
     expect(canRequestDiagnosisFeedback({ ...diagnosis, errorStepIndex: null, misconceptionTag: null, explanation: null, followUp: null })).toBe(false)

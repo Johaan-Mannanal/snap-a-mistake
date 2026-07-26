@@ -3,7 +3,7 @@ import { AccessibilityInfo, findNodeHandle, Modal, Pressable, ScrollView, StyleS
 import { SafeAreaView } from 'react-native-safe-area-context'
 import type { AnalyzeResponse } from '@snap/shared'
 import type { ApiFailure } from '../lib/api'
-import { correctionFailurePresentation, correctionStepOptions } from '../ui/diagnosisFeedback'
+import { correctionFailurePresentation, correctionStepOptions, DIAGNOSIS_FEEDBACK_PROMPT } from '../ui/diagnosisFeedback'
 import { colors, radii, spacing } from '../ui/theme'
 import { AppButton } from './AppButton'
 
@@ -44,9 +44,9 @@ export function DiagnosisFeedback(props: {
 
   return (
     <View style={styles.root}>
-      <Text style={styles.question}>Does this diagnosis match your work?</Text>
+      <Text style={styles.question}>{DIAGNOSIS_FEEDBACK_PROMPT}</Text>
       <View style={styles.actions}>
-        <AppButton label="Yes, that’s right" onPress={props.onAccept} disabled={props.busy} />
+        <AppButton label="Yes" onPress={props.onAccept} disabled={props.busy} />
         <Pressable
           ref={triggerRef}
           accessibilityRole="button"

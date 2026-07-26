@@ -60,10 +60,9 @@ export async function deleteOwnedPhoto(uri: string, files: FilePort = createExpo
 
 export async function flushCleanupQueue(repository: ScanRepository, files: FilePort = createExpoFilePort()): Promise<void> {
   const queuedUris = await repository.getCleanupQueue()
-  for (const uri of queuedUris) {
+  for (const uri of new Set(queuedUris)) {
     try {
-      await deleteOwnedPhoto(uri, files)
-      await repository.acknowledgeCleanup(uri)
+      await repository.cleanupQueuedUri(uri, () => deleteOwnedPhoto(uri, files))
     } catch {
       // Keep the cleanup marker so the next launch can retry safely.
     }

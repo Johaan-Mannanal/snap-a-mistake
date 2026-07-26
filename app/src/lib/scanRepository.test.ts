@@ -14,6 +14,7 @@ class MemoryDatabase implements DatabasePort {
   readonly revisions = new Map<string, RevisionRow>()
   readonly appState = new Map<string, string>()
   readonly cleanup = new Set<string>()
+  readonly cleanupWriteLocks = new Set<string>()
   readonly analyses: { tag: string | null; correct: number; createdAt: string }[] = []
   userVersion = 0
   failActiveSessionDeletion = false
@@ -100,6 +101,10 @@ class MemoryDatabase implements DatabasePort {
       if (this.followUpStatusAfterWriteGate) await this.followUpStatusAfterWriteGate
       return { changes: 1 }
     }
+    if (normalized.startsWith('update cleanup_queue set created_at = created_at')) {
+      this.cleanupWriteLocks.add(String(params[0]))
+      return { changes: this.cleanup.has(String(params[0])) ? 1 : 0 }
+    }
     if (normalized.startsWith('insert') && normalized.includes('into cleanup_queue')) {
       this.cleanup.add(String(params[0]))
       return { changes: 1 }
@@ -150,6 +155,10 @@ class MemoryDatabase implements DatabasePort {
   async getFirstAsync<T>(sql: string, params: unknown[] = []): Promise<T | null> {
     const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase()
     if (normalized.startsWith('pragma user_version')) return { user_version: this.userVersion } as T
+    if (normalized.includes('from scans where image_uri')) {
+      const referenced = [...this.scans.values()].some((scan) => scan.image_uri === String(params[0]))
+      return (referenced ? { referenced: 1 } : null) as T | null
+    }
     if (normalized.includes('from scans where id')) return (this.scans.get(String(params[0])) ?? null) as T | null
     if (normalized.includes('from app_state where key')) {
       const value = this.appState.get(String(params[0]))
@@ -758,6 +767,86 @@ describe('scan repository records', () => {
       'file:///documents/scans/parent.jpg',
       'file:///documents/scans/follow-up.jpg',
     ]))
+  })
+
+  it('keeps a shared image when an individual deletion leaves another reference', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    const sharedUri = 'file:///documents/scans/shared.jpg'
+    await repository.createDraft({ ...draft('first'), imageUri: sharedUri })
+    await repository.createDraft({ ...draft('second'), imageUri: sharedUri })
+
+    await expect(repository.delete('first')).resolves.toEqual({
+      deletedScanIds: ['first'],
+      queuedUris: [],
+    })
+
+    expect(await repository.get('second')).toMatchObject({ imageUri: sharedUri })
+    await expect(repository.getCleanupQueue()).resolves.toEqual([])
+  })
+
+  it('queues a shared image exactly once when its final reference is deleted', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    const sharedUri = 'file:///documents/scans/shared.jpg'
+    await repository.createDraft({ ...draft('first'), imageUri: sharedUri })
+    await repository.createDraft({ ...draft('second'), imageUri: sharedUri })
+    await repository.delete('first')
+
+    await expect(repository.delete('second')).resolves.toEqual({
+      deletedScanIds: ['second'],
+      queuedUris: [sharedUri],
+    })
+
+    await expect(repository.getCleanupQueue()).resolves.toEqual([sharedUri])
+  })
+
+  it('queues one image once when clear-all removes duplicate references', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    const sharedUri = 'file:///documents/scans/shared.jpg'
+    await repository.createDraft({ ...draft('first'), imageUri: sharedUri })
+    await repository.createDraft({ ...draft('second'), imageUri: sharedUri })
+
+    await expect(repository.clearAll()).resolves.toEqual({
+      deletedScanIds: ['first', 'second'],
+      queuedUris: [sharedUri],
+    })
+    await expect(repository.getCleanupQueue()).resolves.toEqual([sharedUri])
+  })
+
+  it('retains a queued image that is referenced again before physical cleanup', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    const sharedUri = 'file:///documents/scans/shared.jpg'
+    await repository.createDraft({ ...draft('first'), imageUri: sharedUri })
+    await repository.delete('first')
+    await repository.createDraft({ ...draft('second'), imageUri: sharedUri })
+    let physicallyDeleted = false
+
+    await expect(repository.cleanupQueuedUri(sharedUri, async () => {
+      physicallyDeleted = true
+    })).resolves.toBe('retained')
+
+    expect(physicallyDeleted).toBe(false)
+    expect(await repository.get('second')).toMatchObject({ imageUri: sharedUri })
+    await expect(repository.getCleanupQueue()).resolves.toEqual([])
+  })
+
+  it('acquires the cleanup write lock before checking references or deleting the file', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    const uri = 'file:///documents/scans/shared.jpg'
+    db.cleanup.add(uri)
+
+    await repository.cleanupQueuedUri(uri, async () => {
+      expect(db.cleanupWriteLocks.has(uri)).toBe(true)
+    })
   })
 
   it('returns a surviving parent to ready after its only resolved follow-up is deleted', async () => {

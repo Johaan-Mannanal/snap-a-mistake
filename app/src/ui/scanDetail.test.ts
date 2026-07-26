@@ -4,6 +4,7 @@ import {
   CLEAR_ALL_CONFIRMATION,
   DATA_PRIVACY_COPY,
   DELETE_SCAN_CONFIRMATION,
+  historicalFollowUpPresentation,
   parseScanRouteId,
   scanDetailPresentation,
 } from './scanDetail'
@@ -42,6 +43,40 @@ describe('scan detail presentation', () => {
 
     expect(scanDetailPresentation(scan({ activeRevision: corrected, revisions: [corrected], feedback: 'corrected' }), true))
       .toMatchObject({ kind: 'result', statusLabel: 'Corrected analysis', revisionStatus: 'Corrected' })
+  })
+
+  it.each([
+    ['accepted', 'Completed analysis', 'Confirmed'],
+    ['rejected', 'Diagnosis rejected', 'Rejected'],
+  ] as const)('uses scan-level %s feedback consistently in active-revision detail', (feedback, statusLabel, revisionStatus) => {
+    expect(scanDetailPresentation(scan({ feedback }), true))
+      .toMatchObject({ kind: 'result', statusLabel, revisionStatus })
+  })
+
+  it.each([
+    ['ready', 'Ready'],
+    ['in-progress', 'In progress'],
+    ['resolved', 'Resolved'],
+    ['unresolved', 'Needs another try'],
+  ] as const)('restores the saved follow-up content with its %s status as read-only history', (followUpStatus, statusLabel) => {
+    const followUp = {
+      problem: 'Simplify −(x + 2).',
+      concept: 'Sign distribution',
+      hint: 'Distribute the negative to both terms.',
+    }
+
+    expect(historicalFollowUpPresentation(scan({ followUp, followUpStatus }))).toEqual({
+      eyebrow: 'SAVED FOLLOW-UP',
+      statusLabel,
+      concept: 'Sign distribution',
+      problem: 'Simplify −(x + 2).',
+      hint: 'Distribute the negative to both terms.',
+      readOnlyDetail: 'Saved practice history · read only',
+    })
+  })
+
+  it('omits the historical follow-up section when none was saved', () => {
+    expect(historicalFollowUpPresentation(scan())).toBeNull()
   })
 
   it('keeps interrupted scans distinct from a completed result', () => {

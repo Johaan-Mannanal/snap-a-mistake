@@ -3,6 +3,8 @@ import type { ApiFailure } from '../lib/api'
 
 type AnalysisResponse = Extract<AnalyzeResponse, { kind: 'analysis' }>
 
+export const DIAGNOSIS_FEEDBACK_PROMPT = 'Is this the right first break?'
+
 export function canRequestDiagnosisFeedback(response: AnalyzeResponse): response is AnalysisResponse {
   return response.kind === 'analysis' && response.errorStepIndex !== null
 }

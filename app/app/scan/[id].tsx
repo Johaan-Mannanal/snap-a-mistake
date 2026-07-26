@@ -19,6 +19,7 @@ import { analysisPresentation, analysisRecoveryPresentation } from '../../src/ui
 import { colors, spacing } from '../../src/ui/theme'
 import {
   DELETE_SCAN_CONFIRMATION,
+  historicalFollowUpPresentation,
   parseScanRouteId,
   scanDetailPresentation,
   type ScanDetailPresentation,
@@ -169,6 +170,7 @@ function HistoricalResult(props: {
   confirmation: React.ReactNode
 }) {
   const result = props.presentation.kind === 'result' ? props.presentation.revision.response : null
+  const followUp = historicalFollowUpPresentation(props.scan)
   const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(() => result?.kind === 'analysis' ? result.errorStepIndex : null)
   const [expandedStepIndexes, setExpandedStepIndexes] = useState<Set<number>>(() => result?.kind === 'analysis' ? initialExpandedStepIndexes(result.errorStepIndex) : new Set())
   const [showAllSteps, setShowAllSteps] = useState(false)
@@ -212,6 +214,7 @@ function HistoricalResult(props: {
         />
       ) : <MissingPhoto />}
       {content}
+      {followUp ? <HistoricalFollowUp followUp={followUp} /> : null}
       {props.deleteFailure ? <Text accessibilityRole="alert" style={styles.failure}>{props.deleteFailure}</Text> : null}
       <Pressable
         ref={props.deleteTriggerRef}
@@ -225,6 +228,26 @@ function HistoricalResult(props: {
       </Pressable>
       {props.confirmation}
     </AppScreen>
+  )
+}
+
+function HistoricalFollowUp(props: { followUp: NonNullable<ReturnType<typeof historicalFollowUpPresentation>> }) {
+  const { followUp } = props
+  return (
+    <View
+      accessible
+      accessibilityLabel={`Saved follow-up. Status: ${followUp.statusLabel}. Concept: ${followUp.concept}. Problem: ${followUp.problem}. Hint: ${followUp.hint}. ${followUp.readOnlyDetail}.`}
+      style={styles.followUp}
+    >
+      <View style={styles.followUpHeader}>
+        <Text style={styles.eyebrow}>{followUp.eyebrow}</Text>
+        <Text style={styles.followUpStatus}>{followUp.statusLabel}</Text>
+      </View>
+      <Text style={styles.followUpConcept}>{followUp.concept}</Text>
+      <Text style={styles.followUpProblem}>{followUp.problem}</Text>
+      <Text style={styles.followUpHint}>Hint: {followUp.hint}</Text>
+      <Text style={styles.readOnlyDetail}>{followUp.readOnlyDetail}</Text>
+    </View>
   )
 }
 
@@ -290,6 +313,13 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1.4 },
   auditDetail: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   diagnosis: { gap: spacing.sm, paddingVertical: spacing.md },
+  followUp: { gap: spacing.sm, padding: spacing.md, borderWidth: 1, borderColor: colors.carbon, backgroundColor: colors.graphite },
+  followUpHeader: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  followUpStatus: { color: colors.chalk, fontSize: 13, fontWeight: '700' },
+  followUpConcept: { color: colors.muted, fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.1 },
+  followUpProblem: { color: colors.chalk, fontSize: 20, fontWeight: '700', lineHeight: 27 },
+  followUpHint: { color: colors.chalk, fontSize: 15, lineHeight: 22, borderLeftWidth: 2, borderLeftColor: colors.chalk, paddingLeft: spacing.sm },
+  readOnlyDetail: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   headline: { color: colors.chalk, fontSize: 24, fontWeight: '700', letterSpacing: -0.5, lineHeight: 30 },
   stateDetail: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   missingPhoto: { minHeight: 160, justifyContent: 'center', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.carbon, backgroundColor: colors.graphite },

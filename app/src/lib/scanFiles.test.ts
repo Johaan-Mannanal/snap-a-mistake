@@ -43,6 +43,7 @@ class MemoryFiles implements FilePort {
 
 class CleanupRepository {
   readonly acknowledged: string[] = []
+  readonly settled: string[] = []
 
   constructor(private readonly queue: string[]) {}
 
@@ -52,6 +53,13 @@ class CleanupRepository {
 
   async acknowledgeCleanup(uri: string): Promise<void> {
     this.acknowledged.push(uri)
+  }
+
+  async cleanupQueuedUri(uri: string, cleanup: () => Promise<void>): Promise<'deleted' | 'retained'> {
+    this.settled.push(uri)
+    await cleanup()
+    this.acknowledged.push(uri)
+    return 'deleted'
   }
 }
 
@@ -120,6 +128,18 @@ describe('scan file ownership', () => {
       'file:///documents/scans/missing.jpg',
     ])
     expect(files.files.has('file:///documents/scans/retry.jpg')).toBe(true)
+  })
+
+  it('settles duplicate queue entries only once so one owned image is deleted once', async () => {
+    const files = new MemoryFiles()
+    const uri = 'file:///documents/scans/shared.jpg'
+    files.files.add(uri)
+    const repository = new CleanupRepository([uri, uri, uri])
+
+    await flushCleanupQueue(repository as unknown as ScanRepository, files)
+
+    expect(repository.settled).toEqual([uri])
+    expect(files.deleted).toEqual([uri])
   })
 
   it('reports cleanup as pending when a committed queue cannot be read', async () => {

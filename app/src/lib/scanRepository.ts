@@ -45,6 +45,7 @@ export interface ScanRepository {
   clearAll(): Promise<ScanClearCommit>
   getCleanupQueue(): Promise<string[]>
   acknowledgeCleanup(imageUri: string): Promise<void>
+  cleanupQueuedUri(imageUri: string, cleanup: () => Promise<void>): Promise<'deleted' | 'retained'>
   commitFollowUpStartIfCurrent(parentScanId: string, session: PersistedSession, targetStatus: FollowUpStatus, isCurrent: () => boolean): Promise<boolean>
   commitFollowUpReturnIfCurrent(parentScanId: string, session: PersistedSession, isCurrent: () => boolean): Promise<boolean>
   getState<T>(key: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>): Promise<T | null>
@@ -205,6 +206,27 @@ async function clearActiveSessionForDeletedScans(db: DatabasePort, deletedScanId
   } catch {
     // Invalid persisted state is handled during hydration; do not broaden deletion scope.
   }
+}
+
+function uniqueImageUris(rows: readonly { image_uri: string }[]): string[] {
+  return [...new Set(rows.map((row) => row.image_uri))]
+}
+
+async function queueUnreferencedImages(db: DatabasePort, imageUris: readonly string[]): Promise<string[]> {
+  const queuedUris: string[] = []
+  for (const imageUri of new Set(imageUris)) {
+    const reference = await db.getFirstAsync<{ referenced: number }>(
+      'SELECT 1 AS referenced FROM scans WHERE image_uri = ? LIMIT 1',
+      [imageUri],
+    )
+    if (reference) continue
+    await db.runAsync(
+      'INSERT OR IGNORE INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)',
+      [imageUri, now()],
+    )
+    queuedUris.push(imageUri)
+  }
+  return queuedUris
 }
 
 function hasUsableCompletedOutcome(scan: ScanRecord): scan is ScanRecord & { activeRevision: ScanRevision } {
@@ -506,13 +528,15 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
           )
           SELECT id, image_uri FROM descendant_scans
         `, [scanId])
-        for (const descendant of descendants)
-          await transaction.runAsync('INSERT INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)', [descendant.image_uri, now()])
         await transaction.runAsync('DELETE FROM scans WHERE id = ?', [scanId])
+        const queuedUris = await queueUnreferencedImages(
+          transaction,
+          uniqueImageUris(descendants),
+        )
         const deletedScanIds = descendants.map((descendant) => descendant.id)
         await clearActiveSessionForDeletedScans(transaction, new Set(deletedScanIds))
         await recomputeSurvivingParentFollowUpStatus(transaction, scan.parentScanId)
-        return { deletedScanIds, queuedUris: descendants.map((descendant) => descendant.image_uri) }
+        return { deletedScanIds, queuedUris }
       })
     },
 
@@ -529,17 +553,10 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
             )
             SELECT image_uri FROM descendant_scans
           `, [input.scanId])
-          for (const descendant of descendants)
-            await transaction.runAsync(
-              'INSERT OR IGNORE INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)',
-              [descendant.image_uri, now()],
-            )
           await transaction.runAsync('DELETE FROM scans WHERE id = ?', [input.scanId])
+          await queueUnreferencedImages(transaction, uniqueImageUris(descendants))
         } else if (input.ownedUri !== null) {
-          await transaction.runAsync(
-            'INSERT OR IGNORE INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)',
-            [input.ownedUri, now()],
-          )
+          await queueUnreferencedImages(transaction, [input.ownedUri])
         }
         await transaction.runAsync('DELETE FROM app_state WHERE key = ?', [ACTIVE_SESSION_KEY])
       })
@@ -551,12 +568,8 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
         await transaction.runAsync('DELETE FROM scans')
         await transaction.runAsync('DELETE FROM analyses')
         await transaction.runAsync('DELETE FROM app_state')
-        for (const row of rows)
-          await transaction.runAsync(
-            'INSERT OR IGNORE INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)',
-            [row.image_uri, now()],
-          )
-        return { deletedScanIds: rows.map((row) => row.id), queuedUris: rows.map((row) => row.image_uri) }
+        const queuedUris = await queueUnreferencedImages(transaction, uniqueImageUris(rows))
+        return { deletedScanIds: rows.map((row) => row.id), queuedUris }
       })
     },
 
@@ -571,6 +584,28 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       await db.withExclusiveTransactionAsync((transaction) => transaction.runAsync(
         'DELETE FROM cleanup_queue WHERE image_uri = ?', [imageUri],
       ).then(() => undefined))
+    },
+
+    async cleanupQueuedUri(imageUri, cleanup): Promise<'deleted' | 'retained'> {
+      return db.withExclusiveTransactionAsync(async (transaction) => {
+        // Convert the transaction to a write transaction before the live-reference
+        // check so another scan write cannot commit between that check and deletion.
+        await transaction.runAsync(
+          'UPDATE cleanup_queue SET created_at = created_at WHERE image_uri = ?',
+          [imageUri],
+        )
+        const reference = await transaction.getFirstAsync<{ referenced: number }>(
+          'SELECT 1 AS referenced FROM scans WHERE image_uri = ? LIMIT 1',
+          [imageUri],
+        )
+        if (reference) {
+          await transaction.runAsync('DELETE FROM cleanup_queue WHERE image_uri = ?', [imageUri])
+          return 'retained'
+        }
+        await cleanup()
+        await transaction.runAsync('DELETE FROM cleanup_queue WHERE image_uri = ?', [imageUri])
+        return 'deleted'
+      })
     },
 
     async commitFollowUpStartIfCurrent(parentScanId, session, targetStatus, isCurrent): Promise<boolean> {

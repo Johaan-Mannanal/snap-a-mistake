@@ -7,7 +7,7 @@ export const DATA_PRIVACY_COPY = 'When you analyze, your photo is sent to our AI
 export type ScanDetailPresentation =
   | {
     kind: 'result'
-    statusLabel: 'Completed analysis' | 'Corrected analysis'
+    statusLabel: 'Completed analysis' | 'Corrected analysis' | 'Diagnosis rejected'
     revisionId: string
     revisionStatus: string
     revision: ScanRevision
@@ -27,10 +27,36 @@ export function parseScanRouteId(value: string | string[] | undefined): string |
   }
 }
 
-function revisionStatus(revision: ScanRevision): string {
-  if (revision.feedback === 'corrected' || revision.reason === 'student-correction') return 'Corrected'
-  if (revision.feedback === 'accepted') return 'Confirmed'
+function revisionStatus(scan: ScanRecord, revision: ScanRevision): string {
+  if (scan.feedback === 'rejected') return 'Rejected'
+  if (scan.feedback === 'corrected' || revision.feedback === 'corrected' || revision.reason === 'student-correction') return 'Corrected'
+  if (scan.feedback === 'accepted') return 'Confirmed'
   return 'Saved'
+}
+
+export type HistoricalFollowUpPresentation = {
+  eyebrow: 'SAVED FOLLOW-UP'
+  statusLabel: 'Ready' | 'In progress' | 'Resolved' | 'Needs another try'
+  concept: string
+  problem: string
+  hint: string
+  readOnlyDetail: 'Saved practice history · read only'
+}
+
+export function historicalFollowUpPresentation(scan: ScanRecord): HistoricalFollowUpPresentation | null {
+  if (scan.followUp === null || scan.followUpStatus === 'none') return null
+  const statusLabel = scan.followUpStatus === 'ready' ? 'Ready'
+    : scan.followUpStatus === 'in-progress' ? 'In progress'
+      : scan.followUpStatus === 'resolved' ? 'Resolved'
+        : 'Needs another try'
+  return {
+    eyebrow: 'SAVED FOLLOW-UP',
+    statusLabel,
+    concept: scan.followUp.concept,
+    problem: scan.followUp.problem,
+    hint: scan.followUp.hint,
+    readOnlyDetail: 'Saved practice history · read only',
+  }
 }
 
 export function scanDetailPresentation(scan: ScanRecord, photoAvailable: boolean): ScanDetailPresentation {
@@ -51,8 +77,11 @@ export function scanDetailPresentation(scan: ScanRecord, photoAvailable: boolean
       || scan.activeRevision.feedback === 'corrected'
       || scan.activeRevision.reason === 'student-correction'
     return {
-      kind: 'result', statusLabel: corrected ? 'Corrected analysis' : 'Completed analysis',
-      revisionId: scan.activeRevision.id, revisionStatus: revisionStatus(scan.activeRevision),
+      kind: 'result',
+      statusLabel: scan.feedback === 'rejected'
+        ? 'Diagnosis rejected'
+        : corrected ? 'Corrected analysis' : 'Completed analysis',
+      revisionId: scan.activeRevision.id, revisionStatus: revisionStatus(scan, scan.activeRevision),
       revision: scan.activeRevision, photoAvailable,
     }
   }
