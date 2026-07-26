@@ -84,3 +84,34 @@ The focused green gate passed 79/79 tests across:
 - The paid golden gate was intentionally not run, per brief.
 
 The app test run retains the repository’s pre-existing Vite CJS deprecation warning; there are no test, lint, or type failures.
+
+## Review follow-up — native Expo transaction return adapter
+
+Whole-branch review found that `initLocalScanStorage()` cast Expo’s
+`SQLiteDatabase` directly to the repository `DatabasePort`. The interfaces are
+not behaviorally equivalent: Expo SDK 57’s
+`withExclusiveTransactionAsync()` commits or rolls back and returns
+`Promise<void>`, while repository transactions return values used by deletion,
+clear-all, lifecycle changes, cleanup, and follow-up handoffs.
+
+The real storage boundary now adapts Expo SQLite explicitly:
+
+- Query methods are forwarded without casting the database to `DatabasePort`.
+- Every native transaction object is recursively adapted before repository work
+  runs.
+- The repository callback value is captured, Expo’s transaction is awaited
+  through commit, and only then is the captured value returned.
+- Task errors and native commit errors still reject through the original Expo
+  rollback/error path.
+- A native transaction that resolves without invoking its task is rejected
+  instead of manufacturing a repository result.
+
+A native-faithful regression double intentionally discards transaction callback
+returns. It proves that:
+
+- `delete()` returns its commit and the real post-commit in-memory session reset
+  plus queued physical cleanup complete without throwing;
+- `clearAll()` returns all deleted IDs and queued URIs;
+- `setLifecycle()` returns the updated record; and
+- a native transaction error preserves rollback and propagates the original
+  error.
