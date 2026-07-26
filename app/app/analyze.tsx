@@ -10,7 +10,7 @@ import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
 import { createCorrectionFence, type CorrectionRun } from '../src/lib/correctionAsync'
 import { createCorrectionBusyState } from '../src/lib/correctionBusy'
 import { createAnalysisFinalization, createCompletedReviewReturn } from '../src/lib/analysisFinalization'
-import { analysisCompleteFeedback, announce, systemHaptics } from '../src/lib/feedback.native'
+import { announce, createFeedbackEventGate, systemHaptics } from '../src/lib/feedback.native'
 import type { ScanRevision } from '../src/lib/scanTypes'
 import { tagLabel } from '../src/lib/labels'
 import { AppButton } from '../src/components/AppButton'
@@ -47,6 +47,7 @@ export default function Analyze() {
   const [completedReturnFailed, setCompletedReturnFailed] = useState(false)
   const [isReturningCompleted, setIsReturningCompleted] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [analysisRunId, setAnalysisRunId] = useState(0)
   const [isResetting, setIsResetting] = useState(false)
   const [resetFailed, setResetFailed] = useState(false)
   const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null)
@@ -79,17 +80,14 @@ export default function Analyze() {
   const photoOffsetY = useRef(0)
   const timelineOffsetY = useRef(0)
   const timelineStepOffsets = useRef(new Map<number, number>())
-  const announcedEvents = useRef(new Set<string>())
+  const feedbackEvents = useRef(createFeedbackEventGate())
   if (resetTransition.current === null)
     resetTransition.current = createSessionResetTransition(resetSession, () => router.dismissTo('/'))
 
   const announceForCurrentRun = useCallback((event: string, message: string) => {
     const token = activeToken.current
     if (token === null) return
-    const key = `${token}:${event}`
-    if (announcedEvents.current.has(key)) return
-    announcedEvents.current.add(key)
-    announce(message)
+    feedbackEvents.current.announceOnce(`${token}:${event}`, message, announce)
   }, [])
 
   const owns = useCallback((token: number) => (
@@ -128,8 +126,8 @@ export default function Analyze() {
         finalization.current.markSuccessfulHandoff()
         if (pending.response.kind === 'analysis') {
           announceForCurrentRun('completed', 'Analysis completed.')
-          void analysisCompleteFeedback(systemHaptics)
         }
+        void feedbackEvents.current.completeOnce(pending.revision.id, systemHaptics)
       } catch {
         if (!owns(token)) return
         setDurableResultRevisionId(null)
@@ -188,7 +186,7 @@ export default function Analyze() {
     finalization.current.begin()
     const token = runFence.current.begin()
     activeToken.current = token
-    announcedEvents.current.clear()
+    setAnalysisRunId(token)
     announceForCurrentRun('started', 'Analysis started. Usually takes less than a minute.')
     pendingSave.current = null
     if (mounted.current) {
@@ -362,8 +360,8 @@ export default function Analyze() {
           if (!ownsCorrection(correction, analysis)) return
           setDurableResultRevisionId(revision.id)
           setResult(next)
-          announceForCurrentRun('correction-completed', 'Correction completed.')
-          void analysisCompleteFeedback(systemHaptics)
+          feedbackEvents.current.announceOnce(`correction:${revision.id}`, 'Correction completed.', announce)
+          void feedbackEvents.current.completeOnce(revision.id, systemHaptics)
         } catch (error) {
           if (!ownsCorrection(correction, analysis) || (error instanceof ApiError && error.failure.kind === 'cancelled')) return
           setCorrectionFailure(error instanceof ApiError ? error.failure : { kind: 'network' })
@@ -529,7 +527,7 @@ export default function Analyze() {
   }
 
   if (!result) {
-    return uri ? <AnalysisProgress uri={uri} elapsedSeconds={elapsedSeconds} descriptionIndex={Math.floor(elapsedSeconds / 6)} onCancel={() => { void returnToReview() }} /> : null
+    return uri ? <AnalysisProgress key={analysisRunId} uri={uri} elapsedSeconds={elapsedSeconds} descriptionIndex={Math.floor(elapsedSeconds / 6)} onCancel={() => { void returnToReview() }} /> : null
   }
 
   if (result.kind === 'not-math') {

@@ -4,7 +4,13 @@ import { setAnnouncementPort, type HapticsPort } from './feedback'
 
 setAnnouncementPort({ announce: (message) => AccessibilityInfo.announceForAccessibility(message) })
 
-export { announce, analysisCompleteFeedback, captureFeedback } from './feedback'
+export {
+  announce,
+  analysisCompleteFeedback,
+  captureFeedback,
+  createFeedbackEventGate,
+  createProgressAnnouncementGate,
+} from './feedback'
 
 export const systemHaptics: HapticsPort = {
   lightImpact: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),

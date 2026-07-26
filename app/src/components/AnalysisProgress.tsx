@@ -1,21 +1,19 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { announce } from '../lib/feedback.native'
+import { announce, createProgressAnnouncementGate } from '../lib/feedback.native'
 import { colors, spacing } from '../ui/theme'
 import { analysisProgressPresentation } from '../ui/presentation'
 
 export function AnalysisProgress(props: { uri: string; elapsedSeconds: number; descriptionIndex: number; onCancel: () => void }) {
   const presentation = analysisProgressPresentation(props.elapsedSeconds, props.descriptionIndex)
-  const announced = useRef(new Set<string>())
+  const announcements = useRef(createProgressAnnouncementGate())
   const insets = useSafeAreaInsets()
   const panelStyle = useMemo(() => ({ bottom: Math.max(24, insets.bottom + 24) }), [insets.bottom])
 
   useEffect(() => {
-    if (props.elapsedSeconds < 20 || announced.current.has('long-wait')) return
-    announced.current.add('long-wait')
-    announce(presentation.elapsedCopy)
-  }, [presentation.elapsedCopy, props.elapsedSeconds])
+    announcements.current.announceForElapsed(props.elapsedSeconds, announce)
+  }, [props.elapsedSeconds])
 
   return (
     <View style={styles.root}>
@@ -24,7 +22,7 @@ export function AnalysisProgress(props: { uri: string; elapsedSeconds: number; d
       <View style={[styles.panel, panelStyle]}>
         <Text style={styles.eyebrow}>ANALYZING</Text>
         <Text style={styles.description}>{presentation.description}</Text>
-        <Text accessibilityLiveRegion="polite" style={styles.elapsedCopy}>{presentation.elapsedCopy}</Text>
+        <Text style={styles.elapsedCopy}>{presentation.elapsedCopy}</Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Cancel analysis and return to review"
