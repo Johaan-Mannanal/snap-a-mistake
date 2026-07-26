@@ -129,6 +129,7 @@ function InsightsHeader(props: { section: InsightsSection; onSectionChange: (sec
       <View style={styles.topBar}>
         <Pressable
           accessibilityLabel="Go back"
+          accessibilityHint="Returns to the camera."
           accessibilityRole="button"
           hitSlop={8}
           onPress={() => router.back()}
@@ -230,25 +231,25 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: spacing.xxl, gap: spacing.lg },
   listContent: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: spacing.xxl },
   header: { gap: spacing.md, paddingTop: spacing.xs, paddingBottom: spacing.lg },
-  topBar: { height: 44, justifyContent: 'center' },
+  topBar: { minHeight: 44, justifyContent: 'center' },
   back: { width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' },
-  title: { color: colors.chalk, fontSize: typeScale.display, fontWeight: '700', letterSpacing: -0.8, lineHeight: 38 },
-  intro: { color: colors.muted, fontSize: typeScale.body, lineHeight: 22 },
-  loading: { color: colors.muted, fontSize: typeScale.body, lineHeight: 22, paddingTop: spacing.sm },
+  title: { color: colors.chalk, fontSize: typeScale.display, fontWeight: '700', letterSpacing: -0.8 },
+  intro: { color: colors.muted, fontSize: typeScale.body },
+  loading: { color: colors.muted, fontSize: typeScale.body, paddingTop: spacing.sm },
   state: { flexGrow: 1, justifyContent: 'space-between', gap: spacing.xl, paddingVertical: spacing.xxl },
   stateCopy: { gap: spacing.sm },
-  stateTitle: { color: colors.chalk, fontSize: typeScale.title, fontWeight: '700', letterSpacing: -0.5, lineHeight: 30 },
-  stateDetail: { color: colors.muted, fontSize: typeScale.body, lineHeight: 22 },
+  stateTitle: { color: colors.chalk, fontSize: typeScale.title, fontWeight: '700', letterSpacing: -0.5 },
+  stateDetail: { color: colors.muted, fontSize: typeScale.body },
   patternList: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.carbon },
   patternRow: { gap: spacing.xs, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.carbon, paddingVertical: spacing.lg },
   patternTitle: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '700' },
-  patternDetail: { color: colors.muted, fontSize: typeScale.caption, lineHeight: 18 },
-  resolution: { color: colors.success, fontSize: typeScale.caption, fontWeight: '700', lineHeight: 18 },
+  patternDetail: { color: colors.muted, fontSize: typeScale.caption },
+  resolution: { color: colors.success, fontSize: typeScale.caption, fontWeight: '700' },
   privacy: { gap: spacing.sm, marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.carbon },
   privacyTitle: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '700' },
-  privacyCopy: { color: colors.muted, fontSize: typeScale.caption, lineHeight: 18 },
+  privacyCopy: { color: colors.muted, fontSize: typeScale.caption },
   clearFailure: { gap: spacing.sm, marginTop: spacing.md },
-  clearFailureCopy: { color: colors.error, fontSize: typeScale.body, lineHeight: 22 },
+  clearFailureCopy: { color: colors.error, fontSize: typeScale.body },
   clearAction: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', marginTop: spacing.md, paddingVertical: spacing.sm },
   clearActionLabel: { color: colors.error, fontSize: typeScale.body, fontWeight: '700', textDecorationLine: 'underline' },
 })

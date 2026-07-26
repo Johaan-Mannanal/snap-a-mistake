@@ -6,11 +6,12 @@ export function AppIcon(props: { name: SFSymbol; size?: number; color?: string; 
   const size = props.size ?? 20
   return (
     <SymbolView
+      accessible={false}
       name={props.name}
       size={size}
       tintColor={props.color ?? colors.chalk}
       type="monochrome"
-      fallback={<Text style={{ color: props.color ?? colors.chalk, fontSize: size }}>{props.fallback}</Text>}
+      fallback={<Text accessible={false} style={{ color: props.color ?? colors.chalk, fontSize: size }}>{props.fallback}</Text>}
     />
   )
 }

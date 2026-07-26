@@ -85,11 +85,11 @@ describe('analysisPresentation', () => {
 })
 
 describe('analysis progress presentation', () => {
-  it('shows the initial honest description and announces it once', () => {
+  it('shows the initial honest description without duplicating the screen announcement', () => {
     expect(analysisProgressPresentation(0, 0)).toEqual({
       description: 'Looking at the photo…',
       elapsedCopy: 'Usually takes less than a minute.',
-      announcement: 'Analyzing your work. Usually takes less than a minute.',
+      announcement: null,
     })
   })
 
@@ -101,16 +101,16 @@ describe('analysis progress presentation', () => {
     })
   })
 
-  it('updates long-wait copy and VoiceOver announcements at 20 and 60 seconds', () => {
+  it('provides long-wait copy without progress announcements', () => {
     expect(analysisProgressPresentation(20, 1)).toEqual({
       description: 'Checking the math…',
       elapsedCopy: 'Still working. This can take a little longer.',
-      announcement: 'Still working. This can take a little longer.',
+      announcement: null,
     })
     expect(analysisProgressPresentation(60, 2)).toEqual({
       description: 'Preparing your explanation…',
       elapsedCopy: 'Still working. You can cancel and return to your review.',
-      announcement: 'Still working. You can cancel and return to your review.',
+      announcement: null,
     })
   })
 

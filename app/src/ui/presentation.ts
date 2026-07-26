@@ -63,17 +63,17 @@ export function analysisProgressPresentation(elapsedSeconds: number, description
   const description = ANALYSIS_DESCRIPTIONS[descriptionIndex % ANALYSIS_DESCRIPTIONS.length] ?? ANALYSIS_DESCRIPTIONS[0]
   if (elapsedSeconds >= 60) {
     const elapsedCopy = 'Still working. You can cancel and return to your review.'
-    return { description, elapsedCopy, announcement: elapsedSeconds === 60 ? elapsedCopy : null }
+    return { description, elapsedCopy, announcement: null }
   }
   if (elapsedSeconds >= 20) {
     const elapsedCopy = 'Still working. This can take a little longer.'
-    return { description, elapsedCopy, announcement: elapsedSeconds === 20 ? elapsedCopy : null }
+    return { description, elapsedCopy, announcement: null }
   }
   const elapsedCopy = 'Usually takes less than a minute.'
   return {
     description,
     elapsedCopy,
-    announcement: elapsedSeconds === 0 ? `Analyzing your work. ${elapsedCopy}` : null,
+    announcement: null,
   }
 }
 

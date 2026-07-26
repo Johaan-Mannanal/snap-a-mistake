@@ -18,6 +18,6 @@ export function AppButton(props: { label: string; onPress?: () => void; disabled
 }
 
 const styles = StyleSheet.create({
-  base: { minHeight: 52, borderWidth: 1, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 },
-  label: { color: colors.chalk, fontSize: 15, fontWeight: '700', letterSpacing: -0.1 },
+  base: { minHeight: 52, borderWidth: 1, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18, paddingVertical: 12 },
+  label: { color: colors.chalk, fontSize: 15, fontWeight: '700', letterSpacing: -0.1, textAlign: 'center' },
 })

@@ -10,6 +10,7 @@ import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
 import { createCorrectionFence, type CorrectionRun } from '../src/lib/correctionAsync'
 import { createCorrectionBusyState } from '../src/lib/correctionBusy'
 import { createAnalysisFinalization, createCompletedReviewReturn } from '../src/lib/analysisFinalization'
+import { analysisCompleteFeedback, announce, systemHaptics } from '../src/lib/feedback.native'
 import type { ScanRevision } from '../src/lib/scanTypes'
 import { tagLabel } from '../src/lib/labels'
 import { AppButton } from '../src/components/AppButton'
@@ -78,8 +79,18 @@ export default function Analyze() {
   const photoOffsetY = useRef(0)
   const timelineOffsetY = useRef(0)
   const timelineStepOffsets = useRef(new Map<number, number>())
+  const announcedEvents = useRef(new Set<string>())
   if (resetTransition.current === null)
     resetTransition.current = createSessionResetTransition(resetSession, () => router.dismissTo('/'))
+
+  const announceForCurrentRun = useCallback((event: string, message: string) => {
+    const token = activeToken.current
+    if (token === null) return
+    const key = `${token}:${event}`
+    if (announcedEvents.current.has(key)) return
+    announcedEvents.current.add(key)
+    announce(message)
+  }, [])
 
   const owns = useCallback((token: number) => (
     mounted.current && runFence.current.owns(token) && finalization.current.isActive()
@@ -115,6 +126,10 @@ export default function Analyze() {
         setDurableResultRevisionId(pending.revision.id)
         if (mounted.current) setUnsaved(false)
         finalization.current.markSuccessfulHandoff()
+        if (pending.response.kind === 'analysis') {
+          announceForCurrentRun('completed', 'Analysis completed.')
+          void analysisCompleteFeedback(systemHaptics)
+        }
       } catch {
         if (!owns(token)) return
         setDurableResultRevisionId(null)
@@ -125,7 +140,7 @@ export default function Analyze() {
         if (owns(token)) setIsSaving(false)
       }
     })
-  }, [owns, scanId])
+  }, [announceForCurrentRun, owns, scanId])
 
   const finalizationDependencies = useCallback((navigate: boolean) => ({
     interrupt: async () => {
@@ -139,10 +154,13 @@ export default function Analyze() {
     runFence.current.invalidate()
     activeRequest.current?.abort()
     return correctionFence.current.invalidate().then(() => finalization.current.cancel(finalizationDependencies(true))).then(
-      () => { if (mounted.current) setReviewReturnFailed(false) },
+      () => {
+        announceForCurrentRun('cancelled', 'Analysis cancelled. Your reviewed photo is still available.')
+        if (mounted.current) setReviewReturnFailed(false)
+      },
       () => { if (mounted.current) setReviewReturnFailed(true) },
     )
-  }, [finalizationDependencies])
+  }, [announceForCurrentRun, finalizationDependencies])
 
   const returnCompletedResultToReview = useCallback(() => {
     if (mounted.current) {
@@ -170,6 +188,8 @@ export default function Analyze() {
     finalization.current.begin()
     const token = runFence.current.begin()
     activeToken.current = token
+    announcedEvents.current.clear()
+    announceForCurrentRun('started', 'Analysis started. Usually takes less than a minute.')
     pendingSave.current = null
     if (mounted.current) {
       setFailure(null)
@@ -220,7 +240,7 @@ export default function Analyze() {
     })()
     runFence.current.track(token, task)
     finalization.current.track(task)
-  }, [owns, persistPendingSave, scanId, uri])
+  }, [announceForCurrentRun, owns, persistPendingSave, scanId, uri])
 
   useEffect(() => { run() }, [run])
   useEffect(() => {
@@ -243,6 +263,21 @@ export default function Analyze() {
     const t = setInterval(() => setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000)
     return () => clearInterval(t)
   }, [failure, result])
+  useEffect(() => {
+    if (!failure) return
+    if (failure.kind === 'persistence') {
+      announceForCurrentRun('failure', 'Analysis could not be saved. Your reviewed photo is still available.')
+      return
+    }
+    announceForCurrentRun('failure', `Analysis unavailable. ${analysisRecoveryPresentation(failure).title}`)
+  }, [announceForCurrentRun, failure])
+  useEffect(() => {
+    if (!result || result.kind === 'analysis') return
+    const message = result.kind === 'not-math'
+      ? 'Analysis completed. This photo does not look like math.'
+      : 'Analysis completed. This photo is too hard to read.'
+    announceForCurrentRun('classified', message)
+  }, [announceForCurrentRun, result])
   useEffect(() => () => {
     mounted.current = false
     runFence.current.invalidate()
@@ -327,6 +362,8 @@ export default function Analyze() {
           if (!ownsCorrection(correction, analysis)) return
           setDurableResultRevisionId(revision.id)
           setResult(next)
+          announceForCurrentRun('correction-completed', 'Correction completed.')
+          void analysisCompleteFeedback(systemHaptics)
         } catch (error) {
           if (!ownsCorrection(correction, analysis) || (error instanceof ApiError && error.failure.kind === 'cancelled')) return
           setCorrectionFailure(error instanceof ApiError ? error.failure : { kind: 'network' })
@@ -338,7 +375,7 @@ export default function Analyze() {
     }
     retryCorrection.current = execute
     execute()
-  }, [beginCorrectionBusy, durableResultRevisionId, finishCorrectionBusy, ownsCorrection, scanId, uri])
+  }, [announceForCurrentRun, beginCorrectionBusy, durableResultRevisionId, finishCorrectionBusy, ownsCorrection, scanId, uri])
 
   const excludeDiagnosis = useCallback((analysis: Extract<AnalyzeResponse, { kind: 'analysis' }>) => {
     if (!scanId || durableResultRevisionId === null || feedbackLock.current.busy) return
@@ -537,6 +574,7 @@ export default function Analyze() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Return to camera"
+          accessibilityHint="Starts a new camera capture."
           accessibilityState={{ disabled: isResetting }}
           disabled={isResetting}
           hitSlop={8}
@@ -639,10 +677,10 @@ const styles = StyleSheet.create({
   stateContent: { flexGrow: 1, justifyContent: 'center' },
   stateCopy: { gap: spacing.md, marginBottom: spacing.lg },
   stateEyebrow: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1.6 },
-  stateTitle: { color: colors.chalk, fontSize: 28, fontWeight: '700', letterSpacing: -0.7, lineHeight: 34 },
-  stateDetail: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  stateTitle: { color: colors.chalk, fontSize: 28, fontWeight: '700', letterSpacing: -0.7 },
+  stateDetail: { color: colors.muted, fontSize: 15 },
   tips: { gap: spacing.sm, marginTop: spacing.xs },
-  tip: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  tip: { color: colors.muted, fontSize: 15 },
   resultContent: { paddingTop: spacing.xs },
   topBar: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   topAction: { width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' },
@@ -651,12 +689,12 @@ const styles = StyleSheet.create({
   diagnosisEyebrow: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1.4 },
   verifiedLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   verifiedMark: { color: colors.success, fontSize: 15, fontWeight: '800' },
-  headline: { flexShrink: 1, color: colors.chalk, fontSize: 24, fontWeight: '700', letterSpacing: -0.5, lineHeight: 30 },
-  diagnosisDetail: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  headline: { flexShrink: 1, color: colors.chalk, fontSize: 24, fontWeight: '700', letterSpacing: -0.5 },
+  diagnosisDetail: { color: colors.muted, fontSize: 15 },
   timeline: { marginTop: spacing.xs },
   actions: { gap: spacing.md, marginTop: spacing.sm },
   resetFailure: { gap: spacing.sm },
-  resetFailureCopy: { color: colors.error, fontSize: 15, lineHeight: 22 },
+  resetFailureCopy: { color: colors.error, fontSize: 15 },
   unsavedBanner: { gap: spacing.sm, paddingVertical: spacing.sm },
-  unsavedCopy: { color: colors.error, fontSize: 15, lineHeight: 22 },
+  unsavedCopy: { color: colors.error, fontSize: 15 },
 })

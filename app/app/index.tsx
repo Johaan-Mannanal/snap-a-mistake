@@ -1,4 +1,4 @@
-import { useReducer, useRef } from 'react'
+import { useReducer, useRef, useState } from 'react'
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import * as ImagePicker from 'expo-image-picker'
@@ -11,6 +11,7 @@ import { CurrentProblemCard } from '../src/components/CurrentProblemCard'
 import { capturePhoto, runIfCaptureIdle, type CaptureLock } from '../src/lib/cameraCapture'
 import { cameraUiReducer, initialCameraUiState } from '../src/lib/cameraUiState'
 import { getSession, setPendingPhoto } from '../src/lib/session'
+import { captureFeedback, systemHaptics } from '../src/lib/feedback.native'
 import { cameraPermissionPresentation, cameraPresentation } from '../src/ui/presentation'
 import { colors, spacing, typeScale } from '../src/ui/theme'
 
@@ -19,6 +20,8 @@ export default function Home() {
   const captureLock = useRef<CaptureLock>({ current: false })
   const [permission, requestPermission] = useCameraPermissions()
   const [{ cameraMountKey, cameraReady, isCapturing, cameraError }, dispatchCamera] = useReducer(cameraUiReducer, initialCameraUiState)
+  const [topControlsHeight, setTopControlsHeight] = useState<number | undefined>()
+  const [bottomControlsHeight, setBottomControlsHeight] = useState<number | undefined>()
   const isRetry = getSession().isRetry
   const followUp = isRetry ? getSession().followUp : null
   const presentation = cameraPresentation(isRetry)
@@ -33,7 +36,10 @@ export default function Home() {
       camera: camera.current,
       ready: cameraReady,
       lock: captureLock.current,
-      onPhoto: (uri) => usePhoto(uri, 'camera'),
+      onPhoto: async (uri) => {
+        await usePhoto(uri, 'camera')
+        void captureFeedback(systemHaptics)
+      },
       onError: (message) => dispatchCamera({ type: 'captureFailed', message }),
       onBusyChange: (busy) => dispatchCamera({ type: 'captureBusyChanged', busy }),
     })
@@ -98,12 +104,13 @@ export default function Home() {
         }}
         style={StyleSheet.absoluteFill}
       />
-      <CameraCorners />
+      <CameraCorners topControlsHeight={topControlsHeight} bottomControlsHeight={bottomControlsHeight} />
       <SafeAreaView style={styles.topSafe} pointerEvents="box-none">
-        <View style={styles.topRow}>
+        <View onLayout={(event) => setTopControlsHeight(event.nativeEvent.layout.height)} style={styles.topRow}>
           <Text style={styles.eyebrow}>{presentation.eyebrow}</Text>
           <Pressable
             accessibilityLabel="Open Insights"
+            accessibilityHint="Opens your private on-device learning history."
             accessibilityRole="button"
             accessibilityState={{ disabled: isCapturing }}
             disabled={isCapturing}
@@ -137,27 +144,31 @@ export default function Home() {
       </View>
 
       <SafeAreaView style={styles.bottomSafe} pointerEvents="box-none">
-        {followUp ? <CurrentProblemCard followUp={followUp} /> : null}
-        <View style={styles.captureRow}>
-          <Pressable
-            accessibilityLabel="Choose from library"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: isCapturing }}
-            disabled={isCapturing}
-            onPress={pick}
-            style={[styles.iconButton, isCapturing && styles.controlDisabled]}
-          >
-            <AppIcon name="photo" fallback="▧" />
-          </Pressable>
-          <Pressable
-            accessibilityLabel={isCapturing ? 'Taking photo' : cameraReady ? 'Take photo' : 'Camera loading'}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !cameraReady || isCapturing }}
-            disabled={!cameraReady || isCapturing}
-            onPress={snap}
-            style={[styles.shutter, (!cameraReady || isCapturing) && styles.shutterDisabled]}
-          ><View style={styles.shutterInner} /></Pressable>
-          <View accessibilityElementsHidden style={styles.iconButton} />
+        <View onLayout={(event) => setBottomControlsHeight(event.nativeEvent.layout.height)}>
+          {followUp ? <CurrentProblemCard followUp={followUp} /> : null}
+          <View style={styles.captureRow}>
+            <Pressable
+              accessibilityLabel="Choose from library"
+              accessibilityHint="Opens your photo library to select a math problem."
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isCapturing }}
+              disabled={isCapturing}
+              onPress={pick}
+              style={[styles.iconButton, isCapturing && styles.controlDisabled]}
+            >
+              <AppIcon name="photo" fallback="▧" />
+            </Pressable>
+            <Pressable
+              accessibilityLabel={isCapturing ? 'Taking photo' : cameraReady ? 'Take photo' : 'Camera loading'}
+              accessibilityHint={cameraReady && !isCapturing ? 'Captures the problem inside the frame.' : undefined}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !cameraReady || isCapturing }}
+              disabled={!cameraReady || isCapturing}
+              onPress={snap}
+              style={[styles.shutter, (!cameraReady || isCapturing) && styles.shutterDisabled]}
+            ><View accessible={false} style={styles.shutterInner} /></Pressable>
+            <View accessibilityElementsHidden style={styles.iconButton} />
+          </View>
         </View>
       </SafeAreaView>
     </View>
@@ -169,16 +180,16 @@ const styles = StyleSheet.create({
   permission: { flex: 1, backgroundColor: colors.ink, paddingHorizontal: spacing.xl, justifyContent: 'center', gap: spacing.xxl },
   permissionContent: { gap: spacing.sm },
   permissionTitle: { color: colors.chalk, fontSize: typeScale.display, fontWeight: '700', letterSpacing: -0.5 },
-  permissionCopy: { color: colors.muted, fontSize: typeScale.body, lineHeight: 22 },
+  permissionCopy: { color: colors.muted, fontSize: typeScale.body },
   permissionActions: { gap: spacing.sm },
   topSafe: { position: 'absolute', top: 0, left: 0, right: 0 },
-  topRow: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
+  topRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
   eyebrow: { color: colors.chalk, fontSize: typeScale.caption, fontWeight: '700', letterSpacing: 1.4 },
   topInsight: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   instructionWrap: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 56, gap: spacing.md },
   instruction: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '600', textAlign: 'center', textShadowColor: colors.ink, textShadowRadius: 8 },
   captureErrorPanel: { alignItems: 'center', gap: spacing.sm, backgroundColor: colors.graphite, borderColor: colors.error, borderLeftWidth: 2, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  captureError: { color: colors.chalk, fontSize: typeScale.caption, lineHeight: 17, textAlign: 'center' },
+  captureError: { color: colors.chalk, fontSize: typeScale.caption, textAlign: 'center' },
   retryCamera: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
   retryCameraLabel: { color: colors.chalk, fontSize: typeScale.caption, fontWeight: '700', textDecorationLine: 'underline' },
   bottomSafe: { position: 'absolute', bottom: 0, left: 0, right: 0 },

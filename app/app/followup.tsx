@@ -159,6 +159,7 @@ export default function FollowUp() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={isLeaving ? 'Leaving practice' : 'Back'}
+          accessibilityHint="Returns to the completed analysis."
           accessibilityState={{ disabled: isLeaving, busy: isLeaving }}
           disabled={isLeaving}
           onPress={leave}
@@ -209,11 +210,11 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.48 },
   copy: { gap: spacing.md },
   eyebrow: { color: colors.muted, fontSize: typeScale.caption, fontWeight: '700', letterSpacing: 1.6 },
-  title: { color: colors.chalk, fontSize: typeScale.display, fontWeight: '700', letterSpacing: -0.8, lineHeight: 38 },
-  problem: { color: colors.chalk, fontSize: typeScale.display, fontWeight: '700', letterSpacing: -0.8, lineHeight: 40 },
-  detail: { color: colors.muted, fontSize: typeScale.body, lineHeight: 22 },
-  hint: { color: colors.chalk, fontSize: typeScale.body, lineHeight: 23, borderLeftColor: colors.chalk, borderLeftWidth: 2, paddingLeft: spacing.sm },
+  title: { color: colors.chalk, fontSize: typeScale.display, fontWeight: '700', letterSpacing: -0.8 },
+  problem: { color: colors.chalk, fontSize: typeScale.display, fontWeight: '700', letterSpacing: -0.8 },
+  detail: { color: colors.muted, fontSize: typeScale.body },
+  hint: { color: colors.chalk, fontSize: typeScale.body, borderLeftColor: colors.chalk, borderLeftWidth: 2, paddingLeft: spacing.sm },
   actions: { gap: spacing.sm },
   failure: { gap: spacing.xs, borderLeftColor: colors.error, borderLeftWidth: 2, paddingLeft: spacing.sm },
-  failureCopy: { color: colors.chalk, fontSize: typeScale.caption, lineHeight: 18 },
+  failureCopy: { color: colors.chalk, fontSize: typeScale.caption },
 })

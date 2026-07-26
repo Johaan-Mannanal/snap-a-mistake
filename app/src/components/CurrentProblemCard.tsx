@@ -41,6 +41,6 @@ const styles = StyleSheet.create({
   label: { color: colors.chalk, fontSize: typeScale.caption, fontWeight: '700', letterSpacing: 1.3 },
   chevron: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '700' },
   detail: { borderTopWidth: 1, borderTopColor: colors.graphite, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.xs },
-  problem: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '700', lineHeight: 22 },
-  hint: { color: colors.muted, fontSize: typeScale.caption, lineHeight: 18 },
+  problem: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '700' },
+  hint: { color: colors.muted, fontSize: typeScale.caption },
 })
