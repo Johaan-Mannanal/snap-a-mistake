@@ -2,7 +2,7 @@ import { forwardRef } from 'react'
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 import type { Step } from '@snap/shared'
 import { colors, spacing } from '../ui/theme'
-import { readableStepMath, stepAccessibilityLabel } from '../ui/presentation'
+import { stepCardPresentation } from '../ui/presentation'
 
 export const StepCard = forwardRef<View, {
   step: Step
@@ -15,15 +15,15 @@ export const StepCard = forwardRef<View, {
 }>(function StepCard(props, ref) {
   const mark = props.step.verdict === 'ok' ? '✓' : props.step.verdict === 'wrong' ? '×' : props.step.verdict === 'suspect' ? '?' : '↓'
   const color = props.step.verdict === 'ok' ? colors.success : props.step.verdict === 'wrong' ? colors.error : colors.muted
-  const math = readableStepMath(props.step.latex, props.step.plain)
+  const presentation = stepCardPresentation(props.step, props)
   return (
     <Pressable
       ref={ref}
       accessibilityRole="button"
-      accessibilityLabel={stepAccessibilityLabel(props.step, props.misconceptionLabel, props.explanation)}
-      accessibilityHint={props.expanded ? 'Double tap to collapse this step.' : 'Double tap to expand this step.'}
-      accessibilityState={{ expanded: props.expanded, selected: props.selected }}
-      accessibilityActions={[{ name: props.expanded ? 'collapse' : 'expand', label: props.expanded ? 'Collapse step' : 'Expand step' }]}
+      accessibilityLabel={presentation.accessibilityLabel}
+      accessibilityHint={presentation.accessibilityHint ?? undefined}
+      accessibilityState={presentation.accessibilityState}
+      accessibilityActions={presentation.accessibilityAction ? [presentation.accessibilityAction] : undefined}
       onAccessibilityAction={props.onPress}
       onLayout={props.onLayout}
       onPress={props.onPress}
@@ -33,9 +33,9 @@ export const StepCard = forwardRef<View, {
       <Text style={[styles.mark, { color }]}>{mark}</Text>
       <View style={styles.copy}>
         <Text style={styles.plain}>{props.step.plain}</Text>
-        {math ? <Text style={styles.math}>{math}</Text> : null}
-        {props.expanded && props.misconceptionLabel ? <Text style={[styles.tag, { color }]}>{props.misconceptionLabel.toUpperCase()}</Text> : null}
-        {props.expanded && props.explanation ? <Text style={styles.explanation}>{props.explanation}</Text> : null}
+        {presentation.math ? <Text style={styles.math}>{presentation.math}</Text> : null}
+        {presentation.misconceptionLabel ? <Text style={[styles.tag, { color }]}>{presentation.misconceptionLabel.toUpperCase()}</Text> : null}
+        {presentation.explanation ? <Text style={styles.explanation}>{presentation.explanation}</Text> : null}
       </View>
     </Pressable>
   )

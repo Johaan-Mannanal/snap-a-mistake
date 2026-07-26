@@ -185,15 +185,47 @@ export function readableStepMath(latex: string, plain?: string): string | null {
   return readable
 }
 
-export function stepAccessibilityLabel(step: Step, misconceptionLabel: string | null, explanation: string | null) {
-  const expanded = step.verdict === 'wrong' || step.verdict === 'suspect'
+export function stepAccessibilityLabel(
+  step: Step,
+  misconceptionLabel: string | null,
+  explanation: string | null,
+  includeSecondary = true,
+) {
+  const expanded = includeSecondary && (step.verdict === 'wrong' || step.verdict === 'suspect')
   const math = readableStepMath(step.latex, step.plain)
   const sentences = [
     `Step ${step.index + 1}, ${VERDICT_LABEL[step.verdict]}.`,
     accessibilitySentence('Work', step.plain),
   ]
-  if (math) sentences.push(accessibilitySentence('Math', math))
+  if (includeSecondary && math) sentences.push(accessibilitySentence('Math', math))
   if (expanded && misconceptionLabel) sentences.push(accessibilitySentence('Misconception', misconceptionLabel))
   if (expanded && explanation) sentences.push(accessibilitySentence('Explanation', explanation))
   return sentences.join(' ')
+}
+
+export function stepCardPresentation(step: Step, input: {
+  expanded: boolean
+  selected: boolean
+  misconceptionLabel: string | null
+  explanation: string | null
+}) {
+  const math = readableStepMath(step.latex, step.plain)
+  const expandable = math !== null || input.misconceptionLabel !== null || input.explanation !== null
+  const expanded = expandable && input.expanded
+  const visibleMisconception = expanded ? input.misconceptionLabel : null
+  const visibleExplanation = expanded ? input.explanation : null
+  const accessibilityAction = !expandable
+    ? null
+    : expanded
+      ? { name: 'collapse' as const, label: 'Collapse step' }
+      : { name: 'expand' as const, label: 'Expand step' }
+  return {
+    math: expanded ? math : null,
+    misconceptionLabel: visibleMisconception,
+    explanation: visibleExplanation,
+    accessibilityLabel: stepAccessibilityLabel(step, visibleMisconception, visibleExplanation, expanded),
+    accessibilityState: expandable ? { expanded, selected: input.selected } : { selected: input.selected },
+    accessibilityHint: !expandable ? null : expanded ? 'Double tap to collapse this step.' : 'Double tap to expand this step.',
+    accessibilityAction,
+  }
 }
