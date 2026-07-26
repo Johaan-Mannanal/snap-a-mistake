@@ -9,15 +9,15 @@ import { getLocalScanRepository } from '../src/lib/history'
 import { deleteOwnedPhoto, flushCleanupQueue, ownScanPhoto } from '../src/lib/scanFiles'
 import {
   advanceReviewTransaction,
-  createReviewActionLock,
+  createReviewMutationCoordinator,
   createReviewTransaction,
   discardReviewTransaction,
   replaceReviewPhoto,
+  resumeReviewTransaction,
   resetReviewForRetake,
-  runExclusiveReviewAction,
   type ReviewTransaction,
 } from '../src/lib/reviewTransaction'
-import { acknowledgePrivacyDisclosure, clearSessionAfterAtomicDiscard, getSession, isPrivacyDisclosureAcknowledged, replacePendingPhoto, resetSession, setReviewedPhoto } from '../src/lib/session'
+import { acknowledgePrivacyDisclosure, clearSessionAfterAtomicDiscard, getSession, isPrivacyDisclosureAcknowledged, replacePendingPhoto, resetSession, resumeFollowUpCapture, setReviewedPhoto } from '../src/lib/session'
 import type { ScanOrigin } from '../src/lib/scanTypes'
 import { reviewPresentation } from '../src/ui/reviewScreen'
 import { colors, spacing } from '../src/ui/theme'
@@ -41,25 +41,39 @@ export default function Review() {
   const [selectionError, setSelectionError] = useState<string | null>(null)
   const [retakeError, setRetakeError] = useState<string | null>(null)
   const [isRetaking, setIsRetaking] = useState(false)
-  const copyLock = useRef(false)
-  const transaction = useRef<ReviewTransaction | null>(null)
+  const [isChoosing, setIsChoosing] = useState(false)
+  const entrySession = useRef(getSession()).current
+  const transaction = useRef<ReviewTransaction | null>(
+    entrySession.pendingScanId && entrySession.photoUri
+      ? resumeReviewTransaction(entrySession.pendingScanId, entrySession.photoUri, disclosureAcknowledged)
+      : null,
+  )
   const cleanupTransaction = useRef<ReviewTransaction | null>(null)
-  const retakeLock = useRef(createReviewActionLock())
+  const mutation = useRef(createReviewMutationCoordinator())
+  const mounted = useRef(true)
 
   useEffect(() => {
     if (!photo) router.replace('/')
   }, [photo])
+  useEffect(() => () => {
+    mounted.current = false
+    mutation.current.invalidate()
+  }, [])
 
   if (!photo) return null
 
-  const presentation = reviewPresentation({ origin: photo.origin, disclosureAcknowledged, isCopying: isCopying || isRetaking, copyFailed })
+  const presentation = reviewPresentation({
+    origin: photo.origin,
+    disclosureAcknowledged,
+    isCopying: isCopying || isRetaking || isChoosing,
+    copyFailed,
+  })
 
-  const analyze = async () => {
-    if (copyLock.current || isRetaking) return
-    copyLock.current = true
-    setIsCopying(true)
-    setCopyFailed(false)
-    try {
+  const analyze = () => {
+    void mutation.current.run(async (owns) => {
+      setIsCopying(true)
+      setCopyFailed(false)
+      try {
       const currentSession = getSession()
       const repository = getLocalScanRepository()
       transaction.current ??= createReviewTransaction(allocateScanId(), disclosureAcknowledged)
@@ -74,22 +88,26 @@ export default function Review() {
         createDraft: (input) => repository.createDraft(input),
         persistReviewedPhoto: setReviewedPhoto,
         acknowledgeDisclosure: acknowledgePrivacyDisclosure,
+        isCurrent: owns,
       })
+      if (!owns()) return
       if (completed.disclosureAcknowledged) setDisclosureAcknowledged(true)
       router.replace('/analyze')
-    } catch {
-      setCopyFailed(true)
-    } finally {
-      copyLock.current = false
-      setIsCopying(false)
-    }
+      } catch {
+        if (owns()) setCopyFailed(true)
+      } finally {
+        if (owns() && mounted.current) setIsCopying(false)
+      }
+    })
   }
 
-  const chooseAnother = async () => {
-    if (copyLock.current) return
-    setSelectionError(null)
-    try {
+  const chooseAnother = () => {
+    void mutation.current.run(async (owns) => {
+      setIsChoosing(true)
+      setSelectionError(null)
+      try {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 })
+      if (!owns()) return
       if (result.canceled) return
       const uri = result.assets?.[0]?.uri
       if (!uri) {
@@ -103,54 +121,65 @@ export default function Review() {
           deleteDraft: (scanId) => repository.delete(scanId),
           flushOwnedPhotos: () => flushCleanupQueue(repository),
           deleteOwnedPhoto,
+          isCurrent: owns,
         })
         cleanupTransaction.current = null
       }
       const priorTransaction = transaction.current
       const replacement = await replaceReviewPhoto(priorTransaction, {
         persistReplacement: () => replacePendingPhoto({ uri, origin: 'library' }),
+        isCurrent: owns,
         discard: (savedTransaction) => discardReviewTransaction(savedTransaction, {
           findDraft: async (scanId) => (await repository.get(scanId)) !== null,
           deleteDraft: (scanId) => repository.delete(scanId),
           flushOwnedPhotos: () => flushCleanupQueue(repository),
           deleteOwnedPhoto,
+          isCurrent: owns,
         }),
       })
+      if (!owns()) return
       setReviewPhoto({ uri, origin: 'library' })
       transaction.current = null
       cleanupTransaction.current = replacement.cleanupFailed ? priorTransaction : null
       if (replacement.cleanupFailed)
         setSelectionError('Your new photo is ready. We couldn’t clear the previous saved photo. Try clearing it again.')
       setCopyFailed(false)
-    } catch {
-      setSelectionError('We couldn’t open your library. Choose another photo when you’re ready.')
-    }
+      } catch {
+        if (owns()) setSelectionError('We couldn’t open your library. Choose another photo when you’re ready.')
+      } finally {
+        if (owns() && mounted.current) setIsChoosing(false)
+      }
+    })
   }
 
-  const retryCleanup = async () => {
-    const savedTransaction = cleanupTransaction.current
-    if (!savedTransaction) return
-    const repository = getLocalScanRepository()
-    try {
+  const retryCleanup = () => {
+    void mutation.current.run(async (owns) => {
+      const savedTransaction = cleanupTransaction.current
+      if (!savedTransaction) return
+      const repository = getLocalScanRepository()
+      try {
       await discardReviewTransaction(savedTransaction, {
         findDraft: async (scanId) => (await repository.get(scanId)) !== null,
         deleteDraft: (scanId) => repository.delete(scanId),
         flushOwnedPhotos: () => flushCleanupQueue(repository),
         deleteOwnedPhoto,
+        isCurrent: owns,
       })
+      if (!owns()) return
       cleanupTransaction.current = null
       setSelectionError(null)
-    } catch {
-      setSelectionError('We still couldn’t clear the previous saved photo. Your new photo is safe; try again when you’re ready.')
-    }
+      } catch {
+        if (owns()) setSelectionError('We still couldn’t clear the previous saved photo. Your new photo is safe; try again when you’re ready.')
+      }
+    })
   }
 
   const retake = () => {
-    void runExclusiveReviewAction(retakeLock.current, async () => {
-      if (copyLock.current) return
+    void mutation.current.run(async (owns) => {
       setIsRetaking(true)
       setRetakeError(null)
       try {
+        const currentSession = getSession()
         const repository = getLocalScanRepository()
         if (cleanupTransaction.current) {
           await discardReviewTransaction(cleanupTransaction.current, {
@@ -158,6 +187,7 @@ export default function Review() {
             deleteDraft: (scanId) => repository.delete(scanId),
             flushOwnedPhotos: () => flushCleanupQueue(repository),
             deleteOwnedPhoto,
+            isCurrent: owns,
           })
           cleanupTransaction.current = null
         }
@@ -165,14 +195,21 @@ export default function Review() {
           discardReviewAndSession: (input) => repository.discardReviewAndSession(input),
           clearInMemorySession: clearSessionAfterAtomicDiscard,
           flushOwnedPhotos: () => flushCleanupQueue(repository),
-          resetSession,
+          resetSession: currentSession.parentScanId && currentSession.followUp
+            ? async () => {
+                const resumed = await resumeFollowUpCapture({ isCurrent: owns })
+                if (!resumed) throw new Error('follow-up retake is no longer current')
+              }
+            : resetSession,
+          isCurrent: owns,
         })
+        if (!owns()) return
         transaction.current = null
         router.replace('/')
       } catch {
-        setRetakeError('We couldn’t clear this saved photo. Your photo is still here. Try retake again.')
+        if (owns()) setRetakeError('We couldn’t clear this saved photo. Your photo is still here. Try retake again.')
       } finally {
-        setIsRetaking(false)
+        if (owns() && mounted.current) setIsRetaking(false)
       }
     })
   }
@@ -190,7 +227,7 @@ export default function Review() {
       {selectionError ? <Text accessibilityRole="alert" style={styles.error}>{selectionError}</Text> : null}
       {retakeError ? <Text accessibilityRole="alert" style={styles.error}>{retakeError}</Text> : null}
       <View style={styles.actions}>
-        <AppButton label={presentation.primaryLabel} disabled={presentation.actionsDisabled} onPress={() => { void analyze() }} />
+        <AppButton label={presentation.primaryLabel} disabled={presentation.actionsDisabled} onPress={analyze} />
         {presentation.actions.retake ? (
           <AppButton label={presentation.actions.retake} disabled={presentation.actionsDisabled} onPress={retake} variant="secondary" />
         ) : null}
@@ -198,12 +235,12 @@ export default function Review() {
           accessibilityRole="button"
           accessibilityState={{ disabled: presentation.actionsDisabled }}
           disabled={presentation.actionsDisabled}
-          onPress={() => { void chooseAnother() }}
+          onPress={chooseAnother}
           style={[styles.chooseAnother, presentation.actionsDisabled && styles.disabled]}
         >
           <Text style={styles.chooseAnotherLabel}>{presentation.actions.replace}</Text>
         </Pressable>
-        {cleanupTransaction.current ? <AppButton label="Try clearing previous photo" disabled={presentation.actionsDisabled} onPress={() => { void retryCleanup() }} variant="tertiary" /> : null}
+        {cleanupTransaction.current ? <AppButton label="Try clearing previous photo" disabled={presentation.actionsDisabled} onPress={retryCleanup} variant="tertiary" /> : null}
         {retakeError ? <AppButton label="Try retake again" disabled={presentation.actionsDisabled} onPress={retake} variant="secondary" /> : null}
       </View>
     </AppScreen>

@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Stack } from 'expo-router'
+import { router, Stack, useRootNavigationState } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { getLocalScanRepository, initLocalScanStorage } from '../src/lib/history'
 import { flushCleanupQueue } from '../src/lib/scanFiles'
-import { hydrateSession } from '../src/lib/session'
+import { hydrateSession, takeHydratedRouteIntent } from '../src/lib/session'
 import { bootstrapLocalStorage, type LocalStorageBootstrapState } from '../src/lib/startup'
 import { colors } from '../src/ui/theme'
 
 export default function RootLayout() {
   const [startup, setStartup] = useState<LocalStorageBootstrapState | null>(null)
+  const navigationState = useRootNavigationState()
   const initialize = useCallback(() => {
     setStartup(null)
     void bootstrapLocalStorage(async () => {
@@ -23,6 +24,16 @@ export default function RootLayout() {
   useEffect(() => {
     queueMicrotask(initialize)
   }, [initialize])
+
+  useEffect(() => {
+    if (startup?.kind !== 'ready' || !navigationState?.key) return
+    const intent = takeHydratedRouteIntent()
+    const destination = intent === 'review' ? '/review'
+      : intent === 'result' ? '/analyze'
+        : intent === 'follow-up' ? '/followup'
+          : null
+    if (destination !== null) router.replace(destination)
+  }, [navigationState?.key, startup])
 
   if (startup === null) {
     return <View style={styles.launch} />

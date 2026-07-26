@@ -30,6 +30,7 @@ export interface ScanRepository {
   migrate(): Promise<void>
   createDraft(input: NewScanDraft): Promise<ScanRecord>
   setLifecycle(scanId: string, lifecycle: Extract<ScanLifecycle, 'analyzing' | 'interrupted' | 'unsaved'>): Promise<ScanRecord>
+  interruptAnalysisAndRestoreSession(scanId: string, session: PersistedSession): Promise<PersistedSession>
   saveRevision(scanId: string, revision: ScanRevision, durationMs: number): Promise<ScanRecord>
   applyCorrection(scanId: string, rejectedRevisionId: string, revision: ScanRevision, durationMs: number, session?: PersistedSession, isCurrent?: () => boolean): Promise<ScanRecord>
   excludeDiagnosis(scanId: string, session?: PersistedSession, isCurrent?: () => boolean): Promise<ScanRecord>
@@ -44,7 +45,8 @@ export interface ScanRepository {
   getCleanupQueue(): Promise<string[]>
   acknowledgeCleanup(imageUri: string): Promise<void>
   commitFollowUpStartIfCurrent(parentScanId: string, session: PersistedSession, targetStatus: FollowUpStatus, isCurrent: () => boolean): Promise<boolean>
-  getState<T>(key: string, schema: z.ZodType<T>): Promise<T | null>
+  commitFollowUpReturnIfCurrent(parentScanId: string, session: PersistedSession, isCurrent: () => boolean): Promise<boolean>
+  getState<T>(key: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>): Promise<T | null>
   setState<T>(key: string, value: T): Promise<void>
   deleteState(key: string): Promise<void>
 }
@@ -307,6 +309,33 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       })
     },
 
+    async interruptAnalysisAndRestoreSession(scanId, session): Promise<PersistedSession> {
+      if (session.routeIntent !== 'review' || session.pendingScanId !== scanId)
+        throw new Error('interrupted analysis must restore its matching review session')
+      return db.withExclusiveTransactionAsync(async (transaction) => {
+        const scan = await requireRecord(transaction, scanId)
+        const restored = scan.activeRevision === null
+          ? session
+          : {
+              ...session,
+              routeIntent: 'result' as const,
+              analysis: scan.activeRevision.response,
+            }
+        if (scan.activeRevision === null) {
+          await transaction.runAsync(
+            'UPDATE scans SET lifecycle = ?, updated_at = ? WHERE id = ?',
+            ['interrupted', now(), scanId],
+          )
+        }
+        await transaction.runAsync(
+          `INSERT INTO app_state (key, value_json) VALUES (?, ?)
+           ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
+          [ACTIVE_SESSION_KEY, JSON.stringify(restored)],
+        )
+        return restored
+      })
+    },
+
     async saveRevision(scanId, revision, durationMs): Promise<ScanRecord> {
       const validatedRevision = ScanRevisionSchema.parse(revision)
       const savedRevision: ScanRevision = {
@@ -556,10 +585,11 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
             throw new Error('parent scan is not ready for a follow-up start')
           requireCurrent()
 
-          if (parent.followUpStatus !== targetStatus) {
+          const activeFollowUp = JSON.stringify(session.followUp)
+          if (parent.followUpStatus !== targetStatus || JSON.stringify(parent.followUp) !== activeFollowUp) {
             await transaction.runAsync(
-              'UPDATE scans SET follow_up_status = ?, updated_at = ? WHERE id = ?',
-              [targetStatus, now(), parentScanId],
+              'UPDATE scans SET follow_up_json = ?, follow_up_status = ?, updated_at = ? WHERE id = ?',
+              [activeFollowUp, targetStatus, now(), parentScanId],
             )
           }
           requireCurrent()
@@ -578,7 +608,39 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       }
     },
 
-    async getState<T>(key: string, schema: z.ZodType<T>): Promise<T | null> {
+    async commitFollowUpReturnIfCurrent(parentScanId, session, isCurrent): Promise<boolean> {
+      if (session.routeIntent !== 'result' || session.pendingScanId !== parentScanId || session.analysis === null)
+        throw new Error('follow-up return must restore its matching parent result')
+      try {
+        return await db.withExclusiveTransactionAsync(async (transaction) => {
+          const requireCurrent = () => {
+            if (!isCurrent()) throw new FollowUpStartStaleError()
+          }
+          requireCurrent()
+          const parent = await requireRecord(transaction, parentScanId)
+          if (parent.followUp === null || parent.activeRevision === null)
+            throw new Error('parent scan has no resumable follow-up result')
+          requireCurrent()
+          await transaction.runAsync(
+            'UPDATE scans SET follow_up_status = ?, updated_at = ? WHERE id = ?',
+            ['ready', now(), parentScanId],
+          )
+          requireCurrent()
+          await transaction.runAsync(
+            `INSERT INTO app_state (key, value_json) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
+            [ACTIVE_SESSION_KEY, JSON.stringify(session)],
+          )
+          requireCurrent()
+          return true
+        })
+      } catch (error) {
+        if (error instanceof FollowUpStartStaleError) return false
+        throw error
+      }
+    },
+
+    async getState<T>(key: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>): Promise<T | null> {
       const row = await db.getFirstAsync<{ value_json: string }>('SELECT value_json FROM app_state WHERE key = ?', [key])
       if (!row) return null
       try {

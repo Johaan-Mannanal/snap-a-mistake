@@ -102,7 +102,12 @@ describe('PersistedSessionSchema', () => {
     expect(PersistedSessionSchema.parse({
       routeIntent: 'result', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
       analysis: {
-        kind: 'analysis', steps: [], errorStepIndex: 0, misconceptionTag: 'sign-error',
+        kind: 'analysis',
+        steps: [{
+          index: 0, latex: 'x = -2', plain: 'x equals negative 2',
+          yBandTopPct: 20, yBandBottomPct: 30, verdict: 'wrong',
+        }],
+        errorStepIndex: 0, misconceptionTag: 'sign-error',
         explanation: 'The sign changed.', followUp, verifierAgreed: true,
       },
       followUp, parentScanId: null,
@@ -140,11 +145,11 @@ describe('PersistedSessionSchema', () => {
     expect(() => PersistedSessionSchema.parse({
       routeIntent: 'review', pendingScanId: null, photoUri: 'file:///temporary.jpg', origin: 'camera',
       analysis: response, followUp: null, parentScanId: null,
-    })).toThrow('review cannot retain an analysis result or follow-up')
+    })).toThrow('review cannot retain an analysis result')
     expect(() => PersistedSessionSchema.parse({
       routeIntent: 'analyze', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
       analysis: null, followUp, parentScanId: null,
-    })).toThrow('analyze cannot retain an analysis result or follow-up')
+    })).toThrow('active follow-up problem requires a parent scan')
     expect(() => PersistedSessionSchema.parse({
       routeIntent: 'result', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
       analysis: response, followUp, parentScanId: null,
@@ -166,6 +171,27 @@ describe('PersistedSessionSchema', () => {
       parentScanId: null,
     })
     expect(session).toMatchObject({ routeIntent: 'analyze', pendingScanId: 'scan-1' })
+  })
+
+  it('retains the active follow-up problem, hint, and alternates through review and analysis', () => {
+    const practice = {
+      followUp,
+      followUpHintVisible: true,
+      previousFollowUpProblems: ['Simplify −(2x + 3).'],
+      parentScanId: 'parent-1',
+    }
+    const review = PersistedSessionSchema.parse({
+      routeIntent: 'review', pendingScanId: null, photoUri: 'file:///temporary.jpg', origin: 'camera',
+      analysis: null, ...practice,
+    })
+    const analyze = PersistedSessionSchema.parse({
+      routeIntent: 'analyze', pendingScanId: 'child-1',
+      photoUri: 'file:///documents/scans/child-1.jpg', origin: 'camera',
+      analysis: null, ...practice,
+    })
+
+    expect(review).toMatchObject(practice)
+    expect(analyze).toMatchObject(practice)
   })
 
   it('rejects persisted sessions containing invalid response JSON', () => {

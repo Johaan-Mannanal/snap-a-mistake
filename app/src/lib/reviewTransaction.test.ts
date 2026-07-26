@@ -159,6 +159,36 @@ describe('review transaction', () => {
     expect(transaction.ownedUri).toBe('file:///documents/scans/scan-1.jpg')
   })
 
+  it('stops Analyze mutations when ownership is invalidated during photo ownership', async () => {
+    let current = true
+    const deps = dependencies()
+    deps.ownPhoto.mockImplementation(async () => {
+      current = false
+      return 'file:///documents/scans/scan-1.jpg'
+    })
+
+    await advanceReviewTransaction(createReviewTransaction('scan-1'), draft, {
+      ...deps,
+      isCurrent: () => current,
+    })
+
+    expect(deps.createDraft).not.toHaveBeenCalled()
+    expect(deps.persistReviewedPhoto).not.toHaveBeenCalled()
+  })
+
+  it('does not clean prior history when replacement ownership expires during persistence', async () => {
+    let current = true
+    const discard = vi.fn(async () => {})
+
+    await replaceReviewPhoto(createReviewTransaction('scan-1'), {
+      persistReplacement: async () => { current = false },
+      discard,
+      isCurrent: () => current,
+    })
+
+    expect(discard).not.toHaveBeenCalled()
+  })
+
   it('atomically clears a partial review session before flushing its queued owned photo', async () => {
     const calls: string[] = []
     const transaction = createReviewTransaction('scan-1')

@@ -14,7 +14,7 @@ import {
   type FollowUpPracticeState,
 } from '../src/lib/followUp'
 import { getLocalScanRepository } from '../src/lib/history'
-import { getSession, startFollowUp } from '../src/lib/session'
+import { getFollowUpPractice, getSession, returnFromFollowUp, startFollowUp } from '../src/lib/session'
 import { colors, spacing, typeScale } from '../src/ui/theme'
 
 function currentParentId(): string | null {
@@ -35,7 +35,7 @@ function diagnosisForParent(): Promise<string> {
 export default function FollowUp() {
   const initialFollowUp = getSession().followUp
   const [practice, setPractice] = useState<FollowUpPracticeState | null>(() => (
-    initialFollowUp ? createFollowUpPracticeState(initialFollowUp) : null
+    getFollowUpPractice() ?? (initialFollowUp ? createFollowUpPracticeState(initialFollowUp) : null)
   ))
   const [alternateFailure, setAlternateFailure] = useState<string | null>(null)
   const [requestingAlternate, setRequestingAlternate] = useState(false)
@@ -48,22 +48,29 @@ export default function FollowUp() {
   const checkFence = useRef(createFollowUpCheckFence())
   const leaveLock = useRef(createFollowUpLeaveLock())
   const mounted = useRef(true)
+  const practiceRouteCurrent = useRef(true)
+  const parentScanId = useRef(currentParentId()).current
 
   useEffect(() => {
     mounted.current = true
     const fence = checkFence.current
     return () => {
       mounted.current = false
+      practiceRouteCurrent.current = false
       alternateRequest.current?.abort()
       void fence.invalidate().catch(() => {})
     }
   }, [])
-
   const leave = () => {
     alternateRequest.current?.abort()
+    practiceRouteCurrent.current = false
     const operation = leaveLock.current.run(async () => {
       await checkFence.current.invalidate()
-      if (mounted.current) router.back()
+      if (parentScanId !== null) {
+        const restored = await returnFromFollowUp(parentScanId, { isCurrent: () => mounted.current })
+        if (!restored) throw new Error('practice route changed')
+      }
+      if (mounted.current) router.replace('/analyze')
     })
     if (!operation.started) return
     setIsLeaving(true)
@@ -72,6 +79,7 @@ export default function FollowUp() {
       () => { if (mounted.current) setIsLeaving(false) },
       () => {
         if (mounted.current) {
+          practiceRouteCurrent.current = true
           setIsLeaving(false)
           setLeaveFailure('We couldn’t safely leave this practice attempt. Try Back again.')
         }
@@ -80,7 +88,7 @@ export default function FollowUp() {
   }
 
   const requestAnother = () => {
-    if (practice === null || alternateRequest.current !== null) return
+    if (practice === null || parentScanId === null || alternateRequest.current !== null) return
     const controller = new AbortController()
     alternateRequest.current = controller
     setRequestingAlternate(true)
@@ -95,6 +103,12 @@ export default function FollowUp() {
           setAlternateFailure('That problem was too similar. Try another similar problem.')
           return
         }
+        const persisted = await startFollowUp(parentScanId, replacement.followUp, {
+          hintVisible: replacement.hintVisible,
+          previousProblems: replacement.previousProblems,
+          isCurrent: () => mounted.current && practiceRouteCurrent.current && alternateRequest.current === controller,
+        })
+        if (!persisted || alternateRequest.current !== controller) return
         setPractice(replacement)
       } catch (error) {
         if (alternateRequest.current !== controller || (error instanceof ApiError && error.failure.kind === 'cancelled')) return
@@ -110,7 +124,6 @@ export default function FollowUp() {
 
   const checkWork = () => {
     if (practice === null || checkLock.current) return
-    const parentScanId = currentParentId()
     if (parentScanId === null) {
       setAlternateFailure('This practice problem is no longer linked to its analysis. Go back and choose it again.')
       return
@@ -125,7 +138,11 @@ export default function FollowUp() {
     const task = (async () => {
       try {
         if (!owns()) return
-        const persisted = await startFollowUp(parentScanId, practice.followUp, { isCurrent: owns })
+        const persisted = await startFollowUp(parentScanId, practice.followUp, {
+          hintVisible: practice.hintVisible,
+          previousProblems: practice.previousProblems,
+          isCurrent: () => practiceRouteCurrent.current && owns(),
+        })
         if (!persisted || !owns()) return
         router.dismissTo('/')
       } catch (error) {
@@ -139,6 +156,21 @@ export default function FollowUp() {
       }
     })()
     checkFence.current.track(run, task)
+  }
+
+  const revealHint = () => {
+    if (practice === null || parentScanId === null) return
+    const revealed = revealFollowUpHint(practice)
+    void startFollowUp(parentScanId, revealed.followUp, {
+      hintVisible: true,
+      previousProblems: revealed.previousProblems,
+      isCurrent: () => mounted.current && practiceRouteCurrent.current,
+    }).then((persisted) => {
+      if (persisted && mounted.current) setPractice(revealed)
+      else if (mounted.current) setCheckFailure('We couldn’t save the hint. Try showing it again.')
+    }).catch(() => {
+      if (mounted.current) setCheckFailure('We couldn’t save the hint. Try showing it again.')
+    })
   }
 
   if (practice === null) {
@@ -182,7 +214,7 @@ export default function FollowUp() {
         </View>
       </View>
       <View style={styles.actions}>
-        {!practice.hintVisible ? <AppButton label="Show a hint" onPress={() => setPractice(revealFollowUpHint(practice))} variant="secondary" /> : null}
+        {!practice.hintVisible ? <AppButton label="Show a hint" onPress={revealHint} variant="secondary" /> : null}
         <AppButton label={requestingAlternate ? 'Finding another problem…' : 'Try another similar problem'} onPress={requestAnother} disabled={requestingAlternate} variant="secondary" />
         {alternateFailure ? (
           <View style={styles.failure}>

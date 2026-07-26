@@ -18,7 +18,16 @@ import {
 } from './session'
 
 const withFollowUp: AnalyzeResponse = {
-  kind: 'analysis', steps: [], errorStepIndex: 1, misconceptionTag: 'sign-error',
+  kind: 'analysis',
+  steps: [{
+    index: 1,
+    latex: 'x = -2',
+    plain: 'x equals negative 2',
+    yBandTopPct: 20,
+    yBandBottomPct: 30,
+    verdict: 'wrong',
+  }],
+  errorStepIndex: 1, misconceptionTag: 'sign-error',
   explanation: 'x', followUp: { problem: 'p', concept: 'c', hint: 'h' }, verifierAgreed: true,
 }
 
@@ -38,6 +47,11 @@ class MemorySessionRepository {
   async setState(key: string, value: unknown): Promise<void> {
     if (key === 'active-session') this.state = value
     else this.states.set(key, value)
+  }
+
+  async interruptAnalysisAndRestoreSession(_scanId: string, value: unknown) {
+    this.state = value
+    return PersistedSessionSchema.parse(value)
   }
 
   async commitFollowUpStartIfCurrent(_parentScanId: string, value: unknown, _targetStatus: 'in-progress', isCurrent: () => boolean): Promise<boolean> {
@@ -76,7 +90,7 @@ describe('session', () => {
 
     expect(repository.state).toEqual({
       routeIntent: 'review', pendingScanId: null, photoUri: 'file:///cache/camera.jpg', origin: 'camera',
-      analysis: null, followUp: null, parentScanId: null,
+      analysis: null, followUp: null, followUpHintVisible: false, previousFollowUpProblems: [], parentScanId: null,
     })
     expect(getSession()).toMatchObject({ routeIntent: 'review', photoUri: 'file:///cache/camera.jpg', origin: 'camera' })
   })
@@ -92,7 +106,7 @@ describe('session', () => {
     expect(repository.states.get('privacy-disclosure-v1')).toEqual({ acknowledged: true })
     expect(repository.state).toEqual({
       routeIntent: 'review', pendingScanId: null, photoUri: 'file:///cache/camera.jpg', origin: 'camera',
-      analysis: null, followUp: null, parentScanId: null,
+      analysis: null, followUp: null, followUpHintVisible: false, previousFollowUpProblems: [], parentScanId: null,
     })
   })
 
@@ -113,7 +127,7 @@ describe('session', () => {
 
     expect(repository.state).toEqual({
       routeIntent: 'result', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'library',
-      analysis: noFollowUp, followUp: null, parentScanId: null,
+      analysis: noFollowUp, followUp: null, followUpHintVisible: false, previousFollowUpProblems: [], parentScanId: null,
     })
     expect(getSession()).toMatchObject({ routeIntent: 'result', pendingScanId: 'scan-1', followUp: null })
   })
@@ -126,7 +140,8 @@ describe('session', () => {
 
     expect(repository.state).toEqual({
       routeIntent: 'follow-up', pendingScanId: null, photoUri: null, origin: null,
-      analysis: null, followUp: withFollowUp.followUp, parentScanId: 'scan-1',
+      analysis: null, followUp: withFollowUp.followUp,
+      followUpHintVisible: false, previousFollowUpProblems: [], parentScanId: 'scan-1',
     })
     expect(getSession()).toMatchObject({ routeIntent: 'follow-up', parentScanId: 'scan-1', followUp: withFollowUp.followUp })
   })
@@ -151,7 +166,8 @@ describe('session', () => {
 
     expect(repository.state).toEqual({
       routeIntent: 'review', pendingScanId: null, photoUri: 'file:///cache/follow-up.jpg', origin: 'camera',
-      analysis: null, followUp: null, parentScanId: 'scan-1',
+      analysis: null, followUp: withFollowUp.followUp,
+      followUpHintVisible: false, previousFollowUpProblems: [], parentScanId: 'scan-1',
     })
     expect(getSession()).toMatchObject({ routeIntent: 'review', parentScanId: 'scan-1', isRetry: true })
   })
@@ -240,7 +256,7 @@ describe('session', () => {
     const repository = new MemorySessionRepository()
     repository.state = PersistedSessionSchema.parse({
       routeIntent: 'analyze', pendingScanId: 'grandchild', photoUri: 'file:///documents/scans/grandchild.jpg', origin: 'camera',
-      analysis: null, followUp: null, parentScanId: 'child',
+      analysis: null, followUp: withFollowUp.followUp, parentScanId: 'child',
     })
     await hydrateSession(repository as unknown as ScanRepository)
 

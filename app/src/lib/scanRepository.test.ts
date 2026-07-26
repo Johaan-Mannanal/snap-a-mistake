@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AnalyzeResponse } from '@snap/shared'
 import { createScanRepository, type DatabasePort } from './scanRepository'
-import type { NewScanDraft, PersistedSession, ScanRevision } from './scanTypes'
+import { PersistedSessionSchema, type NewScanDraft, type PersistedSession, type ScanRevision } from './scanTypes'
 
 type ScanRow = Record<string, unknown>
 type RevisionRow = Record<string, unknown>
@@ -79,6 +79,15 @@ class MemoryDatabase implements DatabasePort {
       const scan = this.scans.get(String(id))
       if (!scan) return { changes: 0 }
       Object.assign(scan, { feedback, updated_at: updatedAt })
+      return { changes: 1 }
+    }
+    if (normalized.startsWith('update scans set follow_up_json')) {
+      const [followUp, followUpStatus, updatedAt, id] = params
+      const scan = this.scans.get(String(id))
+      if (!scan) return { changes: 0 }
+      Object.assign(scan, { follow_up_json: followUp, follow_up_status: followUpStatus, updated_at: updatedAt })
+      this.onFollowUpStatusWritten?.()
+      if (this.followUpStatusAfterWriteGate) await this.followUpStatusAfterWriteGate
       return { changes: 1 }
     }
     if (normalized.startsWith('update scans set follow_up_status')) {
@@ -213,11 +222,20 @@ const revision = (id: string, reason: ScanRevision['reason']): ScanRevision => (
   id, reason, response: analysis, feedback: 'unreviewed', createdAt: '2026-07-24T12:01:00.000Z',
 })
 
+const diagnosedStep = {
+  index: 0,
+  latex: '-(x + 2) = -x + 2',
+  plain: 'negative x plus 2',
+  yBandTopPct: 20,
+  yBandBottomPct: 30,
+  verdict: 'wrong' as const,
+}
+
 const diagnosisRevision: ScanRevision = {
   id: 'revision-with-follow-up',
   reason: 'initial',
   response: {
-    kind: 'analysis', steps: [], errorStepIndex: 0, misconceptionTag: 'sign-error',
+    kind: 'analysis', steps: [diagnosedStep], errorStepIndex: 0, misconceptionTag: 'sign-error',
     explanation: 'The sign changed without distributing the negative.',
     followUp: { problem: 'Simplify −(x + 2).', concept: 'sign distribution', hint: 'Distribute the negative to both terms.' },
     verifierAgreed: true,
@@ -231,6 +249,8 @@ function followUpSession(): PersistedSession {
     routeIntent: 'follow-up', pendingScanId: null, photoUri: null, origin: null,
     analysis: null,
     followUp: { problem: 'Simplify −(x + 2).', concept: 'sign distribution', hint: 'Distribute the negative to both terms.' },
+    followUpHintVisible: false,
+    previousFollowUpProblems: [],
     parentScanId: 'parent',
   }
 }
@@ -272,6 +292,67 @@ describe('scan repository records', () => {
     await expect(repository.setLifecycle('scan-1', 'analyzing')).resolves.toMatchObject({ lifecycle: 'analyzing', imageUri: 'file:///documents/scans/scan-1.jpg' })
     await expect(repository.setLifecycle('scan-1', 'interrupted')).resolves.toMatchObject({ lifecycle: 'interrupted', activeRevision: null })
     expect(db.scans).toHaveLength(1)
+  })
+
+  it('atomically interrupts the scan row and restores its review session', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.setLifecycle('scan-1', 'analyzing')
+    const reviewSession: PersistedSession = {
+      routeIntent: 'review', pendingScanId: 'scan-1',
+      photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: null, followUp: null, followUpHintVisible: false,
+      previousFollowUpProblems: [], parentScanId: null,
+    }
+
+    await repository.interruptAnalysisAndRestoreSession('scan-1', reviewSession)
+
+    expect((await repository.get('scan-1'))?.lifecycle).toBe('interrupted')
+    await expect(repository.getState('active-session', PersistedSessionSchema))
+      .resolves.toMatchObject({ routeIntent: 'review', pendingScanId: 'scan-1' })
+  })
+
+  it('restores a committed result instead of downgrading it to interrupted', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    const savedRevision = revision('revision-1', 'initial')
+    await repository.saveRevision('scan-1', savedRevision, 400)
+    const reviewSession: PersistedSession = {
+      routeIntent: 'review', pendingScanId: 'scan-1',
+      photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: null, followUp: null, followUpHintVisible: false,
+      previousFollowUpProblems: [], parentScanId: null,
+    }
+
+    await expect(repository.interruptAnalysisAndRestoreSession('scan-1', reviewSession))
+      .resolves.toMatchObject({ routeIntent: 'result', analysis: savedRevision.response })
+
+    expect((await repository.get('scan-1'))?.lifecycle).toBe('complete')
+    await expect(repository.getState('active-session', PersistedSessionSchema))
+      .resolves.toMatchObject({ routeIntent: 'result', analysis: savedRevision.response })
+  })
+
+  it('rolls back interruption when the restored session cannot be written', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.setLifecycle('scan-1', 'analyzing')
+    db.failActiveSessionWrite = true
+
+    await expect(repository.interruptAnalysisAndRestoreSession('scan-1', {
+      routeIntent: 'review', pendingScanId: 'scan-1',
+      photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: null, followUp: null, followUpHintVisible: false,
+      previousFollowUpProblems: [], parentScanId: null,
+    })).rejects.toThrow('state unavailable')
+
+    expect((await repository.get('scan-1'))?.lifecycle).toBe('analyzing')
+    expect(db.appState.has('active-session')).toBe(false)
   })
 
   it('saves a retry on the same scan instead of creating another scan', async () => {
@@ -354,7 +435,7 @@ describe('scan repository records', () => {
     const corrected = await repository.applyCorrection('parent', 'revision-with-follow-up', {
       id: 'parent-corrected', reason: 'student-correction', feedback: 'corrected', createdAt: '2026-07-24T12:03:00.000Z',
       response: {
-        kind: 'analysis', steps: [], errorStepIndex: 0, misconceptionTag: 'dropped-term',
+        kind: 'analysis', steps: [diagnosedStep], errorStepIndex: 0, misconceptionTag: 'dropped-term',
         explanation: 'A term was dropped in the current diagnosis.',
         followUp: { problem: 'Simplify x + 0.', concept: 'preserving terms', hint: 'Keep each term.' },
         verifierAgreed: true,
@@ -375,7 +456,7 @@ describe('scan repository records', () => {
       ...diagnosisRevision,
       id: 'child-same-diagnosis',
       response: {
-        kind: 'analysis', steps: [], errorStepIndex: 0, misconceptionTag: 'sign-error',
+        kind: 'analysis', steps: [diagnosedStep], errorStepIndex: 0, misconceptionTag: 'sign-error',
         explanation: 'The sign changed without distributing the negative.',
         followUp: { problem: 'Simplify −(x + 2).', concept: 'sign distribution', hint: 'Distribute the negative to both terms.' },
         verifierAgreed: true,
@@ -857,6 +938,30 @@ describe('atomic follow-up starts', () => {
     expect(JSON.parse(db.appState.get('active-session') ?? 'null')).toEqual(followUpSession())
   })
 
+  it('persists an accepted alternate problem on the parent in the same handoff', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await parentReady(repository)
+    const alternate = {
+      problem: 'Simplify −(3x − 4).',
+      concept: 'sign distribution',
+      hint: 'Apply the negative sign to each term.',
+    }
+    const session = { ...followUpSession(), followUp: alternate }
+
+    await repository.commitFollowUpStartIfCurrent('parent', session, 'in-progress', () => true)
+
+    expect((await repository.get('parent'))).toMatchObject({
+      followUp: alternate,
+      followUpStatus: 'in-progress',
+    })
+    expect(JSON.parse(db.appState.get('active-session') ?? 'null')).toMatchObject({
+      followUp: alternate,
+      parentScanId: 'parent',
+    })
+  })
+
   it('propagates database failure and rolls back both the status and follow-up session for retry', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)
@@ -868,5 +973,30 @@ describe('atomic follow-up starts', () => {
 
     expect(db.appState.has('active-session')).toBe(false)
     expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
+  })
+
+  it('atomically returns an abandoned practice route to its parent result', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await parentReady(repository)
+    await repository.commitFollowUpStartIfCurrent('parent', followUpSession(), 'in-progress', () => true)
+    const resultSession: PersistedSession = {
+      routeIntent: 'result', pendingScanId: 'parent',
+      photoUri: 'file:///documents/scans/parent.jpg', origin: 'camera',
+      analysis: diagnosisRevision.response,
+      followUp: diagnosisRevision.response.kind === 'analysis' ? diagnosisRevision.response.followUp : null,
+      followUpHintVisible: false,
+      previousFollowUpProblems: [],
+      parentScanId: null,
+    }
+
+    await expect(repository.commitFollowUpReturnIfCurrent('parent', resultSession, () => true)).resolves.toBe(true)
+
+    expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
+    expect(JSON.parse(db.appState.get('active-session') ?? 'null')).toMatchObject({
+      routeIntent: 'result',
+      pendingScanId: 'parent',
+    })
   })
 })

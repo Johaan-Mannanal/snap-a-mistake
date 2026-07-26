@@ -4,7 +4,7 @@ import { router } from 'expo-router'
 import type { AnalyzeResponse } from '@snap/shared'
 import { ApiError, type ApiFailure, analyzePhoto, correctDiagnosis } from '../src/lib/api'
 import { getLocalScanRepository } from '../src/lib/history'
-import { adoptResultSession, adoptReviewSession, getSession, persistAnalysis, resetSession, resultSession, reviewSession } from '../src/lib/session'
+import { adoptResultSession, adoptReviewSession, beginFollowUp, getSession, persistAnalysis, resetSession, resultSession, reviewSession } from '../src/lib/session'
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
 import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
 import { createCorrectionFence, type CorrectionRun } from '../src/lib/correctionAsync'
@@ -25,6 +25,7 @@ import { analysisPresentation, analysisRecoveryPresentation } from '../src/ui/pr
 import { colors, spacing } from '../src/ui/theme'
 import { expandStepIndex, initialExpandedStepIndexes, selectStepIndex, toggleExpandedStepIndexes } from '../src/lib/resultInteraction'
 import { isDurableFeedbackAvailable, synthesizeAllCorrectResponse } from '../src/ui/diagnosisFeedback'
+import { initialAnalysisEntry } from '../src/lib/analysisEntry'
 
 type RecoverableFailure = ApiFailure | { kind: 'persistence' }
 
@@ -39,7 +40,8 @@ function allocateRevisionId(): string {
 }
 
 export default function Analyze() {
-  const [result, setResult] = useState<AnalyzeResponse | null>(null)
+  const initialEntry = useRef(initialAnalysisEntry(getSession())).current
+  const [result, setResult] = useState<AnalyzeResponse | null>(initialEntry.result)
   const [failure, setFailure] = useState<RecoverableFailure | null>(null)
   const [unsaved, setUnsaved] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -60,6 +62,8 @@ export default function Analyze() {
   const [correctionFailure, setCorrectionFailure] = useState<ApiFailure | null>(null)
   const [feedbackAccepted, setFeedbackAccepted] = useState(false)
   const [durableResultRevisionId, setDurableResultRevisionId] = useState<string | null>(null)
+  const [openingFollowUp, setOpeningFollowUp] = useState(false)
+  const [followUpOpenFailed, setFollowUpOpenFailed] = useState(false)
   const { photoUri: uri, pendingScanId: scanId } = getSession()
   const resetTransition = useRef<(() => Promise<void>) | null>(null)
   const activeRequest = useRef<AbortController | null>(null)
@@ -72,6 +76,7 @@ export default function Analyze() {
   const runFence = useRef(createRunFence())
   const saveLock = useRef(createAsyncLock<void>())
   const finalization = useRef(createAnalysisFinalization())
+  const restoredResultFinalized = useRef(false)
   const completedReturn = useRef(createCompletedReviewReturn())
   const activeToken = useRef<number | null>(null)
   const pendingSave = useRef<PendingSave | null>(null)
@@ -82,6 +87,10 @@ export default function Analyze() {
   const timelineOffsetY = useRef(0)
   const timelineStepOffsets = useRef(new Map<number, number>())
   const feedbackEvents = useRef(createFeedbackEventGate())
+  if (initialEntry.restoredResult && !restoredResultFinalized.current) {
+    finalization.current.markSuccessfulHandoff()
+    restoredResultFinalized.current = true
+  }
   if (resetTransition.current === null)
     resetTransition.current = createSessionResetTransition(resetSession, () => router.dismissTo('/'))
 
@@ -241,7 +250,19 @@ export default function Analyze() {
     finalization.current.track(task)
   }, [announceForCurrentRun, owns, persistPendingSave, scanId, uri])
 
-  useEffect(() => { run() }, [run])
+  useEffect(() => {
+    if (initialEntry.shouldRun) run()
+  }, [initialEntry.shouldRun, run])
+  useEffect(() => {
+    if (initialEntry.result === null || scanId === null) return
+    let current = true
+    void getLocalScanRepository().get(scanId).then((scan) => {
+      if (!current || !mounted.current || getSession().pendingScanId !== scanId) return
+      setDurableResultRevisionId(scan?.activeRevision?.id ?? null)
+      setFeedbackAccepted(scan?.feedback === 'accepted')
+    })
+    return () => { current = false }
+  }, [initialEntry.result, scanId])
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion)
     const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion)
@@ -309,6 +330,23 @@ export default function Analyze() {
       setResetFailed(true)
     })
   }, [])
+
+  const openFollowUp = useCallback(() => {
+    if (!scanId || openingFollowUp) return
+    setOpeningFollowUp(true)
+    setFollowUpOpenFailed(false)
+    void beginFollowUp(scanId, {
+      isCurrent: () => mounted.current && getSession().pendingScanId === scanId,
+    }).then((committed) => {
+      if (!mounted.current) return
+      if (!committed) throw new Error('follow-up changed')
+      router.push('/followup')
+    }).catch(() => {
+      if (mounted.current) setFollowUpOpenFailed(true)
+    }).finally(() => {
+      if (mounted.current) setOpeningFollowUp(false)
+    })
+  }, [openingFollowUp, scanId])
 
   const acceptDiagnosis = useCallback(() => {
     if (!scanId || feedbackLock.current.busy) return
@@ -652,7 +690,14 @@ export default function Analyze() {
         />
       </View>
       <View style={styles.actions}>
-        {result.followUp && !correct ? <AppButton label="Try a similar problem" onPress={() => router.push('/followup')} /> : null}
+        {result.followUp && !correct ? (
+          <AppButton
+            label="Try a similar problem"
+            disabled={openingFollowUp}
+            onPress={openFollowUp}
+          />
+        ) : null}
+        {followUpOpenFailed ? <Text accessibilityRole="alert" style={styles.resetFailureCopy}>We couldn’t open this practice problem. Try again.</Text> : null}
         {resetFailure}
         <AppButton label="Snap another" onPress={snapAnother} disabled={isResetting} variant="tertiary" />
       </View>
