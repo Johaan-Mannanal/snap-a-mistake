@@ -43,6 +43,7 @@ export interface ScanRepository {
   clearAll(): Promise<string[]>
   getCleanupQueue(): Promise<string[]>
   acknowledgeCleanup(imageUri: string): Promise<void>
+  commitActiveSessionIfCurrent(session: PersistedSession, isCurrent: () => boolean): Promise<boolean>
   getState<T>(key: string, schema: z.ZodType<T>): Promise<T | null>
   setState<T>(key: string, value: T): Promise<void>
   deleteState(key: string): Promise<void>
@@ -79,6 +80,8 @@ type RevisionRow = {
 
 const SCHEMA_VERSION = 2
 const ACTIVE_SESSION_KEY = 'active-session'
+
+class ActiveSessionStaleError extends Error {}
 
 const scanSelect = `
   SELECT id, image_uri, origin, attempt_kind, parent_scan_id, lifecycle,
@@ -485,6 +488,24 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       await db.withExclusiveTransactionAsync((transaction) => transaction.runAsync(
         'DELETE FROM cleanup_queue WHERE image_uri = ?', [imageUri],
       ).then(() => undefined))
+    },
+
+    async commitActiveSessionIfCurrent(session, isCurrent): Promise<boolean> {
+      try {
+        return await db.withExclusiveTransactionAsync(async (transaction) => {
+          if (!isCurrent()) return false
+          await transaction.runAsync(
+            `INSERT INTO app_state (key, value_json) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
+            [ACTIVE_SESSION_KEY, JSON.stringify(session)],
+          )
+          if (!isCurrent()) throw new ActiveSessionStaleError()
+          return true
+        })
+      } catch (error) {
+        if (error instanceof ActiveSessionStaleError) return false
+        throw error
+      }
     },
 
     async getState<T>(key: string, schema: z.ZodType<T>): Promise<T | null> {

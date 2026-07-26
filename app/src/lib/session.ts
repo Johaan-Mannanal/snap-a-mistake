@@ -67,22 +67,6 @@ async function commit(next: Session): Promise<void> {
   session = next
 }
 
-async function commitIfCurrent(next: Session, options: SessionCommitOptions): Promise<boolean> {
-  const isCurrent = options.isCurrent ?? (() => true)
-  if (!isCurrent()) return false
-  const state = persisted(next)
-  if (sessionRepository) {
-    await sessionRepository.setState(ACTIVE_SESSION_KEY, state)
-    if (!isCurrent()) {
-      await sessionRepository.setState(ACTIVE_SESSION_KEY, persisted(session))
-      return false
-    }
-  }
-  if (!isCurrent()) return false
-  session = next
-  return true
-}
-
 export function getSession(): Session {
   return session
 }
@@ -175,10 +159,24 @@ export function adoptReviewSession(): void {
 }
 
 export function startFollowUp(parentScanId: string, followUp: FollowUp, options: SessionCommitOptions = {}): Promise<boolean> {
-  return commitIfCurrent({
+  const next: Session = {
     routeIntent: 'follow-up', pendingScanId: null, photoUri: null, origin: null,
     analysis: null, followUp, parentScanId, isRetry: true, isInterrupted: false,
-  }, options)
+  }
+  const base = persisted(session)
+  const isCurrent = () => (
+    (options.isCurrent?.() ?? true)
+    && JSON.stringify(persisted(session)) === JSON.stringify(base)
+  )
+  if (!isCurrent()) return Promise.resolve(false)
+  if (!sessionRepository) {
+    session = next
+    return Promise.resolve(true)
+  }
+  return sessionRepository.commitActiveSessionIfCurrent(persisted(next), isCurrent).then((committed) => {
+    if (committed) session = next
+    return committed
+  })
 }
 
 export async function resetSession(options: { preserveDraft?: boolean } = {}): Promise<void> {

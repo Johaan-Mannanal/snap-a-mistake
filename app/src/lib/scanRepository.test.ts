@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AnalyzeResponse } from '@snap/shared'
 import { createScanRepository, type DatabasePort } from './scanRepository'
-import type { NewScanDraft, ScanRevision } from './scanTypes'
+import type { NewScanDraft, PersistedSession, ScanRevision } from './scanTypes'
 
 type ScanRow = Record<string, unknown>
 type RevisionRow = Record<string, unknown>
@@ -16,6 +16,9 @@ class MemoryDatabase implements DatabasePort {
   readonly analyses: Array<{ tag: string | null; correct: number; createdAt: string }> = []
   userVersion = 0
   failActiveSessionDeletion = false
+  failActiveSessionWrite = false
+  exclusiveGate: Promise<void> | null = null
+  activeSessionWriteGate: Promise<void> | null = null
 
   async execAsync(sql: string): Promise<void> {
     for (const statement of sql.split(';').map((part) => part.trim()).filter(Boolean)) {
@@ -110,7 +113,12 @@ class MemoryDatabase implements DatabasePort {
     if (normalized.startsWith('delete from app_state')) { this.appState.clear(); return { changes: 1 } }
     if (normalized.startsWith('delete from cleanup_queue where image_uri')) { this.cleanup.delete(String(params[0])); return { changes: 1 } }
     if (normalized.startsWith('delete from cleanup_queue')) { this.cleanup.clear(); return { changes: 1 } }
-    if (normalized.startsWith('insert into app_state')) { this.appState.set(String(params[0]), String(params[1])); return { changes: 1 } }
+    if (normalized.startsWith('insert into app_state')) {
+      if (String(params[0]) === 'active-session' && this.failActiveSessionWrite) throw new Error('state unavailable')
+      if (String(params[0]) === 'active-session' && this.activeSessionWriteGate) await this.activeSessionWriteGate
+      this.appState.set(String(params[0]), String(params[1]))
+      return { changes: 1 }
+    }
     throw new Error(`Unhandled run: ${sql}`)
   }
 
@@ -136,6 +144,7 @@ class MemoryDatabase implements DatabasePort {
   }
 
   async withExclusiveTransactionAsync<T>(task: (transaction: DatabasePort) => Promise<T>): Promise<T> {
+    if (this.exclusiveGate) await this.exclusiveGate
     const scans = new Map([...this.scans].map(([key, value]) => [key, { ...value }]))
     const revisions = new Map([...this.revisions].map(([key, value]) => [key, { ...value }]))
     const appState = new Map(this.appState)
@@ -181,6 +190,15 @@ const diagnosisRevision: ScanRevision = {
   },
   feedback: 'unreviewed',
   createdAt: '2026-07-24T12:01:00.000Z',
+}
+
+function followUpSession(): PersistedSession {
+  return {
+    routeIntent: 'follow-up', pendingScanId: null, photoUri: null, origin: null,
+    analysis: null,
+    followUp: { problem: 'Simplify −(x + 2).', concept: 'sign distribution', hint: 'Distribute the negative to both terms.' },
+    parentScanId: 'parent',
+  }
 }
 
 describe('scan repository migration', () => {
@@ -501,5 +519,60 @@ describe('scan repository records', () => {
     await expect(repository.getCleanupQueue()).resolves.toEqual([
       'file:///documents/scans/failed-before-clear.jpg',
     ])
+  })
+})
+
+describe('conditional active-session commits', () => {
+  it('performs no write when ownership is invalid before the transaction starts', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+
+    await expect(repository.commitActiveSessionIfCurrent(followUpSession(), () => false)).resolves.toBe(false)
+
+    expect(db.appState.has('active-session')).toBe(false)
+  })
+
+  it('performs no write when invalidated while waiting for the exclusive transaction', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    let release!: () => void
+    db.exclusiveGate = new Promise<void>((resolve) => { release = resolve })
+    let current = true
+
+    const pending = repository.commitActiveSessionIfCurrent(followUpSession(), () => current)
+    current = false
+    release()
+
+    await expect(pending).resolves.toBe(false)
+    expect(db.appState.has('active-session')).toBe(false)
+  })
+
+  it('rolls back instead of compensating when invalidated after ownership check but before write completion', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    let release!: () => void
+    db.activeSessionWriteGate = new Promise<void>((resolve) => { release = resolve })
+    let current = true
+
+    const pending = repository.commitActiveSessionIfCurrent(followUpSession(), () => current)
+    current = false
+    release()
+
+    await expect(pending).resolves.toBe(false)
+    expect(db.appState.has('active-session')).toBe(false)
+  })
+
+  it('propagates a database failure without writing a follow-up session', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    db.failActiveSessionWrite = true
+
+    await expect(repository.commitActiveSessionIfCurrent(followUpSession(), () => true)).rejects.toThrow('state unavailable')
+
+    expect(db.appState.has('active-session')).toBe(false)
   })
 })

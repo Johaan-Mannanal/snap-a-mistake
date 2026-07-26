@@ -10,12 +10,14 @@
 - Removed the legacy session wrappers and renamed the unrelated Review state setter so the required `rg` check shows only the persisted `startFollowUp(parentScanId, followUp)` contract.
 - Follow-up photo replacement now uses an explicit review-state transition that retains its existing parent only for a persisted linked review. Ordinary review replacements remain unlinked.
 - Check my work now owns a fence token through session persistence and parent-status persistence. Back waits for an invalidated operation to settle, and stale/unmounted work cannot navigate or mutate the active session/status.
+- Replaced the follow-up session’s write-then-compensate path with a repository-owned conditional SQLite transaction. Ownership is checked synchronously against the operation token and base session before the write, then rechecked to roll back if invalidated during the write.
+- Back is now a single coalesced leave operation with a busy/disabled accessible control; a persistence failure leaves the screen in place and offers a Back retry.
 
 ## Verification
 
-- Focused app tests: 51 tests across follow-up, API, session, and scan repository files.
-- Full app suite: 197 tests passed.
-- Workspace suite: shared 18, server 105 plus 4 Python importer tests, app 197 passed.
+- Focused app tests: 56 tests across follow-up, API, session, and scan repository files.
+- Full app suite: 202 tests passed.
+- Workspace suite: shared 18, server 105 plus 4 Python importer tests, app 202 passed.
 - App and workspace TypeScript typechecks passed.
 - `git diff --check` passed.
 
@@ -25,6 +27,7 @@
 - Parent-status writes are in the same exclusive transaction as child revision writes and skip a no-op replay.
 - Existing analysis/correction ownership fences are preserved; child scan retries continue to use their stable scan ID.
 - Follow-up replacement and check-work race regressions use controlled-await tests at both durable-operation boundaries.
+- Controlled fake-DB tests prove conditional active-session commits do not write before a rejected/queued ownership check, roll back when invalidated mid-write, and surface database failures without compensation writes.
 
 ## Concerns
 

@@ -8,6 +8,7 @@ import {
   buildAlternateFollowUpContext,
   createFollowUpPracticeState,
   createFollowUpCheckFence,
+  createFollowUpLeaveLock,
   revealFollowUpHint,
   replaceFollowUpProblem,
   type FollowUpPracticeState,
@@ -39,9 +40,13 @@ export default function FollowUp() {
   const [alternateFailure, setAlternateFailure] = useState<string | null>(null)
   const [requestingAlternate, setRequestingAlternate] = useState(false)
   const [checkingWork, setCheckingWork] = useState(false)
+  const [checkFailure, setCheckFailure] = useState<string | null>(null)
+  const [isLeaving, setIsLeaving] = useState(false)
+  const [leaveFailure, setLeaveFailure] = useState<string | null>(null)
   const alternateRequest = useRef<AbortController | null>(null)
   const checkLock = useRef(false)
   const checkFence = useRef(createFollowUpCheckFence())
+  const leaveLock = useRef(createFollowUpLeaveLock())
   const mounted = useRef(true)
 
   useEffect(() => {
@@ -53,15 +58,24 @@ export default function FollowUp() {
     }
   }, [])
 
-  const leave = (navigate: () => void) => {
+  const leave = () => {
     alternateRequest.current?.abort()
-    void checkFence.current.invalidate().then(() => {
-      if (mounted.current) navigate()
+    const operation = leaveLock.current.run(async () => {
+      await checkFence.current.invalidate()
+      if (mounted.current) router.back()
     })
-  }
-
-  const back = () => {
-    leave(() => router.back())
+    if (!operation.started) return
+    setIsLeaving(true)
+    setLeaveFailure(null)
+    void operation.promise.then(
+      () => { if (mounted.current) setIsLeaving(false) },
+      () => {
+        if (mounted.current) {
+          setIsLeaving(false)
+          setLeaveFailure('We couldn’t safely leave this practice attempt. Try Back again.')
+        }
+      },
+    )
   }
 
   const requestAnother = () => {
@@ -103,6 +117,7 @@ export default function FollowUp() {
     checkLock.current = true
     alternateRequest.current?.abort()
     setCheckingWork(true)
+    setCheckFailure(null)
     setAlternateFailure(null)
     const run = checkFence.current.begin()
     const owns = () => mounted.current && checkFence.current.owns(run)
@@ -114,9 +129,10 @@ export default function FollowUp() {
         await getLocalScanRepository().setFollowUpStatus(parentScanId, 'in-progress', owns)
         if (!owns()) return
         router.dismissTo('/')
-      } catch {
-        if (!owns()) return
-        setAlternateFailure('We couldn’t prepare your follow-up attempt. Your problem is still here; try again.')
+      } catch (error) {
+        if (!owns() && error instanceof Error && error.message === 'follow-up status is no longer current') return
+        if (owns()) setCheckFailure('We couldn’t prepare your follow-up attempt. Your problem is still here; try again.')
+        throw error
       } finally {
         if (checkFence.current.owns(run)) {
           checkLock.current = false
@@ -143,9 +159,22 @@ export default function FollowUp() {
   return (
     <AppScreen contentStyle={styles.content}>
       <View style={styles.top}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={styles.back}>
-          <Text style={styles.backLabel}>‹ Back</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={isLeaving ? 'Leaving practice' : 'Back'}
+          accessibilityState={{ disabled: isLeaving, busy: isLeaving }}
+          disabled={isLeaving}
+          onPress={leave}
+          style={[styles.back, isLeaving && styles.disabled]}
+        >
+          <Text style={styles.backLabel}>{isLeaving ? 'Leaving…' : '‹ Back'}</Text>
         </Pressable>
+        {leaveFailure ? (
+          <View style={styles.failure}>
+            <Text accessibilityRole="alert" style={styles.failureCopy}>{leaveFailure}</Text>
+            <AppButton label="Try Back again" onPress={leave} disabled={isLeaving} variant="tertiary" />
+          </View>
+        ) : null}
         <View style={styles.copy}>
           <Text style={styles.eyebrow}>{practice.followUp.concept.toUpperCase()}</Text>
           <Text style={styles.problem}>{practice.followUp.problem}</Text>
@@ -162,6 +191,12 @@ export default function FollowUp() {
             {!checkingWork ? <AppButton label="Retry another problem" onPress={requestAnother} disabled={requestingAlternate} variant="tertiary" /> : null}
           </View>
         ) : null}
+        {checkFailure ? (
+          <View style={styles.failure}>
+            <Text accessibilityRole="alert" style={styles.failureCopy}>{checkFailure}</Text>
+            <AppButton label="Try checking my work again" onPress={checkWork} disabled={checkingWork} variant="tertiary" />
+          </View>
+        ) : null}
         <AppButton label={checkingWork ? 'Preparing camera…' : 'Check my work'} onPress={checkWork} disabled={checkingWork} />
       </View>
     </AppScreen>
@@ -174,6 +209,7 @@ const styles = StyleSheet.create({
   top: { gap: spacing.lg },
   back: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', paddingRight: spacing.md },
   backLabel: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '700' },
+  disabled: { opacity: 0.48 },
   copy: { gap: spacing.md },
   eyebrow: { color: colors.muted, fontSize: typeScale.caption, fontWeight: '700', letterSpacing: 1.6 },
   title: { color: colors.chalk, fontSize: typeScale.display, fontWeight: '700', letterSpacing: -0.8, lineHeight: 38 },

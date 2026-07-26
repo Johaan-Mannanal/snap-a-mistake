@@ -4,6 +4,7 @@ import {
   buildAlternateFollowUpContext,
   createFollowUpPracticeState,
   createFollowUpCheckFence,
+  createFollowUpLeaveLock,
   revealFollowUpHint,
   replaceFollowUpProblem,
 } from './followUp'
@@ -97,5 +98,38 @@ describe('follow-up check fence', () => {
     await leaving
 
     expect(effects).toEqual(['persist-session'])
+  })
+})
+
+describe('follow-up leave lock', () => {
+  it('coalesces repeated Back taps into one owned leave operation', async () => {
+    const lock = createFollowUpLeaveLock()
+    let release!: () => void
+    const pending = new Promise<void>((resolve) => { release = resolve })
+    let calls = 0
+
+    const first = lock.run(async () => { calls += 1; await pending })
+    const second = lock.run(async () => { calls += 1 })
+    const third = lock.run(async () => { calls += 1 })
+
+    expect(first.started).toBe(true)
+    expect(second.started).toBe(false)
+    expect(third.started).toBe(false)
+    expect(lock.busy).toBe(true)
+    release()
+    await Promise.all([first.promise, second.promise, third.promise])
+    expect(calls).toBe(1)
+    expect(lock.busy).toBe(false)
+  })
+
+  it('clears after a leave failure so retry owns a new operation', async () => {
+    const lock = createFollowUpLeaveLock()
+    const failed = lock.run(async () => { throw new Error('state unavailable') })
+
+    await expect(failed.promise).rejects.toThrow('state unavailable')
+    const retry = lock.run(async () => {})
+
+    expect(retry.started).toBe(true)
+    await expect(retry.promise).resolves.toBeUndefined()
   })
 })

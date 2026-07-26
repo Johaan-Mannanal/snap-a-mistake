@@ -17,6 +17,26 @@ export type FollowUpCheckFence = {
   invalidate(): Promise<void>
 }
 
+export type FollowUpLeaveLock = {
+  readonly busy: boolean
+  run(task: () => Promise<void>): { started: boolean; promise: Promise<void> }
+}
+
+export function createFollowUpLeaveLock(): FollowUpLeaveLock {
+  let active: Promise<void> | null = null
+  return {
+    get busy() { return active !== null },
+    run(task) {
+      if (active) return { started: false, promise: active }
+      const current = task().finally(() => {
+        if (active === current) active = null
+      })
+      active = current
+      return { started: true, promise: current }
+    },
+  }
+}
+
 export function createFollowUpCheckFence(): FollowUpCheckFence {
   let generation = 0
   let activeRun: FollowUpCheckRun | null = null
@@ -33,9 +53,11 @@ export function createFollowUpCheckFence(): FollowUpCheckFence {
       return activeRun === run && generation === run.token
     },
     track(run, task) {
-      const settled = task.catch(() => {}).finally(() => {
+      const settled = task.finally(() => {
         if (activeRun === run) activeRun = null
+        if (pending === settled) pending = Promise.resolve()
       })
+      void settled.catch(() => {})
       pending = settled
     },
     async invalidate() {
