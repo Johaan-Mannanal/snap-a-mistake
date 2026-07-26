@@ -1,5 +1,6 @@
 import type { AnalyzeResponse, CorrectionContext, FollowUp } from '@snap/shared'
 import type { BuildAppDeps } from '../src/app.js'
+import { ModelJsonError } from '../src/llm/client.js'
 
 export const MOCK_MODES = [
   'correct',
@@ -92,26 +93,40 @@ const analysisFixtures: Record<AnalysisMode, AnalyzeResponse> = {
 const correctedDiagnosis: Omit<AnalyzeResponse & { kind: 'analysis' }, 'steps'> = {
   kind: 'analysis',
   errorStepIndex: 1,
-  misconceptionTag: 'algebraic-slip',
-  explanation: 'You combined unlike terms as though they were the same quantity.',
+  misconceptionTag: 'integration-by-parts-error',
+  explanation: 'At this step, integration by parts leaves ∫eˣ dx, not an integral with x still inside it. That extra x changes the product and makes the later cancellation invalid.',
   followUp: {
-    problem: 'Simplify 2x + 3 + 4x.',
-    concept: 'like terms',
-    hint: 'Combine only matching variable terms.',
+    problem: 'Evaluate ∫ 2x eˣ dx with u = 2x, dv = eˣ dx.',
+    concept: 'integration by parts',
+    hint: 'Differentiate u, then integrate dv before multiplying.',
   },
   verifierAgreed: true,
 }
 
-const alternateFollowUp: FollowUp = {
-  problem: 'Evaluate ∫ 2x eˣ dx with u = 2x, dv = eˣ dx.',
-  concept: 'integration by parts',
-  hint: 'Differentiate u once, then integrate dv.',
+const integrationByPartsAlternates: FollowUp[] = [
+  { problem: 'Evaluate ∫ 2x eˣ dx with u = 2x, dv = eˣ dx.', concept: 'integration by parts', hint: 'Differentiate u once, then integrate dv.' },
+  { problem: 'Evaluate ∫ x² eˣ dx with u = x², dv = eˣ dx.', concept: 'integration by parts', hint: 'Write du before expanding the remaining integral.' },
+  { problem: 'Evaluate ∫ 3x eˣ dx with u = 3x, dv = eˣ dx.', concept: 'integration by parts', hint: 'Keep the constant attached to u when finding du.' },
+  { problem: 'Evaluate ∫ x e²ˣ dx with u = x, dv = e²ˣ dx.', concept: 'integration by parts', hint: 'Integrate e²ˣ before substituting into the formula.' },
+  { problem: 'Evaluate ∫ 4x eˣ dx with u = 4x, dv = eˣ dx.', concept: 'integration by parts', hint: 'Use ∫u dv = uv − ∫v du.' },
+]
+
+function normalizeProblem(problem: string): string {
+  return problem.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
 }
 
-const regularFollowUp: FollowUp = {
-  problem: 'Simplify 3x + 5x.',
-  concept: 'like terms',
-  hint: 'Combine the coefficients of matching variable terms.',
+function alternateFollowUp(context: { concept: string; previousProblems: string[] }): FollowUp {
+  const pool = context.concept === 'integration by parts'
+    ? integrationByPartsAlternates
+    : [{
+        problem: `Practice another ${context.concept} problem.`,
+        concept: context.concept,
+        hint: `Start with the rule for ${context.concept}.`,
+      }]
+  const previous = new Set(context.previousProblems.map(normalizeProblem))
+  const next = pool.find((followUp) => !previous.has(normalizeProblem(followUp.problem)))
+  if (!next) throw new ModelJsonError('no distinct deterministic follow-up remains')
+  return next
 }
 
 function pause(delayMs: number): Promise<void> {
@@ -153,8 +168,6 @@ export function createMockDeps(
       })),
       errorStepIndex: context.selectedStepIndex,
     }),
-    generateFollowUp: async (context) => mode === 'alternate-follow-up'
-      ? { ...alternateFollowUp, concept: context.concept }
-      : { ...regularFollowUp, concept: context.concept },
+    generateFollowUp: async (context) => alternateFollowUp(context),
   }
 }

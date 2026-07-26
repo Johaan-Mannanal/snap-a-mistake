@@ -22,12 +22,12 @@ Patterns and Previous scans are stored locally on the device. The app retains it
 4. An independent verifier can soften a disputed diagnosis into a suspect state.
 5. Shared Zod schemas validate the response before the app renders Unicode math such as ∫, √, ×, −, eˣ, and x². Student-facing text does not expose raw LaTeX.
 
-The server is stateless: it has no account system, database, or history store. A submitted photo and the request context are sent to the configured external AI service for the requested analysis, correction, or follow-up. The server does not retain those inputs or outputs after responding. Provider retention is governed by the provider’s applicable terms.
+The server is stateless: it has no account system, database, or history store. Analysis sends the submitted photo to the configured external AI service. Correction sends the photo plus selected existing-analysis context. Follow-up generation sends only diagnosis, concept, and problem-history text—never a photo. The server does not retain those inputs or outputs after responding. Provider retention is governed by the provider’s applicable terms.
 
 ## Technical evidence
 
 - TypeScript npm-workspace monorepo: Expo/React Native app, Fastify API, Zod shared contracts, and device-local SQLite.
-- 391 automated tests passed on this branch on July 25, 2026: 18 shared Vitest, 109 server Vitest, 4 stock-Python importer, and 260 app Vitest tests.
+- 393 automated tests passed on this branch on July 25, 2026: 18 shared Vitest, 111 server Vitest, 4 stock-Python importer, and 260 app Vitest tests.
 - All three workspaces typechecked and Expo lint completed with zero warnings and zero errors on that same run.
 - The repository includes an inspectable 25-case golden manifest: 15 synthetic cases and 10 licensed FERMAT handwriting photographs.
 - The paid live-model golden command remains deliberately separate: it requires an API key and makes external requests. No current paid-pass rate is claimed without a recorded run artifact.

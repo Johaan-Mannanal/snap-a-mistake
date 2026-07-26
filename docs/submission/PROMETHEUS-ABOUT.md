@@ -34,7 +34,7 @@ Model reliability also required more than prompt tuning. Responses can be malfor
 
 The biggest thing I learned is that building a useful AI product is not the same as making one impressive model call. Reliability comes from the system around the model: clear interfaces, validation, disagreement handling, good fallback states, and tests that represent real inputs.
 
-I created a 25-case validation set with 15 synthetic cases and 10 licensed FERMAT handwriting images, and the repository now has 391 passing automated tests across the app, server, shared schemas, and dataset importer. That process taught me to treat model behavior as something that needs evaluation, not something I should assume will stay consistent.
+I created a 25-case validation set with 15 synthetic cases and 10 licensed FERMAT handwriting images, and the repository now has 393 passing automated tests across the app, server, shared schemas, and dataset importer. That process taught me to treat model behavior as something that needs evaluation, not something I should assume will stay consistent.
 
 I also learned that educational feedback needs restraint. When the verifier is uncertain, admitting that uncertainty is better than giving a confident but incorrect diagnosis.
 
