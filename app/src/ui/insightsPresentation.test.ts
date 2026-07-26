@@ -106,6 +106,42 @@ describe('insights presentation', () => {
     })
   })
 
+  const statusCases: Array<[Partial<ScanRecord>, string]> = [
+    [{ lifecycle: 'review', feedback: 'excluded', activeRevision: null, revisions: [], followUp: null, followUpStatus: 'none' }, 'Diagnosis excluded'],
+    [{ feedback: 'rejected' }, 'Diagnosis rejected'],
+    [{ feedback: 'corrected' }, 'Saved · corrected'],
+    [{ feedback: 'accepted' }, 'Saved · confirmed'],
+    [{ feedback: 'unreviewed' }, 'Saved'],
+    [{ lifecycle: 'unsaved' }, 'Not saved'],
+    [{ lifecycle: 'interrupted' }, 'Analysis interrupted'],
+    [{ lifecycle: 'review', activeRevision: null, revisions: [], followUp: null, followUpStatus: 'none' }, 'Ready to analyze'],
+    [{ lifecycle: 'analyzing' }, 'Analysis in progress'],
+  ]
+
+  it.each(statusCases)('gives %o an honest history status of %s', (overrides, expectedStatus) => {
+    const presentation = insightsPresentation({ kind: 'ready', patterns: [], scans: [scan(overrides)] })
+
+    if (presentation.kind !== 'ready' || presentation.scans.kind !== 'list') throw new Error('expected scan list')
+    const item = presentation.scans.items[0]
+    if (!item) throw new Error('expected scan item')
+    expect(item.statusLabel).toBe(expectedStatus)
+  })
+
+  const recoveryCases: Array<[ScanRevision['response'], string]> = [
+    [{ kind: 'not-math' }, 'Not math'],
+    [{ kind: 'unreadable', tips: ['Use more light.'] }, 'Photo unreadable'],
+  ]
+
+  it.each(recoveryCases)('keeps a completed %s result recognizable in history', (response, expectedStatus) => {
+    const activeRevision: ScanRevision = { id: 'recovery', reason: 'initial', response, feedback: 'unreviewed', createdAt }
+    const presentation = insightsPresentation({ kind: 'ready', patterns: [], scans: [scan({ activeRevision, revisions: [activeRevision], followUp: null, followUpStatus: 'none' })] })
+
+    if (presentation.kind !== 'ready' || presentation.scans.kind !== 'list') throw new Error('expected scan list')
+    const item = presentation.scans.items[0]
+    if (!item) throw new Error('expected scan item')
+    expect(item.statusLabel).toBe(expectedStatus)
+  })
+
   it('orders previous scans newest first with IDs breaking equal timestamps', () => {
     const older = scan({ id: 'a', createdAt: '2026-07-19T09:30:00.000Z' })
     const newer = scan({ id: 'b', createdAt: '2026-07-20T09:30:00.000Z' })

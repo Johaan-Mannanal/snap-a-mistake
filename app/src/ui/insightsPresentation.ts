@@ -45,15 +45,20 @@ function resolutionLabel(resolvedFollowUps: number): string | null {
 }
 
 function statusLabel(scan: ScanRecord): string {
-  if (scan.lifecycle === 'complete') {
-    if (scan.feedback === 'corrected') return 'Saved · corrected'
-    if (scan.feedback === 'accepted') return 'Saved · confirmed'
-    return 'Saved'
-  }
+  if (scan.feedback === 'excluded') return 'Diagnosis excluded'
+  if (scan.feedback === 'rejected') return 'Diagnosis rejected'
+
+  const response = scan.activeRevision?.response
+  if (response?.kind === 'not-math') return 'Not math'
+  if (response?.kind === 'unreadable') return 'Photo unreadable'
+
+  if (scan.lifecycle === 'unsaved') return 'Not saved'
+  if (scan.lifecycle === 'interrupted') return 'Analysis interrupted'
   if (scan.lifecycle === 'review') return 'Ready to analyze'
   if (scan.lifecycle === 'analyzing') return 'Analysis in progress'
-  if (scan.lifecycle === 'interrupted') return 'Analysis interrupted'
-  return 'Not saved'
+  if (scan.feedback === 'corrected') return 'Saved · corrected'
+  if (scan.feedback === 'accepted') return 'Saved · confirmed'
+  return 'Saved'
 }
 
 function analysisTagLabel(scan: ScanRecord): string {
