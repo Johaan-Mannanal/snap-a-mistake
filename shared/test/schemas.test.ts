@@ -158,19 +158,82 @@ describe('AnalyzeResponseSchema', () => {
     })).toThrow('error step must exist')
   })
 
-  it('accepts unique non-sequential indexes and all-correct results', () => {
-    const result = AnalysisResultSchema.parse({
+  it.each([
+    ['wrong verdict for correct work', null, true, ['ok', 'wrong', 'ok']],
+    ['suspect verdict for correct work', null, true, ['ok', 'suspect', 'ok']],
+    ['downstream verdict for correct work', null, true, ['ok', 'downstream', 'ok']],
+    ['wrong verdict before the diagnosis', 5, true, ['wrong', 'wrong', 'downstream']],
+    ['suspect verdict before the diagnosis', 5, true, ['suspect', 'wrong', 'downstream']],
+    ['downstream verdict before the diagnosis', 5, true, ['downstream', 'wrong', 'downstream']],
+    ['ok verdict at an agreed diagnosis', 5, true, ['ok', 'ok', 'downstream']],
+    ['suspect verdict at an agreed diagnosis', 5, true, ['ok', 'suspect', 'downstream']],
+    ['wrong verdict at a disputed diagnosis', 5, false, ['ok', 'wrong', 'downstream']],
+    ['ok verdict after the diagnosis', 5, true, ['ok', 'wrong', 'ok']],
+    ['wrong verdict after the diagnosis', 5, true, ['ok', 'wrong', 'wrong']],
+    ['suspect verdict after the diagnosis', 5, true, ['ok', 'wrong', 'suspect']],
+  ] as const)('rejects a contradictory analysis with %s', (
+    _case,
+    errorStepIndex,
+    verifierAgreed,
+    verdicts,
+  ) => {
+    const hasDiagnosis = errorStepIndex !== null
+    expect(() => AnalysisResultSchema.parse({
       kind: 'analysis',
-      steps: [{ ...step(2), verdict: 'ok' }, { ...step(5), verdict: 'ok' }, { ...step(9), verdict: 'wrong' }],
-      errorStepIndex: 9,
+      steps: [
+        { ...step(2), verdict: verdicts[0] },
+        { ...step(5), verdict: verdicts[1] },
+        { ...step(9), verdict: verdicts[2] },
+      ],
+      errorStepIndex,
+      misconceptionTag: hasDiagnosis ? 'sign-error' : null,
+      explanation: hasDiagnosis ? 'The sign changed.' : null,
+      followUp: hasDiagnosis
+        ? { problem: 'Simplify −2x + x.', concept: 'signs', hint: 'Keep the negative sign.' }
+        : null,
+      verifierAgreed,
+    })).toThrow('verdicts must match the diagnosis')
+  })
+
+  it('accepts agreed and disputed diagnoses by array order with sparse indexes and Unicode math', () => {
+    const agreed = AnalysisResultSchema.parse({
+      kind: 'analysis',
+      steps: [
+        { ...step(41), latex: 'x² − 1', plain: 'x² minus 1', verdict: 'ok' },
+        { ...step(7), latex: 'x² = −1', plain: 'x² equals −1', verdict: 'wrong' },
+        { ...step(103), latex: 'x = √−1', plain: 'x equals √−1', verdict: 'downstream' },
+      ],
+      errorStepIndex: 7,
       misconceptionTag: 'sign-error',
-      explanation: 'The sign changed.',
-      followUp: { problem: 'Simplify −2x + x.', concept: 'signs', hint: 'Keep the negative sign.' },
+      explanation: 'The sign changed before taking √.',
+      followUp: { problem: 'Simplify x² − 4.', concept: 'signs', hint: 'Keep −4 on the same side.' },
       verifierAgreed: true,
     })
+    const disputed = AnalysisResultSchema.parse({
+      kind: 'analysis',
+      steps: [
+        { ...step(41), latex: '∫ x dx', plain: 'integral of x', verdict: 'ok' },
+        { ...step(7), latex: '= x² ÷ 2', plain: 'equals x² ÷ 2', verdict: 'suspect' },
+        { ...step(103), latex: '= 2x', plain: 'equals 2x', verdict: 'downstream' },
+      ],
+      errorStepIndex: 7,
+      misconceptionTag: 'other',
+      explanation: 'This transition may need another check.',
+      followUp: { problem: 'Evaluate ∫ 2x dx.', concept: 'integration', hint: 'Increase the exponent by one.' },
+      verifierAgreed: false,
+    })
+
+    expect(agreed.steps.map(({ verdict }) => verdict)).toEqual(['ok', 'wrong', 'downstream'])
+    expect(disputed.steps.map(({ verdict }) => verdict)).toEqual(['ok', 'suspect', 'downstream'])
+  })
+
+  it('accepts all-correct work with sparse indexes and Unicode math', () => {
     const correct = AnalysisResultSchema.parse({
       kind: 'analysis',
-      steps: [{ ...step(2), verdict: 'ok' }, { ...step(9), verdict: 'ok' }],
+      steps: [
+        { ...step(41), latex: '∫ x dx', plain: 'integral of x', verdict: 'ok' },
+        { ...step(7), latex: '= x² ÷ 2 + C', plain: 'equals x² ÷ 2 plus C', verdict: 'ok' },
+      ],
       errorStepIndex: null,
       misconceptionTag: null,
       explanation: null,
@@ -178,7 +241,6 @@ describe('AnalyzeResponseSchema', () => {
       verifierAgreed: true,
     })
 
-    expect(result.errorStepIndex).toBe(9)
     expect(correct.errorStepIndex).toBeNull()
   })
 })

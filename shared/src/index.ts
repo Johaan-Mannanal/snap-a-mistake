@@ -110,13 +110,32 @@ export const AnalysisResultSchema = DiagnosisFieldsSchema.extend({
 }).superRefine((value, ctx) => {
   validateAnalysisConsistency(value, ctx)
   validateUniqueStepIndexes(value, ctx)
-  if (value.errorStepIndex !== null && !value.steps.some((step) => step.index === value.errorStepIndex)) {
+  const errorPosition = value.errorStepIndex === null
+    ? null
+    : value.steps.findIndex((step) => step.index === value.errorStepIndex)
+  if (errorPosition === -1) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['errorStepIndex'],
       message: 'error step must exist in steps',
     })
+    return
   }
+  value.steps.forEach((step, position) => {
+    const expectedVerdict = errorPosition === null
+      ? 'ok'
+      : position < errorPosition
+        ? 'ok'
+        : position === errorPosition
+          ? value.verifierAgreed ? 'wrong' : 'suspect'
+          : 'downstream'
+    if (step.verdict !== expectedVerdict)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['steps', position, 'verdict'],
+        message: 'step verdicts must match the diagnosis and verifier agreement',
+      })
+  })
 })
 export type AnalysisResult = z.infer<typeof AnalysisResultSchema>
 

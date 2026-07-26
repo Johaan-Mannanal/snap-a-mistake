@@ -1,6 +1,7 @@
 import type { AnalyzeResponse, CorrectionContext, FollowUp } from '@snap/shared'
 import type { BuildAppDeps } from '../src/app.js'
 import { ModelJsonError } from '../src/llm/client.js'
+import { withVerdicts } from '../src/pipeline/run.js'
 
 export const MOCK_MODES = [
   'correct',
@@ -160,12 +161,7 @@ export function createMockDeps(
     },
     runCorrection: async (_image, context: CorrectionContext) => ({
       ...correctedDiagnosis,
-      steps: context.analysis.steps.map((step) => ({
-        ...step,
-        verdict: step.index < context.selectedStepIndex
-          ? 'ok'
-          : step.index === context.selectedStepIndex ? 'wrong' : 'downstream',
-      })),
+      steps: withVerdicts(context.analysis.steps, context.selectedStepIndex, true),
       errorStepIndex: context.selectedStepIndex,
     }),
     generateFollowUp: async (context) => alternateFollowUp(context),

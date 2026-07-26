@@ -25,8 +25,17 @@ const correctionContext: CorrectionContext = {
 }
 
 function correctedResponse(context: CorrectionContext): AnalyzeResponse {
+  const selectedPosition = context.analysis.steps.findIndex(
+    (step) => step.index === context.selectedStepIndex,
+  )
   return {
     ...context.analysis,
+    steps: context.analysis.steps.map((step, position) => ({
+      ...step,
+      verdict: position < selectedPosition
+        ? 'ok'
+        : position === selectedPosition ? 'wrong' : 'downstream',
+    })),
     errorStepIndex: context.selectedStepIndex,
     misconceptionTag: 'algebraic-slip',
     explanation: 'You combined unlike terms as if they were the same quantity.',

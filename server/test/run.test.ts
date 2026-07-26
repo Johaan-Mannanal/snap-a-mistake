@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Stage1Result, Stage2Result, VerifierResult } from '@snap/shared'
+import { AnalysisResultSchema, type Stage1Result, type Stage2Result, type VerifierResult } from '@snap/shared'
 import type OpenAI from 'openai'
 import { ModelJsonError } from '../src/llm/client.js'
 import { makeRunAnalysis, type StageTiming } from '../src/pipeline/run.js'
@@ -55,6 +55,16 @@ describe('runAnalysis', () => {
     if (r.kind !== 'analysis') throw new Error('expected analysis')
     expect(r.steps.map((s) => s.verdict)).toEqual(['ok', 'wrong', 'downstream'])
     expect(r.misconceptionTag).toBe('sign-error')
+  })
+  it('derives verdict progression by array order for sparse step indexes', async () => {
+    const r = await run({
+      s1: s1({ steps: [step(5), step(2), step(9)] }),
+      s2: { ...errorDiag, errorStepIndex: 2 },
+      v: { agrees: true, note: '' },
+    })
+    if (r.kind !== 'analysis') throw new Error('expected analysis')
+    expect(r.steps.map((s) => s.verdict)).toEqual(['ok', 'wrong', 'downstream'])
+    expect(AnalysisResultSchema.safeParse(r).success).toBe(true)
   })
   it('softens to suspect when verifier disagrees', async () => {
     const r = await run({ s2: errorDiag, v: { agrees: false, note: 'looks fine' } })

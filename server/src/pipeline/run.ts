@@ -42,12 +42,15 @@ async function timeStage<T>(
 }
 
 export function withVerdicts(steps: TranscribedStep[], errorIndex: number | null, verifierAgreed: boolean): Step[] {
-  return steps.map((s) => ({
+  const errorPosition = errorIndex === null
+    ? null
+    : steps.findIndex((step) => step.index === errorIndex)
+  return steps.map((s, position) => ({
     ...s,
     verdict:
-      errorIndex === null ? 'ok'
-      : s.index < errorIndex ? 'ok'
-      : s.index === errorIndex ? (verifierAgreed ? 'wrong' : 'suspect')
+      errorPosition === null ? 'ok'
+      : position < errorPosition ? 'ok'
+      : position === errorPosition ? (verifierAgreed ? 'wrong' : 'suspect')
       : 'downstream',
   }))
 }

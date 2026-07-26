@@ -10,7 +10,16 @@ function response(tag: MisconceptionTag | null): AnalyzeResponse {
   return tag === null
     ? { kind: 'analysis', steps: [], errorStepIndex: null, misconceptionTag: null, explanation: null, followUp: null, verifierAgreed: true }
     : {
-        kind: 'analysis', steps: [], errorStepIndex: 0, misconceptionTag: tag,
+        kind: 'analysis',
+        steps: [{
+          index: 0,
+          latex: 'incorrect transition',
+          plain: 'first incorrect step',
+          yBandTopPct: 10,
+          yBandBottomPct: 20,
+          verdict: 'wrong',
+        }],
+        errorStepIndex: 0, misconceptionTag: tag,
         explanation: 'The first incorrect step needs attention.',
         followUp: { problem: 'Try a similar problem.', concept: 'the same concept', hint: 'Check the first step.' },
         verifierAgreed: true,

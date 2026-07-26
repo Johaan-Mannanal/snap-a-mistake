@@ -67,7 +67,12 @@ describe('analysisPresentation', () => {
 
   it('localizes an agreed error', () => {
     const response: AnalysisResponse = {
-      ...base, errorStepIndex: 1, misconceptionTag: 'integration-by-parts-error', explanation: 'Extra x.',
+      ...base,
+      steps: [
+        { index: 0, latex: '∫x eˣ dx', plain: 'integral of x times eˣ', yBandTopPct: 10, yBandBottomPct: 20, verdict: 'ok' },
+        { index: 1, latex: '= xeˣ − ∫xeˣ dx', plain: 'equals x eˣ minus integral of x eˣ', yBandTopPct: 20, yBandBottomPct: 30, verdict: 'wrong' },
+      ],
+      errorStepIndex: 1, misconceptionTag: 'integration-by-parts-error', explanation: 'Extra x.',
       followUp: { problem: 'Try again.', concept: 'integration by parts', hint: 'Choose u first.' },
     }
     expect(analysisPresentation(response)).toEqual({
@@ -77,7 +82,12 @@ describe('analysisPresentation', () => {
 
   it('softens verifier disagreement', () => {
     const response: AnalysisResponse = {
-      ...base, verifierAgreed: false, errorStepIndex: 2, misconceptionTag: 'other', explanation: 'Check this transition.',
+      ...base,
+      steps: [
+        { index: 0, latex: 'x + 1', plain: 'x plus 1', yBandTopPct: 10, yBandBottomPct: 20, verdict: 'ok' },
+        { index: 2, latex: 'x − 1', plain: 'x minus 1', yBandTopPct: 20, yBandBottomPct: 30, verdict: 'suspect' },
+      ],
+      verifierAgreed: false, errorStepIndex: 2, misconceptionTag: 'other', explanation: 'Check this transition.',
       followUp: { problem: 'Try again.', concept: 'review', hint: 'Check each step.' },
     }
     expect(analysisPresentation(response)).toMatchObject({ tone: 'neutral', headline: 'Step three needs a second look.' })

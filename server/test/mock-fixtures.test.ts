@@ -53,6 +53,30 @@ describe('deterministic mock fixtures', () => {
     expect(correction.steps[1]?.verdict).toBe('wrong')
   })
 
+  it('maps correction verdicts by array order for sparse step indexes', async () => {
+    const correctionDeps = createMockDeps('correction')
+    const source = getMockAnalysisResponse('correction')
+    if (source?.kind !== 'analysis') throw new Error('expected correction analysis fixture')
+    const analysis = {
+      ...source,
+      steps: source.steps.slice(0, 3).map((step, position) => ({
+        ...step,
+        index: [5, 2, 9][position]!,
+        verdict: position === 0 ? 'ok' as const : position === 1 ? 'wrong' as const : 'downstream' as const,
+      })),
+      errorStepIndex: 2,
+    }
+
+    const correction = await correctionDeps.runCorrection(
+      { base64: 'image', mediaType: 'image/jpeg' },
+      { analysis, selectedStepIndex: 2 },
+    )
+
+    if (correction.kind !== 'analysis') throw new Error('expected corrected analysis')
+    expect(correction.steps.map((step) => step.verdict)).toEqual(['ok', 'wrong', 'downstream'])
+    expect(AnalyzeResponseSchema.safeParse(correction).success).toBe(true)
+  })
+
   it('cycles through distinct Unicode-safe alternates that the follow-up loop can accept', async () => {
     const alternateDeps = createMockDeps('alternate-follow-up')
     const original = 'Evaluate ∫ x eˣ dx with u = x and dv = eˣ dx.'

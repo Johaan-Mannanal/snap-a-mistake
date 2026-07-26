@@ -10,7 +10,14 @@ function scan(overrides: Partial<ScanRecord> = {}): ScanRecord {
     reason: 'initial',
     response: {
       kind: 'analysis',
-      steps: [],
+      steps: [{
+        index: 0,
+        latex: '−(x + 2) = −x + 2',
+        plain: 'negative x plus 2',
+        yBandTopPct: 10,
+        yBandBottomPct: 20,
+        verdict: 'wrong',
+      }],
       errorStepIndex: 0,
       misconceptionTag: 'sign-error',
       explanation: 'The sign changes here.',

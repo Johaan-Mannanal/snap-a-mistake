@@ -29,7 +29,14 @@ describe('diagnosis feedback', () => {
 
   it('is available only for an active error diagnosis and describes every OCR step readably', () => {
     expect(canRequestDiagnosisFeedback(diagnosis)).toBe(true)
-    expect(canRequestDiagnosisFeedback({ ...diagnosis, errorStepIndex: null, misconceptionTag: null, explanation: null, followUp: null })).toBe(false)
+    expect(canRequestDiagnosisFeedback({
+      ...diagnosis,
+      steps: diagnosis.steps.map((step) => ({ ...step, verdict: 'ok' })),
+      errorStepIndex: null,
+      misconceptionTag: null,
+      explanation: null,
+      followUp: null,
+    })).toBe(false)
     expect(correctionStepOptions(diagnosis)).toEqual([
       { index: 0, label: 'Step 1: x plus 1' },
       { index: 3, label: 'Step 4: x minus 1' },

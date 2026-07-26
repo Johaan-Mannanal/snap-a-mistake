@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CorrectionContext } from '@snap/shared'
+import { AnalysisResultSchema, type CorrectionContext } from '@snap/shared'
 import type OpenAI from 'openai'
 import type { Config } from '../src/config.js'
 import { ModelJsonError } from '../src/llm/client.js'
@@ -17,7 +17,7 @@ const analysis = {
   steps: [0, 1, 2, 3].map((index) => ({
     index, latex: `L${index}`, plain: `P${index}`,
     yBandTopPct: index * 10, yBandBottomPct: index * 10 + 9,
-    verdict: index === 1 ? 'wrong' as const : 'ok' as const,
+    verdict: index < 1 ? 'ok' as const : index === 1 ? 'wrong' as const : 'downstream' as const,
   })),
   errorStepIndex: 1,
   misconceptionTag: 'sign-error' as const,
@@ -47,6 +47,7 @@ describe('runCorrection', () => {
     if (result.kind !== 'analysis') throw new Error('expected analysis')
     expect(result.errorStepIndex).toBe(2)
     expect(result.steps.map((step) => step.verdict)).toEqual(['ok', 'ok', 'wrong', 'downstream'])
+    expect(AnalysisResultSchema.safeParse(result).success).toBe(true)
   })
 
   it('marks the selected step suspect when the verifier disagrees', async () => {
@@ -56,6 +57,7 @@ describe('runCorrection', () => {
     if (result.kind !== 'analysis') throw new Error('expected analysis')
     expect(result.steps.map((step) => step.verdict)).toEqual(['ok', 'ok', 'suspect', 'downstream'])
     expect(result.verifierAgreed).toBe(false)
+    expect(AnalysisResultSchema.safeParse(result).success).toBe(true)
   })
 
   it('rejects a selected step that is absent from the supplied analysis', async () => {
