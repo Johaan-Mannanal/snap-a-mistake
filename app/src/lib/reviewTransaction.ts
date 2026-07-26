@@ -1,5 +1,9 @@
 import type { NewScanDraft } from './scanTypes'
 import type { ReviewedPhoto } from './session'
+import {
+  photoOwnershipCoordinator,
+  type PhotoOwnershipCoordinator,
+} from './photoOwnership'
 
 export type ReviewTransaction = {
   scanId: string
@@ -16,6 +20,7 @@ export type ReviewTransactionDependencies = {
   createDraft(input: NewScanDraft): Promise<unknown>
   persistReviewedPhoto(input: ReviewedPhoto): Promise<void>
   acknowledgeDisclosure(): Promise<void>
+  photoOwnership?: PhotoOwnershipCoordinator
   isCurrent?(): boolean
 }
 
@@ -76,23 +81,35 @@ export async function advanceReviewTransaction(
   dependencies: ReviewTransactionDependencies,
 ): Promise<ReviewTransaction> {
   if (!isCurrent(dependencies)) return transaction
-  if (transaction.ownedUri === null) {
-    transaction.ownedUri = await dependencies.ownPhoto(transaction.scanId)
+  if (transaction.ownedUri === null || !transaction.draftCreated) {
+    const ownership = dependencies.photoOwnership ?? photoOwnershipCoordinator
+    await ownership.runExclusive(async () => {
+      if (!isCurrent(dependencies)) return
+      if (transaction.ownedUri === null) {
+        transaction.ownedUri = await dependencies.ownPhoto(transaction.scanId)
+        if (!isCurrent(dependencies)) return
+      }
+
+      if (!transaction.draftCreated) {
+        const persistedDraft = await dependencies.findDraft(transaction.scanId)
+        if (!isCurrent(dependencies)) return
+        if (!persistedDraft) {
+          await dependencies.createDraft({
+            ...draft,
+            id: transaction.scanId,
+            imageUri: transaction.ownedUri,
+          })
+          if (!isCurrent(dependencies)) return
+        }
+        transaction.draftCreated = true
+      }
+    })
     if (!isCurrent(dependencies)) return transaction
   }
 
-  if (!transaction.draftCreated) {
-    const persistedDraft = await dependencies.findDraft(transaction.scanId)
-    if (!isCurrent(dependencies)) return transaction
-    if (!persistedDraft) {
-      await dependencies.createDraft({
-        ...draft,
-        id: transaction.scanId,
-        imageUri: transaction.ownedUri,
-      })
-      if (!isCurrent(dependencies)) return transaction
-    }
-    transaction.draftCreated = true
+  if (!transaction.draftCreated || transaction.ownedUri === null) {
+    // A stale run can leave a durable cleanup reservation but must not publish a session.
+    return transaction
   }
 
   if (!transaction.sessionPersisted) {

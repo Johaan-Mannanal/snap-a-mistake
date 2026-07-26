@@ -7,6 +7,8 @@ import { createRunFence } from './analysisAsync'
 import { analysisRevisionReason, beginAnalysisReset, persistAnalysisRun } from './analysisPersistence'
 import { flushCleanupQueue, ownScanPhoto, type FilePort } from './scanFiles'
 import { CorrectionStorageError, createGeneratedCorrectionRetry } from './correctionAsync'
+import { createPhotoOwnershipCoordinator } from './photoOwnership'
+import { advanceReviewTransaction, createReviewTransaction } from './reviewTransaction'
 
 vi.mock('expo-file-system', () => ({
   Directory: class {},
@@ -40,6 +42,7 @@ class MemoryDatabase implements DatabasePort {
   followUpStatusAfterWriteGate: Promise<void> | null = null
   onActiveSessionWritten: (() => void) | null = null
   onFollowUpStatusWritten: (() => void) | null = null
+  transactionDepth = 0
 
   async execAsync(sql: string): Promise<void> {
     for (const statement of sql.split(';').map((part) => part.trim()).filter(Boolean)) {
@@ -216,6 +219,7 @@ class MemoryDatabase implements DatabasePort {
     const revisions = new Map([...this.revisions].map(([key, value]) => [key, { ...value }]))
     const appState = new Map(this.appState)
     const cleanup = new Set(this.cleanup)
+    this.transactionDepth += 1
     try {
       return await task(this)
     } catch (error) {
@@ -224,6 +228,8 @@ class MemoryDatabase implements DatabasePort {
       this.appState.clear(); appState.forEach((value, key) => this.appState.set(key, value))
       this.cleanup.clear(); cleanup.forEach((value) => this.cleanup.add(value))
       throw error
+    } finally {
+      this.transactionDepth -= 1
     }
   }
 }
@@ -233,11 +239,15 @@ class ProcessFiles implements FilePort {
   readonly files = new Set<string>()
   readonly copies: string[] = []
   readonly deleted: string[] = []
+  copyGate: Promise<void> | null = null
+  onCopyStarted: (() => void) | null = null
 
   async createScanDirectory(): Promise<void> {}
 
   async copy(sourceUri: string, destinationUri: string): Promise<void> {
     if (!this.files.has(sourceUri)) throw new Error('source file is missing')
+    this.onCopyStarted?.()
+    if (this.copyGate) await this.copyGate
     this.files.add(destinationUri)
     this.copies.push(destinationUri)
   }
@@ -1064,6 +1074,21 @@ describe('scan repository records', () => {
     })
   })
 
+  it('performs physical cleanup after the SQLite transaction is closed', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    const uri = 'file:///documents/scans/shared.jpg'
+    db.cleanup.add(uri)
+
+    await repository.cleanupQueuedUri(uri, async () => {
+      expect(db.transactionDepth).toBe(0)
+    })
+
+    expect(db.transactionDepth).toBe(0)
+    expect(await repository.getCleanupQueue()).toEqual([])
+  })
+
   it('returns a surviving parent to ready after its only resolved follow-up is deleted', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)
@@ -1374,6 +1399,49 @@ describe('atomic follow-up starts', () => {
 })
 
 describe('owned photo crash recovery', () => {
+  it('blocks cleanup until a pending copy is atomically adopted by its draft', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    const files = new ProcessFiles()
+    const ownership = createPhotoOwnershipCoordinator()
+    files.files.add('file:///cache/camera.jpg')
+    let finishCopy!: () => void
+    files.copyGate = new Promise<void>((resolve) => { finishCopy = resolve })
+    const copyStarted = new Promise<void>((resolve) => { files.onCopyStarted = resolve })
+    await repository.migrate()
+
+    const adoption = advanceReviewTransaction(createReviewTransaction('scan-race'), {
+      origin: 'camera',
+      attemptKind: 'original',
+      parentScanId: null,
+      createdAt: '2026-07-26T12:00:00.000Z',
+    }, {
+      ownPhoto: (scanId) => ownScanPhoto(scanId, 'file:///cache/camera.jpg', repository, files),
+      findDraft: async (scanId) => (await repository.get(scanId)) !== null,
+      createDraft: (input) => repository.createDraft(input),
+      persistReviewedPhoto: async () => {},
+      acknowledgeDisclosure: async () => {},
+      photoOwnership: ownership,
+    })
+    await copyStarted
+    let cleanupSettled = false
+    const cleanup = flushCleanupQueue(repository, files, ownership).then(() => { cleanupSettled = true })
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+    expect(cleanupSettled).toBe(false)
+    expect(files.deleted).toEqual([])
+    expect(await repository.getCleanupQueue()).toEqual(['file:///documents/scans/scan-race.jpg'])
+
+    finishCopy()
+    await adoption
+    await cleanup
+
+    expect(files.files.has('file:///documents/scans/scan-race.jpg')).toBe(true)
+    expect(files.deleted).toEqual([])
+    expect(await repository.getCleanupQueue()).toEqual([])
+    expect((await repository.get('scan-race'))?.imageUri).toBe('file:///documents/scans/scan-race.jpg')
+  })
+
   it('drains a durable reservation after process death before the copy begins', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)

@@ -1,5 +1,9 @@
 import { Directory, File, Paths } from 'expo-file-system'
 import type { ScanRepository } from './scanRepository'
+import {
+  photoOwnershipCoordinator,
+  type PhotoOwnershipCoordinator,
+} from './photoOwnership'
 
 export type FilePort = {
   readonly scanDirectoryUri: string
@@ -64,20 +68,38 @@ export async function deleteOwnedPhoto(uri: string, files: FilePort = createExpo
   await files.delete(uri)
 }
 
-export async function flushCleanupQueue(repository: ScanRepository, files: FilePort = createExpoFilePort()): Promise<void> {
-  const queuedUris = await repository.getCleanupQueue()
-  for (const uri of new Set(queuedUris)) {
-    try {
-      await repository.cleanupQueuedUri(uri, () => deleteOwnedPhoto(uri, files))
-    } catch {
-      // Keep the cleanup marker so the next launch can retry safely.
-    }
-  }
+export async function cleanupOwnedPhoto(
+  uri: string,
+  files: FilePort = createExpoFilePort(),
+  ownership: PhotoOwnershipCoordinator = photoOwnershipCoordinator,
+): Promise<void> {
+  await ownership.runExclusive(() => deleteOwnedPhoto(uri, files))
 }
 
-export async function flushCommittedCleanup(repository: ScanRepository, files: FilePort = createExpoFilePort()): Promise<{ pending: boolean }> {
+export async function flushCleanupQueue(
+  repository: ScanRepository,
+  files: FilePort = createExpoFilePort(),
+  ownership: PhotoOwnershipCoordinator = photoOwnershipCoordinator,
+): Promise<void> {
+  await ownership.runExclusive(async () => {
+    const queuedUris = await repository.getCleanupQueue()
+    for (const uri of new Set(queuedUris)) {
+      try {
+        await repository.cleanupQueuedUri(uri, () => deleteOwnedPhoto(uri, files))
+      } catch {
+        // Keep the cleanup marker so the next launch can retry safely.
+      }
+    }
+  })
+}
+
+export async function flushCommittedCleanup(
+  repository: ScanRepository,
+  files: FilePort = createExpoFilePort(),
+  ownership: PhotoOwnershipCoordinator = photoOwnershipCoordinator,
+): Promise<{ pending: boolean }> {
   try {
-    await flushCleanupQueue(repository, files)
+    await flushCleanupQueue(repository, files, ownership)
     return { pending: (await repository.getCleanupQueue()).length > 0 }
   } catch {
     return { pending: true }

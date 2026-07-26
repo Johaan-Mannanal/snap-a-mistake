@@ -600,13 +600,12 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
     },
 
     async cleanupQueuedUri(imageUri, cleanup): Promise<'deleted' | 'retained'> {
-      return db.withExclusiveTransactionAsync(async (transaction) => {
-        // Convert the transaction to a write transaction before the live-reference
-        // check so another scan write cannot commit between that check and deletion.
-        await transaction.runAsync(
+      const disposition = await db.withExclusiveTransactionAsync(async (transaction) => {
+        const claim = await transaction.runAsync(
           'UPDATE cleanup_queue SET created_at = created_at WHERE image_uri = ?',
           [imageUri],
         )
+        if (claim.changes === 0) return 'retained' as const
         const reference = await transaction.getFirstAsync<{ referenced: number }>(
           'SELECT 1 AS referenced FROM scans WHERE image_uri = ? LIMIT 1',
           [imageUri],
@@ -615,10 +614,17 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
           await transaction.runAsync('DELETE FROM cleanup_queue WHERE image_uri = ?', [imageUri])
           return 'retained'
         }
-        await cleanup()
-        await transaction.runAsync('DELETE FROM cleanup_queue WHERE image_uri = ?', [imageUri])
-        return 'deleted'
+        return 'delete' as const
       })
+      if (disposition === 'retained') return disposition
+
+      // The shared photo-ownership coordinator excludes draft adoption while this
+      // physical file I/O runs; keep SQLite transactions bounded to database work.
+      await cleanup()
+      await db.withExclusiveTransactionAsync(async (transaction) => {
+        await transaction.runAsync('DELETE FROM cleanup_queue WHERE image_uri = ?', [imageUri])
+      })
+      return 'deleted'
     },
 
     async commitFollowUpStartIfCurrent(parentScanId, session, targetStatus, isCurrent): Promise<boolean> {

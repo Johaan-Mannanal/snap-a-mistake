@@ -6,7 +6,7 @@ import { AppButton } from '../src/components/AppButton'
 import { AppScreen } from '../src/components/AppScreen'
 import { ZoomablePhoto } from '../src/components/ZoomablePhoto'
 import { getLocalScanRepository } from '../src/lib/history'
-import { deleteOwnedPhoto, flushCleanupQueue, ownScanPhoto } from '../src/lib/scanFiles'
+import { cleanupOwnedPhoto, flushCleanupQueue, ownScanPhoto } from '../src/lib/scanFiles'
 import {
   advanceReviewTransaction,
   createReviewMutationCoordinator,
@@ -120,7 +120,7 @@ export default function Review() {
           findDraft: async (scanId) => (await repository.get(scanId)) !== null,
           deleteDraft: (scanId) => repository.delete(scanId),
           flushOwnedPhotos: () => flushCleanupQueue(repository),
-          deleteOwnedPhoto,
+          deleteOwnedPhoto: cleanupOwnedPhoto,
           isCurrent: owns,
         })
         cleanupTransaction.current = null
@@ -133,7 +133,7 @@ export default function Review() {
           findDraft: async (scanId) => (await repository.get(scanId)) !== null,
           deleteDraft: (scanId) => repository.delete(scanId),
           flushOwnedPhotos: () => flushCleanupQueue(repository),
-          deleteOwnedPhoto,
+          deleteOwnedPhoto: cleanupOwnedPhoto,
           isCurrent: owns,
         }),
       })
@@ -162,7 +162,7 @@ export default function Review() {
         findDraft: async (scanId) => (await repository.get(scanId)) !== null,
         deleteDraft: (scanId) => repository.delete(scanId),
         flushOwnedPhotos: () => flushCleanupQueue(repository),
-        deleteOwnedPhoto,
+        deleteOwnedPhoto: cleanupOwnedPhoto,
         isCurrent: owns,
       })
       if (!owns()) return
@@ -186,7 +186,7 @@ export default function Review() {
             findDraft: async (scanId) => (await repository.get(scanId)) !== null,
             deleteDraft: (scanId) => repository.delete(scanId),
             flushOwnedPhotos: () => flushCleanupQueue(repository),
-            deleteOwnedPhoto,
+            deleteOwnedPhoto: cleanupOwnedPhoto,
             isCurrent: owns,
           })
           cleanupTransaction.current = null
