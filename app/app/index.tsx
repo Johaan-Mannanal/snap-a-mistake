@@ -157,16 +157,7 @@ export default function Home() {
             onPress={snap}
             style={[styles.shutter, (!cameraReady || isCapturing) && styles.shutterDisabled]}
           ><View style={styles.shutterInner} /></Pressable>
-          <Pressable
-            accessibilityLabel="Open Insights"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: isCapturing }}
-            disabled={isCapturing}
-            onPress={openInsights}
-            style={[styles.iconButton, isCapturing && styles.controlDisabled]}
-          >
-            <AppIcon name="chart.line.uptrend.xyaxis" fallback="↗" />
-          </Pressable>
+          <View accessibilityElementsHidden style={styles.iconButton} />
         </View>
       </SafeAreaView>
     </View>
