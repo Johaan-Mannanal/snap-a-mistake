@@ -347,12 +347,10 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
               followUpHintVisible: false,
               previousFollowUpProblems: [],
             })
-        if (scan.activeRevision === null) {
-          await transaction.runAsync(
-            'UPDATE scans SET lifecycle = ?, updated_at = ? WHERE id = ?',
-            ['interrupted', now(), scanId],
-          )
-        }
+        await transaction.runAsync(
+          'UPDATE scans SET lifecycle = ?, updated_at = ? WHERE id = ?',
+          [scan.activeRevision === null ? 'interrupted' : 'complete', now(), scanId],
+        )
         await transaction.runAsync(
           `INSERT INTO app_state (key, value_json) VALUES (?, ?)
            ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,

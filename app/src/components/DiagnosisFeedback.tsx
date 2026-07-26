@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, findNodeHandle, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import type { AnalyzeResponse } from '@snap/shared'
-import type { ApiFailure } from '../lib/api'
-import { correctionFailurePresentation, correctionStepOptions, DIAGNOSIS_FEEDBACK_PROMPT } from '../ui/diagnosisFeedback'
+import { correctionFailurePresentation, correctionStepOptions, DIAGNOSIS_FEEDBACK_PROMPT, type CorrectionFailure } from '../ui/diagnosisFeedback'
 import { colors, radii, spacing } from '../ui/theme'
 import { AppButton } from './AppButton'
 
@@ -12,7 +11,7 @@ type AnalysisResponse = Extract<AnalyzeResponse, { kind: 'analysis' }>
 export function DiagnosisFeedback(props: {
   response: AnalysisResponse
   busy: boolean
-  failure: ApiFailure | null
+  failure: CorrectionFailure | null
   onAccept: () => void
   onCorrectStep: (index: number) => void
   onAllCorrect: () => void
@@ -95,7 +94,7 @@ export function DiagnosisFeedback(props: {
   )
 }
 
-function FeedbackFailure({ failure, onRetry, onCancel }: { failure: ApiFailure; onRetry: () => void; onCancel: () => void }) {
+function FeedbackFailure({ failure, onRetry, onCancel }: { failure: CorrectionFailure; onRetry: () => void; onCancel: () => void }) {
   const presentation = correctionFailurePresentation(failure)
   return (
     <View style={styles.failure} accessibilityRole="alert">

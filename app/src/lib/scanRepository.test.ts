@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { AnalyzeResponse } from '@snap/shared'
 import { createScanRepository, type DatabasePort } from './scanRepository'
 import { PersistedSessionSchema, type NewScanDraft, type PersistedSession, type ScanRevision } from './scanTypes'
-import { getSession, hydrateSession, takeHydratedRouteIntent } from './session'
+import { getSession, hydrateSession, persistAnalysis, recoverAnalysis, resetSession, setPendingPhoto, setReviewedPhoto, takeHydratedRouteIntent } from './session'
+import { createRunFence } from './analysisAsync'
+import { analysisRevisionReason, beginAnalysisReset, persistAnalysisRun } from './analysisPersistence'
 
 type ScanRow = Record<string, unknown>
 type RevisionRow = Record<string, unknown>
@@ -331,6 +333,7 @@ describe('scan repository records', () => {
     await repository.createDraft(draft())
     const savedRevision = revision('revision-1', 'initial')
     await repository.saveRevision('scan-1', savedRevision, 400)
+    await repository.setLifecycle('scan-1', 'analyzing')
     const reviewSession: PersistedSession = {
       routeIntent: 'review', pendingScanId: 'scan-1',
       photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
@@ -346,12 +349,90 @@ describe('scan repository records', () => {
       .resolves.toMatchObject({ routeIntent: 'result', analysis: savedRevision.response })
   })
 
+  it('cancelling a retry restores the older active result and complete lifecycle', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await hydrateSession(repository)
+    await repository.createDraft(draft())
+    await repository.saveRevision('scan-1', diagnosisRevision, 400)
+    await setPendingPhoto({ uri: 'file:///documents/scans/scan-1.jpg', origin: 'camera' })
+    await setReviewedPhoto({
+      scanId: 'scan-1',
+      uri: 'file:///documents/scans/scan-1.jpg',
+      origin: 'camera',
+    })
+    await repository.setLifecycle('scan-1', 'analyzing')
+
+    await expect(recoverAnalysis('scan-1')).resolves.toBe('result')
+
+    expect((await repository.get('scan-1'))?.lifecycle).toBe('complete')
+    expect(getSession()).toMatchObject({
+      routeIntent: 'result',
+      pendingScanId: 'scan-1',
+      analysis: diagnosisRevision.response,
+    })
+  })
+
+  it('recovers canonically if cancellation lands after Result session persistence starts', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await hydrateSession(repository)
+    await repository.createDraft(draft())
+    await repository.saveRevision('scan-1', diagnosisRevision, 400)
+    await setPendingPhoto({ uri: 'file:///documents/scans/scan-1.jpg', origin: 'camera' })
+    await setReviewedPhoto({
+      scanId: 'scan-1',
+      uri: 'file:///documents/scans/scan-1.jpg',
+      origin: 'camera',
+    })
+    await persistAnalysis('scan-1', diagnosisRevision.response, 400)
+    await repository.setLifecycle('scan-1', 'analyzing')
+
+    await expect(recoverAnalysis('scan-1')).resolves.toBe('result')
+
+    expect((await repository.get('scan-1'))?.lifecycle).toBe('complete')
+    expect(getSession()).toMatchObject({
+      routeIntent: 'result',
+      analysis: diagnosisRevision.response,
+      followUp: diagnosisRevision.response.kind === 'analysis' ? diagnosisRevision.response.followUp : null,
+      parentScanId: null,
+    })
+  })
+
+  it('cancelling an initial analysis without a revision restores interrupted Review', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await hydrateSession(repository)
+    await repository.createDraft(draft())
+    await setPendingPhoto({ uri: 'file:///documents/scans/scan-1.jpg', origin: 'camera' })
+    await setReviewedPhoto({
+      scanId: 'scan-1',
+      uri: 'file:///documents/scans/scan-1.jpg',
+      origin: 'camera',
+    })
+    await repository.setLifecycle('scan-1', 'analyzing')
+
+    await expect(recoverAnalysis('scan-1')).resolves.toBe('review')
+
+    expect((await repository.get('scan-1'))?.lifecycle).toBe('interrupted')
+    expect(getSession()).toMatchObject({
+      routeIntent: 'review',
+      pendingScanId: 'scan-1',
+      analysis: null,
+      isInterrupted: true,
+    })
+  })
+
   it('persists a schema-valid original result that survives a second hydration', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)
     await repository.migrate()
     await repository.createDraft(draft())
     await repository.saveRevision('scan-1', diagnosisRevision, 400)
+    await repository.setLifecycle('scan-1', 'analyzing')
     await repository.setState('active-session', {
       routeIntent: 'analyze', pendingScanId: 'scan-1',
       photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
@@ -383,6 +464,7 @@ describe('scan repository records', () => {
     await repository.createDraft({ ...draft('child'), attemptKind: 'follow-up', parentScanId: 'parent' })
     const childRevision = revision('child-revision', 'initial')
     await repository.saveRevision('child', childRevision, 300)
+    await repository.setLifecycle('child', 'analyzing')
     const activeProblem = diagnosisRevision.response.kind === 'analysis'
       ? diagnosisRevision.response.followUp!
       : null
@@ -411,6 +493,54 @@ describe('scan repository records', () => {
       analysis: childRevision.response,
       parentScanId: 'parent',
     })
+    expect((await repository.get('child'))?.lifecycle).toBe('complete')
+  })
+
+  it('fences and awaits actual deferred Result persistence before Snap another resets session state', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await hydrateSession(repository)
+    await repository.createDraft(draft())
+    await setPendingPhoto({ uri: 'file:///documents/scans/scan-1.jpg', origin: 'camera' })
+    await setReviewedPhoto({
+      scanId: 'scan-1',
+      uri: 'file:///documents/scans/scan-1.jpg',
+      origin: 'camera',
+    })
+    let releaseSessionWrite!: () => void
+    db.activeSessionAfterWriteGate = new Promise<void>((resolve) => { releaseSessionWrite = resolve })
+    const sessionWritten = new Promise<void>((resolve) => { db.onActiveSessionWritten = resolve })
+    const fence = createRunFence()
+    const token = fence.begin()
+    const savedRevision = revision('revision-late', 'initial')
+    const persistence = persistAnalysisRun({
+      isCurrent: () => fence.owns(token),
+      saveRevision: () => repository.saveRevision('scan-1', savedRevision, 400),
+      validateSaved: (scan) => scan.activeRevision?.id === savedRevision.id,
+      persistSession: () => persistAnalysis('scan-1', savedRevision.response, 400),
+    })
+    fence.track(token, persistence.then(() => {}))
+    await sessionWritten
+
+    let navigated = false
+    const reset = beginAnalysisReset({
+      invalidateRun: () => fence.invalidate(),
+      abortRequest: () => {},
+      markTerminal: () => {},
+      invalidateCorrections: async () => {},
+      reset: () => resetSession(),
+      navigate: () => { navigated = true },
+    })
+    expect(fence.owns(token)).toBe(false)
+    expect(getSession().routeIntent).toBe('analyze')
+
+    releaseSessionWrite()
+    await reset
+
+    expect(getSession().routeIntent).toBe('capture')
+    await expect(repository.getState('active-session', PersistedSessionSchema)).resolves.toBeNull()
+    expect(navigated).toBe(true)
   })
 
   it('rolls back interruption when the restored session cannot be written', async () => {
@@ -443,6 +573,19 @@ describe('scan repository records', () => {
     expect(db.scans).toHaveLength(1)
     expect(saved.activeRevision?.id).toBe('revision-1')
     expect(saved.lifecycle).toBe('complete')
+  })
+
+  it('classifies analysis after an excluded revision as a retry without discarding history', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.saveRevision('scan-1', revision('revision-1', 'initial'), 400)
+    const excluded = await repository.excludeDiagnosis('scan-1')
+
+    expect(excluded.activeRevision).toBeNull()
+    expect(excluded.revisions).toHaveLength(1)
+    expect(analysisRevisionReason(excluded)).toBe('retry')
   })
 
   it('replays the same revision idempotently after a partial save recovery', async () => {

@@ -77,6 +77,27 @@ async function commit(next: Session): Promise<void> {
   session = next
 }
 
+async function recoverStoredAnalysis(
+  repository: ScanRepository,
+  stored: PersistedSession,
+): Promise<Session> {
+  if (stored.pendingScanId === null) throw new Error('persisted analysis is missing its scan ID')
+  const followUpAttempt = stored.parentScanId !== null
+  const interrupted = fromPersisted({
+    ...stored,
+    routeIntent: 'review',
+    analysis: null,
+    followUp: followUpAttempt ? stored.followUp : null,
+    followUpHintVisible: followUpAttempt ? stored.followUpHintVisible : false,
+    previousFollowUpProblems: followUpAttempt ? stored.previousFollowUpProblems : [],
+  }, true)
+  const recovered = await repository.interruptAnalysisAndRestoreSession(
+    stored.pendingScanId,
+    persisted(interrupted),
+  )
+  return fromPersisted(recovered, recovered.routeIntent === 'review')
+}
+
 export function getSession(): Session {
   return session
 }
@@ -93,11 +114,8 @@ export async function hydrateSession(repository: ScanRepository): Promise<Sessio
   }
 
   if (stored.routeIntent === 'analyze') {
-    if (stored.pendingScanId === null) throw new Error('persisted analysis is missing its scan ID')
-    const interrupted = fromPersisted({ ...stored, routeIntent: 'review' }, true)
-    const recovered = await repository.interruptAnalysisAndRestoreSession(stored.pendingScanId, persisted(interrupted))
-    session = fromPersisted(recovered, recovered.routeIntent === 'review')
-    hydratedRouteIntent = recovered.routeIntent
+    session = await recoverStoredAnalysis(repository, stored)
+    hydratedRouteIntent = session.routeIntent
     return session
   }
 
@@ -110,6 +128,17 @@ export function takeHydratedRouteIntent(): PersistedSession['routeIntent'] | nul
   const intent = hydratedRouteIntent
   hydratedRouteIntent = null
   return intent
+}
+
+export async function recoverAnalysis(scanId: string): Promise<'review' | 'result'> {
+  if (!sessionRepository) throw new Error('local scan storage is not initialized')
+  const stored = persisted(session)
+  if (stored.pendingScanId !== scanId) throw new Error('analysis recovery scan does not match the active session')
+  const recovered = await recoverStoredAnalysis(sessionRepository, stored)
+  if (recovered.routeIntent !== 'review' && recovered.routeIntent !== 'result')
+    throw new Error('analysis recovery returned an unsupported route')
+  session = recovered
+  return recovered.routeIntent
 }
 
 export function isPrivacyDisclosureAcknowledged(): boolean {

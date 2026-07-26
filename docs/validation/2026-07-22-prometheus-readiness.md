@@ -12,7 +12,7 @@ npm run typecheck
 npm run lint -w app
 ```
 
-- `npm test`: **461 tests passed** — 36 shared Vitest, 116 server Vitest, 4 stock-Python importer tests, and 305 app Vitest tests.
+- `npm test`: **467 tests passed** — 36 shared Vitest, 116 server Vitest, 4 stock-Python importer tests, and 311 app Vitest tests.
 - `npm run typecheck`: shared, server, and app each completed `tsc --noEmit`.
 - `npm run lint -w app`: Expo lint completed with zero warnings and zero errors.
 - The app’s lint setup uses SDK 57-compatible `eslint` and `eslint-config-expo`. Its only targeted configuration exceptions are for React Native object-ref forwarding and Reanimated shared-value mutation; ordinary Expo lint rules remain enabled.

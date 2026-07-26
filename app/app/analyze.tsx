@@ -4,9 +4,10 @@ import { router } from 'expo-router'
 import type { AnalyzeResponse } from '@snap/shared'
 import { ApiError, type ApiFailure, analyzePhoto, correctDiagnosis } from '../src/lib/api'
 import { getLocalScanRepository } from '../src/lib/history'
-import { adoptResultSession, adoptReviewSession, beginFollowUp, getSession, persistAnalysis, resetSession, resultSession, reviewSession } from '../src/lib/session'
+import { adoptResultSession, adoptReviewSession, beginFollowUp, getSession, persistAnalysis, recoverAnalysis, resetSession, resultSession, reviewSession } from '../src/lib/session'
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
 import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
+import { analysisRevisionReason, beginAnalysisReset, persistAnalysisRun } from '../src/lib/analysisPersistence'
 import { createCorrectionFence, type CorrectionRun } from '../src/lib/correctionAsync'
 import { createCorrectionBusyState } from '../src/lib/correctionBusy'
 import { createAnalysisFinalization, createCompletedReviewReturn } from '../src/lib/analysisFinalization'
@@ -24,7 +25,7 @@ import { DiagnosisFeedback } from '../src/components/DiagnosisFeedback'
 import { analysisPresentation, analysisRecoveryPresentation } from '../src/ui/presentation'
 import { colors, spacing } from '../src/ui/theme'
 import { expandStepIndex, initialExpandedStepIndexes, selectStepIndex, toggleExpandedStepIndexes } from '../src/lib/resultInteraction'
-import { isDurableFeedbackAvailable, synthesizeAllCorrectResponse } from '../src/ui/diagnosisFeedback'
+import { isDurableFeedbackAvailable, synthesizeAllCorrectResponse, type CorrectionFailure } from '../src/ui/diagnosisFeedback'
 import { initialAnalysisEntry } from '../src/lib/analysisEntry'
 
 type RecoverableFailure = ApiFailure | { kind: 'persistence' }
@@ -59,7 +60,7 @@ export default function Analyze() {
   const [pendingPhotoFocusIndex, setPendingPhotoFocusIndex] = useState<number | null>(null)
   const [timelineLayoutVersion, setTimelineLayoutVersion] = useState(0)
   const [feedbackBusy, setFeedbackBusy] = useState(false)
-  const [correctionFailure, setCorrectionFailure] = useState<ApiFailure | null>(null)
+  const [correctionFailure, setCorrectionFailure] = useState<CorrectionFailure | null>(null)
   const [feedbackAccepted, setFeedbackAccepted] = useState(false)
   const [durableResultRevisionId, setDurableResultRevisionId] = useState<string | null>(null)
   const [openingFollowUp, setOpeningFollowUp] = useState(false)
@@ -125,12 +126,14 @@ export default function Analyze() {
       if (!owns(token)) return
       if (mounted.current) setIsSaving(true)
       try {
-        if (!owns(token)) return
-        const saved = await getLocalScanRepository().saveRevision(scanId!, pending.revision, pending.durationMs)
-        if (!owns(token)) return
-        if (saved.activeRevision?.id !== pending.revision.id) throw new Error('saved revision is not active')
-        await persistAnalysis(scanId!, pending.response, pending.durationMs)
-        if (!owns(token)) return
+        const saved = await persistAnalysisRun({
+          isCurrent: () => owns(token),
+          saveRevision: () => getLocalScanRepository().saveRevision(scanId!, pending.revision, pending.durationMs),
+          validateSaved: (record) => record.activeRevision?.id === pending.revision.id,
+          persistSession: () => persistAnalysis(scanId!, pending.response, pending.durationMs),
+        })
+        if (saved === null || !owns(token)) return
+        if (mounted.current) setResult(pending.response)
         setDurableResultRevisionId(pending.revision.id)
         if (mounted.current) setUnsaved(false)
         finalization.current.markSuccessfulHandoff()
@@ -143,20 +146,29 @@ export default function Analyze() {
         setDurableResultRevisionId(null)
         if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'unsaved').catch(() => {})
         if (!owns(token)) return
-        if (mounted.current) setUnsaved(true)
+        if (mounted.current) {
+          setResult(pending.response)
+          setUnsaved(true)
+        }
       } finally {
-        if (owns(token)) setIsSaving(false)
+        if (mounted.current && runFence.current.owns(token)) setIsSaving(false)
       }
     })
   }, [announceForCurrentRun, owns, scanId])
 
-  const finalizationDependencies = useCallback((navigate: boolean) => ({
-    interrupt: async () => {
-      if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'interrupted')
-    },
-    restoreReview: () => resetSession({ preserveDraft: true }),
-    navigate: () => { if (navigate && mounted.current) router.replace('/review') },
-  }), [scanId])
+  const finalizationDependencies = useCallback((navigate: boolean) => {
+    let recoveredRoute: 'review' | 'result' = 'review'
+    return {
+      interrupt: async () => {
+        if (scanId) recoveredRoute = await recoverAnalysis(scanId)
+      },
+      restoreReview: async () => {},
+      navigate: () => {
+        if (navigate && mounted.current)
+          router.replace(recoveredRoute === 'result' ? '/analyze' : '/review')
+      },
+    }
+  }, [scanId])
 
   const returnToReview = useCallback(() => {
     runFence.current.invalidate()
@@ -223,7 +235,7 @@ export default function Analyze() {
           durationMs,
           revision: {
             id: allocateRevisionId(),
-            reason: scan.activeRevision ? 'retry' : 'initial',
+            reason: analysisRevisionReason(scan),
             response,
             feedback: 'unreviewed',
             createdAt: new Date().toISOString(),
@@ -231,7 +243,6 @@ export default function Analyze() {
         }
         if (!owns(token)) return
         pendingSave.current = pending
-        if (mounted.current) setResult(response)
         await persistPendingSave(pending, token)
       } catch (error) {
         if (!owns(token)) return
@@ -321,10 +332,14 @@ export default function Analyze() {
   const snapAnother = useCallback(() => {
     setIsResetting(true)
     setResetFailed(false)
-    void (async () => {
-      await correctionFence.current.invalidate()
-      await resetTransition.current!()
-    })().catch(() => {
+    void beginAnalysisReset({
+      invalidateRun: () => runFence.current.invalidate(),
+      abortRequest: () => { activeRequest.current?.abort() },
+      markTerminal: () => { finalization.current.markSuccessfulHandoff() },
+      invalidateCorrections: () => correctionFence.current.invalidate(),
+      reset: () => resetTransition.current!(),
+      navigate: () => {},
+    }).catch(() => {
       if (!mounted.current) return
       setIsResetting(false)
       setResetFailed(true)
@@ -362,7 +377,7 @@ export default function Analyze() {
         retryCorrection.current = null
       } catch {
         if (!correctionFence.current.owns(correction)) return
-        setCorrectionFailure({ kind: 'network' })
+        setCorrectionFailure({ kind: 'storage' })
       } finally {
         finishCorrectionBusy(correction)
       }

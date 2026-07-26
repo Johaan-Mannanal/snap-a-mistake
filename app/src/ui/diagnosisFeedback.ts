@@ -2,6 +2,7 @@ import type { AnalyzeResponse, Step } from '@snap/shared'
 import type { ApiFailure } from '../lib/api'
 
 type AnalysisResponse = Extract<AnalyzeResponse, { kind: 'analysis' }>
+export type CorrectionFailure = ApiFailure | { kind: 'storage' }
 
 export const DIAGNOSIS_FEEDBACK_PROMPT = 'Is this the right first break?'
 
@@ -37,7 +38,9 @@ export function synthesizeAllCorrectResponse(response: AnalysisResponse): Analys
   }
 }
 
-export function correctionFailurePresentation(failure: ApiFailure) {
+export function correctionFailurePresentation(failure: CorrectionFailure) {
+  if (failure.kind === 'storage')
+    return { title: 'We couldn’t save your feedback.', detail: 'Your diagnosis is unchanged. Check local storage and try again.', retryLabel: 'Retry saving', cancelLabel: 'Back to result' }
   if (failure.kind === 'cancelled')
     return { title: 'Correction cancelled.', detail: 'Your current diagnosis is unchanged.', retryLabel: 'Try again', cancelLabel: 'Back to result' }
   if (failure.kind === 'timeout')

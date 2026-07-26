@@ -65,4 +65,13 @@ describe('diagnosis feedback', () => {
     expect(correctionFailurePresentation({ kind: 'timeout' })).toMatchObject({ title: 'The revised diagnosis took too long.', retryLabel: 'Try again', cancelLabel: 'Cancel' })
     expect(correctionFailurePresentation({ kind: 'cancelled' })).toMatchObject({ title: 'Correction cancelled.', retryLabel: 'Try again', cancelLabel: 'Back to result' })
   })
+
+  it('labels local acceptance persistence failures as a save problem with retry', () => {
+    expect(correctionFailurePresentation({ kind: 'storage' })).toEqual({
+      title: 'We couldn’t save your feedback.',
+      detail: 'Your diagnosis is unchanged. Check local storage and try again.',
+      retryLabel: 'Retry saving',
+      cancelLabel: 'Back to result',
+    })
+  })
 })
