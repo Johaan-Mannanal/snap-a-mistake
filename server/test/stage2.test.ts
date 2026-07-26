@@ -36,6 +36,25 @@ describe('analyzeSteps', () => {
     expect(text).not.toMatch(/x\^2 when helpful/i)
   })
 
+  it('labels sparse non-monotonic values as opaque step IDs in model context', async () => {
+    const sparseSteps = [
+      { ...steps[0]!, index: 41 },
+      { ...steps[1]!, index: 7 },
+    ]
+    const client = fakeClient(JSON.stringify({
+      ...JSON.parse(diagnosis),
+      errorStepIndex: 7,
+    }))
+
+    await analyzeSteps(client, 'gpt-5.6-sol', sparseSteps)
+
+    const call = (client.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as OpenAI.Chat.Completions.ChatCompletionCreateParams
+    const text = JSON.stringify(call.messages)
+    expect(text).toContain('Step ID 41:')
+    expect(text).toContain('Step ID 7:')
+    expect(text).toMatch(/errorStepIndex.*integer identity shown after Step ID/i)
+  })
+
   it('orders overlapping tags and documents their classification boundaries', async () => {
     const client = fakeClient(diagnosis)
     await analyzeSteps(client, 'gpt-5.6-sol', steps)

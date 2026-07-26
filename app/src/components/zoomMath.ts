@@ -1,3 +1,12 @@
+export function photoTransform(input: { x: number; y: number; scale: number }) {
+  'worklet'
+  return [
+    { translateX: input.x },
+    { translateY: input.y },
+    { scale: input.scale },
+  ]
+}
+
 export function clampPhotoTranslation(input: {
   x: number
   y: number

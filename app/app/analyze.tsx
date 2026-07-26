@@ -648,10 +648,11 @@ export default function Analyze() {
         <View onLayout={(event) => { photoOffsetY.current = event.nativeEvent.layout.y }}>
           <ZoomablePhoto
             uri={uri}
-            renderOverlay={(geometry) => (
+            renderOverlay={(geometry, zoomScale) => (
               <PhotoOverlay
                 steps={result.steps}
                 geometry={geometry}
+                zoomScale={zoomScale}
                 selectedStepIndex={selectedStepIndex}
                 onSelectStep={selectPhotoStep}
               />

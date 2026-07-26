@@ -54,6 +54,7 @@ Respond with ONLY a JSON object:
 
 Rules:
 - If every step is correct: all four fields null. NEVER invent an error to seem useful.
+- "errorStepIndex" must be the integer identity shown after Step ID, not the step's array position.
 - "misconceptionTag" MUST use this controlled vocabulary and its boundaries:
 ${TAG_GUIDE}
 ${TAG_DECISION_GUIDE}
@@ -69,7 +70,7 @@ export async function analyzeSteps(
   steps: TranscribedStep[],
 ): Promise<Stage2Result> {
   const rendered = steps
-    .map((s) => `Step ${s.index}: ${s.latex}   (${s.plain})`)
+    .map((s) => `Step ID ${s.index}: ${s.latex}   (${s.plain})`)
     .join('\n')
   return callModelJson({
     client, model, system: SYSTEM, schema: Stage2Schema, maxTokens: 1500,

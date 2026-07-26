@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { AnalysisResultSchema, type CorrectionContext } from '@snap/shared'
 import type OpenAI from 'openai'
 import type { Config } from '../src/config.js'
@@ -48,6 +48,29 @@ describe('runCorrection', () => {
     expect(result.errorStepIndex).toBe(2)
     expect(result.steps.map((step) => step.verdict)).toEqual(['ok', 'ok', 'wrong', 'downstream'])
     expect(AnalysisResultSchema.safeParse(result).success).toBe(true)
+  })
+
+  it('uses response order for context while retaining the selected opaque identity', async () => {
+    const sparseAnalysis = {
+      ...analysis,
+      steps: analysis.steps.map((step, position) => ({
+        ...step,
+        index: [41, 7, 103, 2][position]!,
+      })),
+      errorStepIndex: 7,
+    }
+    const client = fakeClient(diagnosis, '{"agrees":true,"note":"The selected step is invalid."}')
+
+    await makeRunCorrection(client, config)(image, {
+      analysis: sparseAnalysis,
+      selectedStepIndex: 7,
+    })
+
+    const firstCall = (client.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as OpenAI.Chat.Completions.ChatCompletionCreateParams
+    const text = JSON.stringify(firstCall.messages)
+    expect(text).toContain('Step ID 41:')
+    expect(text).toContain('Step ID 7:')
+    expect(text).toContain('Selected first logical break: step ID 7')
   })
 
   it('marks the selected step suspect when the verifier disagrees', async () => {

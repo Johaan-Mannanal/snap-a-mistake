@@ -66,6 +66,19 @@ describe('runAnalysis', () => {
     expect(r.steps.map((s) => s.verdict)).toEqual(['ok', 'wrong', 'downstream'])
     expect(AnalysisResultSchema.safeParse(r).success).toBe(true)
   })
+  it('preserves steps when both photo band endpoints are unavailable', async () => {
+    const unlocated = { index: 41, latex: 'x^2', plain: 'x²' }
+    const r = await run({
+      s1: s1({ steps: [unlocated] }),
+      s2: cleanDiag,
+    })
+
+    expect(r).toMatchObject({
+      kind: 'analysis',
+      steps: [{ ...unlocated, verdict: 'ok' }],
+    })
+    expect(AnalysisResultSchema.safeParse(r).success).toBe(true)
+  })
   it('softens to suspect when verifier disagrees', async () => {
     const r = await run({ s2: errorDiag, v: { agrees: false, note: 'looks fine' } })
     if (r.kind !== 'analysis') throw new Error('expected analysis')

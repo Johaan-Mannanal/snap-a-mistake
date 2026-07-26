@@ -6,6 +6,7 @@ import { stepCardPresentation } from '../ui/presentation'
 
 export const StepCard = forwardRef<View, {
   step: Step
+  ordinal: number
   misconceptionLabel: string | null
   explanation: string | null
   expanded: boolean
@@ -29,7 +30,7 @@ export const StepCard = forwardRef<View, {
       onPress={props.onPress}
       style={({ pressed }) => [styles.row, props.selected && styles.selected, pressed && styles.pressed]}
     >
-      <Text style={styles.index}>{String(props.step.index + 1).padStart(2, '0')}</Text>
+      <Text style={styles.index}>{String(props.ordinal).padStart(2, '0')}</Text>
       <Text style={[styles.mark, { color }]}>{mark}</Text>
       <View style={styles.copy}>
         <Text style={styles.plain}>{props.step.plain}</Text>

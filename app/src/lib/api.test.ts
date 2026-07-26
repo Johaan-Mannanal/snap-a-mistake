@@ -30,6 +30,20 @@ describe('analyzePhoto', () => {
     expect(init.method).toBe('POST')
     expect(init.body).toBeInstanceOf(FormData)
   })
+  it('accepts a complete response whose steps have no photo bands', async () => {
+    const unlocated = {
+      kind: 'analysis',
+      steps: [{ index: 41, latex: 'x^2', plain: 'x²', verdict: 'ok' }],
+      errorStepIndex: null,
+      misconceptionTag: null,
+      explanation: null,
+      followUp: null,
+      verifierAgreed: true,
+    }
+    const fetchFn = vi.fn().mockResolvedValue(ok(unlocated))
+
+    await expect(analyzePhoto('file:///photo.jpg', { fetchFn })).resolves.toEqual(unlocated)
+  })
   it('uploads a byte-backed photo part instead of a legacy URI descriptor', async () => {
     const fetchFn = vi.fn().mockResolvedValue(ok(analysis))
     await analyzePhoto('file:///photo.jpg', { fetchFn })

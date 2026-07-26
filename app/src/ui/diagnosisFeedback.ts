@@ -18,12 +18,12 @@ export function isDurableFeedbackAvailable(
 }
 
 export function correctionStepOptions(response: AnalysisResponse): { index: number; label: string }[] {
-  return response.steps.map((step) => ({ index: step.index, label: readableStep(step) }))
+  return response.steps.map((step, position) => ({ index: step.index, label: readableStep(step, position + 1) }))
 }
 
-function readableStep(step: Step): string {
+function readableStep(step: Step, ordinal: number): string {
   const text = step.plain.trim() || 'Recognized work'
-  return `Step ${step.index + 1}: ${text}`
+  return `Step ${ordinal}: ${text}`
 }
 
 export function synthesizeAllCorrectResponse(response: AnalysisResponse): AnalysisResponse {

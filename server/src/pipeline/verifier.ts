@@ -16,12 +16,12 @@ export async function verifyDiagnosis(
   steps: TranscribedStep[],
   diagnosis: { errorStepIndex: number; explanation: string },
 ): Promise<VerifierResult> {
-  const rendered = steps.map((s) => `Step ${s.index}: ${s.latex}`).join('\n')
+  const rendered = steps.map((s) => `Step ID ${s.index}: ${s.latex}`).join('\n')
   return callModelJson({
     client, model, system: SYSTEM, schema: VerifierSchema, maxTokens: 400,
     content: [{
       type: 'text',
-      text: `Work:\n${rendered}\n\nClaimed first error: step ${diagnosis.errorStepIndex} — "${diagnosis.explanation}"`,
+      text: `Work:\n${rendered}\n\nClaimed first error: step ID ${diagnosis.errorStepIndex} — "${diagnosis.explanation}"`,
     }],
   })
 }

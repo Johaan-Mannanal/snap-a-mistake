@@ -31,9 +31,9 @@ Rules:
 
 function renderContext(context: CorrectionContext): string {
   const steps = context.analysis.steps
-    .map((step) => `Step ${step.index}: ${step.latex}   (${step.plain})`)
+    .map((step) => `Step ID ${step.index}: ${step.latex}   (${step.plain})`)
     .join('\n')
-  return `Student's work:\n${steps}\n\nSelected first logical break: step ${context.selectedStepIndex}\n\nControlled misconception tags: sign-error, dropped-term, distribution-error, chain-rule-missed, product-rule-misapplied, integration-by-parts-error, u-sub-bounds-error, algebraic-slip, exponent-rule-error, equals-abuse, notation-error, formula-misapplied, other.`
+  return `Student's work:\n${steps}\n\nSelected first logical break: step ID ${context.selectedStepIndex}\n\nControlled misconception tags: sign-error, dropped-term, distribution-error, chain-rule-missed, product-rule-misapplied, integration-by-parts-error, u-sub-bounds-error, algebraic-slip, exponent-rule-error, equals-abuse, notation-error, formula-misapplied, other.`
 }
 
 export function makeRunCorrection(client: OpenAI, config: Config): RunCorrectionFn {

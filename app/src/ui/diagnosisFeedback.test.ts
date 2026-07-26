@@ -39,7 +39,23 @@ describe('diagnosis feedback', () => {
     })).toBe(false)
     expect(correctionStepOptions(diagnosis)).toEqual([
       { index: 0, label: 'Step 1: x plus 1' },
-      { index: 3, label: 'Step 4: x minus 1' },
+      { index: 3, label: 'Step 2: x minus 1' },
+    ])
+  })
+
+  it('keeps opaque identities for correction selection while labeling response ordinals', () => {
+    const sparse = {
+      ...diagnosis,
+      steps: [
+        { ...diagnosis.steps[0]!, index: 41 },
+        { ...diagnosis.steps[1]!, index: 7 },
+      ],
+      errorStepIndex: 7,
+    }
+
+    expect(correctionStepOptions(sparse)).toEqual([
+      { index: 41, label: 'Step 1: x plus 1' },
+      { index: 7, label: 'Step 2: x minus 1' },
     ])
   })
 

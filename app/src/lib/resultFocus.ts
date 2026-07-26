@@ -7,9 +7,8 @@ import type { Step } from '@snap/shared'
 export function focusedStepIndexes(steps: readonly Step[], errorStepIndex: number | null): number[] {
   if (errorStepIndex === null) return steps.map((step) => step.index)
 
-  const ordered = [...steps].sort((a, b) => a.index - b.index)
-  const diagnosedPosition = ordered.findIndex((step) => step.index === errorStepIndex)
+  const diagnosedPosition = steps.findIndex((step) => step.index === errorStepIndex)
   if (diagnosedPosition === -1) return []
 
-  return ordered.slice(Math.max(0, diagnosedPosition - 1), diagnosedPosition + 2).map((step) => step.index)
+  return steps.slice(Math.max(0, diagnosedPosition - 1), diagnosedPosition + 2).map((step) => step.index)
 }

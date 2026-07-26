@@ -120,7 +120,27 @@ describe('analysisPresentation', () => {
       verifierAgreed: false, errorStepIndex: 2, misconceptionTag: 'other', explanation: 'Check this transition.',
       followUp: { problem: 'Try again.', concept: 'review', hint: 'Check each step.' },
     }
-    expect(analysisPresentation(response)).toMatchObject({ tone: 'neutral', headline: 'Step three needs a second look.' })
+    expect(analysisPresentation(response)).toMatchObject({ tone: 'neutral', headline: 'Step two needs a second look.' })
+  })
+
+  it('announces a sparse non-monotonic diagnosis by response ordinal', () => {
+    const response: AnalysisResponse = {
+      ...base,
+      steps: [
+        { index: 41, latex: 'x + 1', plain: 'x plus 1', verdict: 'ok' },
+        { index: 7, latex: 'x − 1', plain: 'x minus 1', verdict: 'wrong' },
+        { index: 103, latex: 'x − 2', plain: 'x minus 2', verdict: 'downstream' },
+        { index: 2, latex: 'x − 3', plain: 'x minus 3', verdict: 'downstream' },
+      ],
+      errorStepIndex: 7,
+      misconceptionTag: 'sign-error',
+      explanation: 'The sign changed.',
+      followUp: { problem: 'Simplify −(x + 1).', concept: 'signs', hint: 'Distribute the negative.' },
+    }
+
+    expect(analysisPresentation(response)).toMatchObject({
+      headline: 'The first break is in step two.',
+    })
   })
 })
 
@@ -188,7 +208,7 @@ describe('analysis progress presentation', () => {
       yBandTopPct: 25,
       yBandBottomPct: 45,
     }
-    expect(stepAccessibilityLabel(step, 'Integration by parts error', 'The extra x stays inside the integral.')).toBe(
+    expect(stepAccessibilityLabel(step, 2, 'Integration by parts error', 'The extra x stays inside the integral.')).toBe(
       'Step 2, incorrect. Work: x e to the x minus x times the integral. Math: x eˣ − x ∫ eˣ dx. Misconception: Integration by parts error. Explanation: The extra x stays inside the integral.',
     )
   })
@@ -203,7 +223,7 @@ describe('analysis progress presentation', () => {
       yBandBottomPct: 80,
     }
 
-    const label = stepAccessibilityLabel(step, null, null)
+    const label = stepAccessibilityLabel(step, 9, null, null)
 
     expect(label).toBe('Step 9, correct. Work: Cancel suitable terms.')
     expect(label).not.toContain('\\')
@@ -219,7 +239,7 @@ describe('analysis progress presentation', () => {
       yBandBottomPct: 10,
     }
 
-    expect(stepAccessibilityLabel(step, null, null)).toBe(
+    expect(stepAccessibilityLabel(step, 1, null, null)).toBe(
       'Step 1, correct. Work: Negative thirty-five divided by negative six fifths, times zero point two, divided by negative seven ninths. Math: −35 ÷ (−6/5) × 0.2 ÷ (−7/9).',
     )
   })
@@ -234,7 +254,7 @@ describe('analysis progress presentation', () => {
       yBandBottomPct: 20,
     }
 
-    expect(stepAccessibilityLabel(step, null, null)).toBe('Step 2, correct. Work: 1. Deal with the sign.')
+    expect(stepAccessibilityLabel(step, 2, null, null)).toBe('Step 2, correct. Work: 1. Deal with the sign.')
   })
 })
 
@@ -260,12 +280,12 @@ describe('stepCardPresentation', () => {
 
   it('hides a diagnosed card’s math and diagnosis from collapsed UI and accessibility', () => {
     expect(stepCardPresentation(diagnosed, {
-      expanded: false, selected: true, misconceptionLabel: 'Integration by parts error', explanation: 'The extra x stays inside the integral.',
+      ordinal: 2, expanded: false, selected: true, misconceptionLabel: 'Integration by parts error', explanation: 'The extra x stays inside the integral.',
     })).toEqual({
       math: null,
       misconceptionLabel: null,
       explanation: null,
-      accessibilityLabel: 'Step 5, incorrect. Work: Move the x outside the integral.',
+      accessibilityLabel: 'Step 2, incorrect. Work: Move the x outside the integral.',
       accessibilityState: { expanded: false, selected: true },
       accessibilityHint: 'Double tap to expand this step.',
       accessibilityAction: { name: 'expand', label: 'Expand step' },
@@ -274,12 +294,12 @@ describe('stepCardPresentation', () => {
 
   it('shows a diagnosed card’s visible secondary math and diagnosis when expanded', () => {
     expect(stepCardPresentation(diagnosed, {
-      expanded: true, selected: true, misconceptionLabel: 'Integration by parts error', explanation: 'The extra x stays inside the integral.',
+      ordinal: 2, expanded: true, selected: true, misconceptionLabel: 'Integration by parts error', explanation: 'The extra x stays inside the integral.',
     })).toEqual({
       math: 'x ∫ eˣ dx',
       misconceptionLabel: 'Integration by parts error',
       explanation: 'The extra x stays inside the integral.',
-      accessibilityLabel: 'Step 5, incorrect. Work: Move the x outside the integral. Math: x ∫ eˣ dx. Misconception: Integration by parts error. Explanation: The extra x stays inside the integral.',
+      accessibilityLabel: 'Step 2, incorrect. Work: Move the x outside the integral. Math: x ∫ eˣ dx. Misconception: Integration by parts error. Explanation: The extra x stays inside the integral.',
       accessibilityState: { expanded: true, selected: true },
       accessibilityHint: 'Double tap to collapse this step.',
       accessibilityAction: { name: 'collapse', label: 'Collapse step' },
@@ -290,11 +310,12 @@ describe('stepCardPresentation', () => {
     ['correct', correct, 'correct'],
     ['downstream', downstream, 'downstream from the first issue'],
   ] as const)('hides and reveals meaningful math for a %s step', (_name, step, verdict) => {
-    const collapsed = stepCardPresentation(step, { expanded: false, selected: false, misconceptionLabel: null, explanation: null })
-    const expanded = stepCardPresentation(step, { expanded: true, selected: false, misconceptionLabel: null, explanation: null })
+    const ordinal = step === correct ? 3 : 4
+    const collapsed = stepCardPresentation(step, { ordinal, expanded: false, selected: false, misconceptionLabel: null, explanation: null })
+    const expanded = stepCardPresentation(step, { ordinal, expanded: true, selected: false, misconceptionLabel: null, explanation: null })
 
     expect(collapsed.math).toBeNull()
-    expect(collapsed.accessibilityLabel).toBe(`Step ${step.index + 1}, ${verdict}. Work: Move the x outside the integral.`)
+    expect(collapsed.accessibilityLabel).toBe(`Step ${ordinal}, ${verdict}. Work: Move the x outside the integral.`)
     expect(collapsed.accessibilityState).toEqual({ expanded: false, selected: false })
     expect(expanded.math).toBe('x ∫ eˣ dx')
     expect(expanded.accessibilityLabel).toContain('Math: x ∫ eˣ dx.')
@@ -302,11 +323,11 @@ describe('stepCardPresentation', () => {
   })
 
   it('does not advertise expansion for a card with no meaningful secondary content', () => {
-    expect(stepCardPresentation(noDetail, { expanded: true, selected: true, misconceptionLabel: null, explanation: null })).toEqual({
+    expect(stepCardPresentation(noDetail, { ordinal: 5, expanded: true, selected: true, misconceptionLabel: null, explanation: null })).toEqual({
       math: null,
       misconceptionLabel: null,
       explanation: null,
-      accessibilityLabel: 'Step 13, correct. Work: Simplify.',
+      accessibilityLabel: 'Step 5, correct. Work: Simplify.',
       accessibilityState: { selected: true },
       accessibilityHint: null,
       accessibilityAction: null,

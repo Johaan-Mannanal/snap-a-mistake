@@ -1,6 +1,12 @@
 const MAX_LINE_HEIGHT_RATIO = 0.04
+const OVERLAY_FONT_SIZE = 11
+const OVERLAY_LINE_HEIGHT = 16
+const OVERLAY_LABEL_INSET = 4
+const OVERLAY_SELECTED_BORDER_WIDTH = 2
+const OVERLAY_BORDER_WIDTH = 1.5
 
 export type ContainedPhotoRect = { left: number; top: number; width: number; height: number }
+export type PhotoBand = { yBandTopPct: number; yBandBottomPct: number }
 
 export function containedPhotoRect(input: {
   frameWidth: number
@@ -22,12 +28,38 @@ export function containedPhotoRect(input: {
   }
 }
 
-export function hasPhotoBand(step: { yBandTopPct?: number; yBandBottomPct?: number }): boolean {
+export function hasPhotoBand<T extends { yBandTopPct?: number; yBandBottomPct?: number }>(
+  step: T,
+): step is T & PhotoBand {
   return Number.isFinite(step.yBandTopPct)
     && Number.isFinite(step.yBandBottomPct)
     && step.yBandTopPct! >= 0
     && step.yBandBottomPct! <= 100
-    && step.yBandTopPct! <= step.yBandBottomPct!
+    && step.yBandTopPct! < step.yBandBottomPct!
+}
+
+export function photoOverlayStepPresentation(
+  steps: readonly { index: number }[],
+  stepIndex: number,
+): { label: string; accessibilityLabel: string } {
+  const position = steps.findIndex((step) => step.index === stepIndex)
+  const ordinal = position + 1
+  return {
+    label: `STEP ${ordinal}`,
+    accessibilityLabel: `Focus step ${ordinal} in the timeline`,
+  }
+}
+
+export function overlayDecorationMetrics(zoomScale: number, selected: boolean) {
+  'worklet'
+  const safeScale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1
+  return {
+    borderWidth: (selected ? OVERLAY_SELECTED_BORDER_WIDTH : OVERLAY_BORDER_WIDTH) / safeScale,
+    fontSize: OVERLAY_FONT_SIZE / safeScale,
+    lineHeight: OVERLAY_LINE_HEIGHT / safeScale,
+    paddingHorizontal: OVERLAY_LABEL_INSET / safeScale,
+    marginRight: OVERLAY_LABEL_INSET / safeScale,
+  }
 }
 
 export function bandStyle(

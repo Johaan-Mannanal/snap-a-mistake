@@ -20,8 +20,11 @@ describe('transcribe', () => {
     const parts = userMsg?.content as Array<{ type: string; image_url?: { url: string } }>
     expect(parts.some((p) => p.type === 'image_url' && p.image_url?.url.startsWith('data:image/jpeg;base64,'))).toBe(true)
     const system = call.messages.find((m) => m.role === 'system')?.content
+    expect(system).toMatch(/array order.*top.*bottom/i)
+    expect(system).toMatch(/index.*unique non-negative integer identity/i)
     expect(system).toMatch(/tight band around only that line/i)
     expect(system).toMatch(/exclude.*neighboring line/i)
+    expect(system).toMatch(/omit both.*cannot reliably locate/i)
     expect(call.model).toBe('gpt-5.6-sol')
   })
 })

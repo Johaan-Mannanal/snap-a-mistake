@@ -209,7 +209,7 @@ function HistoricalResult(props: {
         <ZoomablePhoto
           uri={props.scan.imageUri}
           renderOverlay={result?.kind === 'analysis'
-            ? (geometry) => <PhotoOverlay steps={result.steps} geometry={geometry} selectedStepIndex={selectedStepIndex} onSelectStep={selectStep} />
+            ? (geometry, zoomScale) => <PhotoOverlay steps={result.steps} geometry={geometry} zoomScale={zoomScale} selectedStepIndex={selectedStepIndex} onSelectStep={selectStep} />
             : undefined}
         />
       ) : <MissingPhoto />}

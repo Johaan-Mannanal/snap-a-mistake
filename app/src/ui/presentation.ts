@@ -62,7 +62,9 @@ export function analysisPresentation(response: Extract<AnalyzeResponse, { kind: 
   if (response.errorStepIndex === null) {
     return { tone: 'success' as const, eyebrow: 'CHECKED', headline: 'All steps check out', detail: 'Every step follows from the last.' }
   }
-  const step = ORDINAL[response.errorStepIndex] ?? String(response.errorStepIndex + 1)
+  const diagnosedPosition = response.steps.findIndex((step) => step.index === response.errorStepIndex)
+  const ordinal = diagnosedPosition + 1
+  const step = ORDINAL[diagnosedPosition] ?? String(ordinal)
   if (!response.verifierAgreed) {
     return { tone: 'neutral' as const, eyebrow: 'SECOND LOOK', headline: `Step ${step} needs a second look.`, detail: response.explanation ?? '' }
   }
@@ -209,6 +211,7 @@ export function readableStepMath(latex: string, plain?: string): string | null {
 
 export function stepAccessibilityLabel(
   step: Step,
+  ordinal: number,
   misconceptionLabel: string | null,
   explanation: string | null,
   includeSecondary = true,
@@ -216,7 +219,7 @@ export function stepAccessibilityLabel(
   const expanded = includeSecondary && (step.verdict === 'wrong' || step.verdict === 'suspect')
   const math = readableStepMath(step.latex, step.plain)
   const sentences = [
-    `Step ${step.index + 1}, ${VERDICT_LABEL[step.verdict]}.`,
+    `Step ${ordinal}, ${VERDICT_LABEL[step.verdict]}.`,
     accessibilitySentence('Work', step.plain),
   ]
   if (includeSecondary && math) sentences.push(accessibilitySentence('Math', math))
@@ -226,6 +229,7 @@ export function stepAccessibilityLabel(
 }
 
 export function stepCardPresentation(step: Step, input: {
+  ordinal: number
   expanded: boolean
   selected: boolean
   misconceptionLabel: string | null
@@ -245,7 +249,7 @@ export function stepCardPresentation(step: Step, input: {
     math: expanded ? math : null,
     misconceptionLabel: visibleMisconception,
     explanation: visibleExplanation,
-    accessibilityLabel: stepAccessibilityLabel(step, visibleMisconception, visibleExplanation, expanded),
+    accessibilityLabel: stepAccessibilityLabel(step, input.ordinal, visibleMisconception, visibleExplanation, expanded),
     accessibilityState: expandable ? { expanded, selected: input.selected } : { selected: input.selected },
     accessibilityHint: !expandable ? null : expanded ? 'Double tap to collapse this step.' : 'Double tap to expand this step.',
     accessibilityAction,

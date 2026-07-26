@@ -28,15 +28,18 @@ export const StepTimeline = forwardRef<StepTimelineHandle, StepTimelineProps>(fu
   }), [])
   const focused = focusedStepIndexes(props.steps, props.errorStepIndex)
   const focusedSet = new Set(focused)
-  const visibleSteps = props.showAll ? props.steps : props.steps.filter((step) => focusedSet.has(step.index))
+  const visibleSteps = props.steps
+    .map((step, position) => ({ step, ordinal: position + 1 }))
+    .filter(({ step }) => props.showAll || focusedSet.has(step.index))
   const canToggle = focused.length < props.steps.length
 
   return (
     <View accessibilityRole="list" accessibilityLabel="Solution steps" style={styles.root}>
-      {visibleSteps.map((step) => (
+      {visibleSteps.map(({ step, ordinal }) => (
         <StepCard
           key={step.index}
           step={step}
+          ordinal={ordinal}
           misconceptionLabel={step.index === props.errorStepIndex ? props.misconceptionLabel : null}
           explanation={step.index === props.errorStepIndex ? props.explanation : null}
           expanded={props.expandedStepIndexes.has(step.index)}

@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 import { colors, spacing } from '../ui/theme'
 import { containedPhotoRect, type ContainedPhotoRect } from '../lib/overlay'
-import { clampPhotoTranslation } from './zoomMath'
+import { clampPhotoTranslation, photoTransform } from './zoomMath'
 
 const MIN_SCALE = 1
 const MAX_SCALE = 4
@@ -15,7 +15,7 @@ function clampScale(value: number) {
 
 export function ZoomablePhoto(props: {
   uri: string
-  renderOverlay?: (geometry: ContainedPhotoRect | null) => ReactNode
+  renderOverlay?: (geometry: ContainedPhotoRect | null, zoomScale: SharedValue<number>) => ReactNode
 }) {
   const scale = useSharedValue(MIN_SCALE)
   const scaleAtGestureStart = useSharedValue(MIN_SCALE)
@@ -117,11 +117,7 @@ export function ZoomablePhoto(props: {
   })
 
   const animatedPhotoStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
+    transform: photoTransform({ x: translateX.value, y: translateY.value, scale: scale.value }),
   }))
 
   const geometry = containedPhotoRect({
@@ -153,7 +149,7 @@ export function ZoomablePhoto(props: {
         >
           <Animated.View style={[styles.photoWrap, animatedPhotoStyle]}>
             <Image source={{ uri: props.uri }} resizeMode="contain" style={styles.photo} />
-            {props.renderOverlay?.(geometry)}
+            {props.renderOverlay?.(geometry, scale)}
           </Animated.View>
         </View>
       </GestureDetector>

@@ -36,6 +36,25 @@ const scan = {
 }
 
 describe('ScanRecordSchema', () => {
+  it('preserves an active revision with an unlocated Unicode step', () => {
+    const unlocatedResponse = {
+      kind: 'analysis' as const,
+      steps: [{ index: 41, latex: 'x^2', plain: 'x²', verdict: 'ok' as const }],
+      errorStepIndex: null,
+      misconceptionTag: null,
+      explanation: null,
+      followUp: null,
+      verifierAgreed: true,
+    }
+    const unlocatedRevision = { ...revision, response: unlocatedResponse }
+
+    expect(ScanRecordSchema.parse({
+      ...scan,
+      activeRevision: unlocatedRevision,
+      revisions: [unlocatedRevision],
+    }).activeRevision?.response).toEqual(unlocatedResponse)
+  })
+
   it('requires a parent scan for follow-up attempts', () => {
     expect(() => ScanRecordSchema.parse({ ...scan, attemptKind: 'follow-up', parentScanId: null }))
       .toThrow('follow-up requires parentScanId')

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { bandHitTargetStyle, bandStyle, containedPhotoRect, hasPhotoBand } from './overlay'
+import {
+  bandHitTargetStyle,
+  bandStyle,
+  containedPhotoRect,
+  hasPhotoBand,
+  overlayDecorationMetrics,
+  photoOverlayStepPresentation,
+} from './overlay'
 
 describe('bandStyle', () => {
   it('keeps an overly broad model band to one displayed line', () => {
@@ -28,9 +35,11 @@ describe('bandStyle', () => {
   })
 
   it('rejects steps without a usable location instead of placing a fake band', () => {
+    expect(hasPhotoBand({})).toBe(false)
+    expect(hasPhotoBand({ yBandTopPct: 20 })).toBe(false)
     expect(hasPhotoBand({ yBandTopPct: Number.NaN, yBandBottomPct: 20 })).toBe(false)
     expect(hasPhotoBand({ yBandTopPct: 80, yBandBottomPct: 20 })).toBe(false)
-    expect(hasPhotoBand({ yBandTopPct: 20, yBandBottomPct: 20 })).toBe(true)
+    expect(hasPhotoBand({ yBandTopPct: 20, yBandBottomPct: 20 })).toBe(false)
   })
 
   it('keeps the top-edge press target fully inside the photo at 44 points', () => {
@@ -41,5 +50,24 @@ describe('bandStyle', () => {
   it('shifts the bottom-edge press target upward while keeping its visual line precise', () => {
     expect(bandHitTargetStyle({ yBandTopPct: 98, yBandBottomPct: 100 }, 400))
       .toEqual({ top: 356, height: 44, visualTop: 20, visualHeight: 24 })
+  })
+
+  it('keeps overlay identity opaque while presenting array ordinals', () => {
+    const steps = [{ index: 41 }, { index: 7 }, { index: 103 }, { index: 2 }]
+
+    expect(photoOverlayStepPresentation(steps, 7)).toEqual({
+      label: 'STEP 2',
+      accessibilityLabel: 'Focus step 2 in the timeline',
+    })
+  })
+
+  it.each([1, 2.5, 4])('counter-scales decoration metrics at %sx zoom', (zoomScale) => {
+    const metrics = overlayDecorationMetrics(zoomScale, true)
+
+    expect(metrics.borderWidth * zoomScale).toBeCloseTo(2)
+    expect(metrics.fontSize * zoomScale).toBeCloseTo(11)
+    expect(metrics.lineHeight * zoomScale).toBeCloseTo(16)
+    expect(metrics.paddingHorizontal * zoomScale).toBeCloseTo(4)
+    expect(metrics.marginRight * zoomScale).toBeCloseTo(4)
   })
 })

@@ -23,6 +23,29 @@ describe('Stage1Schema', () => {
       steps: [{ ...step(0), yBandTopPct: 80, yBandBottomPct: 20 }],
     })).toThrow('yBandTopPct must not exceed yBandBottomPct')
   })
+  it('rejects a zero-height vertical band', () => {
+    expect(() => Stage1Schema.parse({
+      isMath: true,
+      legibility: 0.9,
+      steps: [{ ...step(0), yBandTopPct: 20, yBandBottomPct: 20 }],
+    })).toThrow('yBandTopPct must be less than yBandBottomPct')
+  })
+  it('accepts a step when both optional band endpoints are absent', () => {
+    const { yBandTopPct: _top, yBandBottomPct: _bottom, ...unlocated } = step(41)
+    const result = Stage1Schema.parse({ isMath: true, legibility: 0.9, steps: [unlocated] })
+
+    expect(result.steps[0]).toEqual(unlocated)
+  })
+  it.each([
+    ['bottom', { ...step(0), yBandBottomPct: undefined }],
+    ['top', { ...step(0), yBandTopPct: undefined }],
+  ])('rejects a vertical band with its %s endpoint missing', (_missingEndpoint, candidate) => {
+    expect(() => Stage1Schema.parse({
+      isMath: true,
+      legibility: 0.9,
+      steps: [candidate],
+    })).toThrow('both band endpoints are required together')
+  })
   it('rejects duplicate transcription step indexes', () => {
     expect(() => Stage1Schema.parse({
       isMath: true,
@@ -95,6 +118,37 @@ describe('AnalyzeResponseSchema', () => {
       misconceptionTag: null, explanation: null, followUp: null, verifierAgreed: true,
     })
     expect(a.kind).toBe('analysis')
+  })
+  it('preserves unlocated steps and Unicode math in a complete response', () => {
+    const response = AnalyzeResponseSchema.parse({
+      kind: 'analysis',
+      steps: [
+        { index: 41, latex: 'x^2', plain: 'x²', yBandTopPct: 10, yBandBottomPct: 20, verdict: 'ok' },
+        { index: 7, latex: 'x - 1', plain: 'x − 1', verdict: 'wrong' },
+      ],
+      errorStepIndex: 7,
+      misconceptionTag: 'sign-error',
+      explanation: 'The sign changed before x².',
+      followUp: { problem: 'Simplify −(x² + 1).', concept: 'signs', hint: 'Distribute the negative.' },
+      verifierAgreed: true,
+    })
+
+    if (response.kind !== 'analysis') throw new Error('expected analysis')
+    expect(response.steps).toEqual([
+      { index: 41, latex: 'x^2', plain: 'x²', yBandTopPct: 10, yBandBottomPct: 20, verdict: 'ok' },
+      { index: 7, latex: 'x - 1', plain: 'x − 1', verdict: 'wrong' },
+    ])
+  })
+  it('rejects a half-present band in a complete response', () => {
+    expect(() => AnalyzeResponseSchema.parse({
+      kind: 'analysis',
+      steps: [{ index: 7, latex: 'x - 1', plain: 'x − 1', yBandTopPct: 20, verdict: 'wrong' }],
+      errorStepIndex: 7,
+      misconceptionTag: 'sign-error',
+      explanation: 'The sign changed.',
+      followUp: { problem: 'Simplify −(x + 1).', concept: 'signs', hint: 'Distribute the negative.' },
+      verifierAgreed: true,
+    })).toThrow('both band endpoints are required together')
   })
   it('rejects an incomplete analysis diagnosis', () => {
     expect(() => AnalyzeResponseSchema.parse({

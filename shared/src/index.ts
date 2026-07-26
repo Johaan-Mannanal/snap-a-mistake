@@ -33,14 +33,35 @@ const StepFieldsSchema = z.object({
   index: z.number().int().min(0),
   latex: z.string(),
   plain: z.string(),
-  yBandTopPct: z.number().min(0).max(100),
-  yBandBottomPct: z.number().min(0).max(100),
+  yBandTopPct: z.number().min(0).max(100).optional(),
+  yBandBottomPct: z.number().min(0).max(100).optional(),
 })
 function validateVerticalBand(
-  value: { yBandTopPct: number; yBandBottomPct: number },
+  value: { yBandTopPct?: number; yBandBottomPct?: number },
   ctx: z.RefinementCtx,
 ) {
-  if (value.yBandTopPct > value.yBandBottomPct)
+  const top = value.yBandTopPct
+  const bottom = value.yBandBottomPct
+  const hasTop = top !== undefined
+  const hasBottom = bottom !== undefined
+  if (hasTop !== hasBottom) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [hasTop ? 'yBandBottomPct' : 'yBandTopPct'],
+      message: 'both band endpoints are required together',
+    })
+    return
+  }
+  if (!hasTop || !hasBottom) return
+  if (top === bottom) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['yBandTopPct'],
+      message: 'yBandTopPct must be less than yBandBottomPct',
+    })
+    return
+  }
+  if (top > bottom)
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['yBandTopPct'],

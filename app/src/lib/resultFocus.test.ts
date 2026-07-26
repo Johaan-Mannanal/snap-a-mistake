@@ -22,6 +22,15 @@ describe('focusedStepIndexes', () => {
     expect(focusedStepIndexes([step(0), step(2, 'wrong'), step(5, 'downstream'), step(9, 'downstream')], 2)).toEqual([0, 2, 5])
   })
 
+  it('uses response order when opaque step identities are sparse and non-monotonic', () => {
+    expect(focusedStepIndexes([
+      step(41),
+      step(7, 'wrong'),
+      step(103, 'downstream'),
+      step(2, 'downstream'),
+    ], 7)).toEqual([41, 7, 103])
+  })
+
   it('does not invent a downstream step after the final diagnosis', () => {
     expect(focusedStepIndexes([step(1), step(4), step(7, 'wrong')], 7)).toEqual([4, 7])
   })
