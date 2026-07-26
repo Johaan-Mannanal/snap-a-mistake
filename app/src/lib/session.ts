@@ -173,7 +173,7 @@ export function startFollowUp(parentScanId: string, followUp: FollowUp, options:
     session = next
     return Promise.resolve(true)
   }
-  return sessionRepository.commitActiveSessionIfCurrent(persisted(next), isCurrent).then((committed) => {
+  return sessionRepository.commitFollowUpStartIfCurrent(parentScanId, persisted(next), 'in-progress', isCurrent).then((committed) => {
     if (committed) session = next
     return committed
   })

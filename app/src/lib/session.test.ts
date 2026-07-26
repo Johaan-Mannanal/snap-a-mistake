@@ -25,6 +25,7 @@ class MemorySessionRepository {
   states = new Map<string, unknown>()
   deleted: string[] = []
   failDelete = false
+  followUpStartCommit = true
 
   async getState<T>(key: string, schema: { safeParse(value: unknown): { success: boolean; data?: T } }): Promise<T | null> {
     const value = key === 'active-session' ? this.state : (this.states.get(key) ?? null)
@@ -37,8 +38,9 @@ class MemorySessionRepository {
     else this.states.set(key, value)
   }
 
-  async commitActiveSessionIfCurrent(value: unknown, isCurrent: () => boolean): Promise<boolean> {
+  async commitFollowUpStartIfCurrent(_parentScanId: string, value: unknown, _targetStatus: 'in-progress', isCurrent: () => boolean): Promise<boolean> {
     if (!isCurrent()) return false
+    if (!this.followUpStartCommit) return false
     this.state = value
     return true
   }
@@ -125,6 +127,17 @@ describe('session', () => {
       analysis: null, followUp: withFollowUp.followUp, parentScanId: 'scan-1',
     })
     expect(getSession()).toMatchObject({ routeIntent: 'follow-up', parentScanId: 'scan-1', followUp: withFollowUp.followUp })
+  })
+
+  it('does not update in-memory session when the atomic follow-up handoff does not commit', async () => {
+    const repository = new MemorySessionRepository()
+    repository.followUpStartCommit = false
+    await hydrateSession(repository as unknown as ScanRepository)
+
+    await expect(startFollowUp('scan-1', withFollowUp.followUp!)).resolves.toBe(false)
+
+    expect(repository.state).toBeNull()
+    expect(getSession()).toMatchObject({ routeIntent: 'capture', parentScanId: null, followUp: null })
   })
 
   it('keeps the parent link when a follow-up moves from camera capture into review', async () => {

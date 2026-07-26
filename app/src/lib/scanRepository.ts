@@ -43,7 +43,7 @@ export interface ScanRepository {
   clearAll(): Promise<string[]>
   getCleanupQueue(): Promise<string[]>
   acknowledgeCleanup(imageUri: string): Promise<void>
-  commitActiveSessionIfCurrent(session: PersistedSession, isCurrent: () => boolean): Promise<boolean>
+  commitFollowUpStartIfCurrent(parentScanId: string, session: PersistedSession, targetStatus: FollowUpStatus, isCurrent: () => boolean): Promise<boolean>
   getState<T>(key: string, schema: z.ZodType<T>): Promise<T | null>
   setState<T>(key: string, value: T): Promise<void>
   deleteState(key: string): Promise<void>
@@ -81,7 +81,7 @@ type RevisionRow = {
 const SCHEMA_VERSION = 2
 const ACTIVE_SESSION_KEY = 'active-session'
 
-class ActiveSessionStaleError extends Error {}
+class FollowUpStartStaleError extends Error {}
 
 const scanSelect = `
   SELECT id, image_uri, origin, attempt_kind, parent_scan_id, lifecycle,
@@ -490,20 +490,40 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       ).then(() => undefined))
     },
 
-    async commitActiveSessionIfCurrent(session, isCurrent): Promise<boolean> {
+    async commitFollowUpStartIfCurrent(parentScanId, session, targetStatus, isCurrent): Promise<boolean> {
+      if (session.routeIntent !== 'follow-up' || session.parentScanId !== parentScanId || session.followUp === null)
+        throw new Error('follow-up session does not match its parent scan')
+      if (targetStatus !== 'in-progress') throw new Error('follow-up starts must target in-progress')
       try {
         return await db.withExclusiveTransactionAsync(async (transaction) => {
-          if (!isCurrent()) return false
+          const requireCurrent = () => {
+            if (!isCurrent()) throw new FollowUpStartStaleError()
+          }
+
+          requireCurrent()
+          const parent = await requireRecord(transaction, parentScanId)
+          if (parent.followUp === null || (parent.followUpStatus !== 'ready' && parent.followUpStatus !== 'in-progress'))
+            throw new Error('parent scan is not ready for a follow-up start')
+          requireCurrent()
+
+          if (parent.followUpStatus !== targetStatus) {
+            await transaction.runAsync(
+              'UPDATE scans SET follow_up_status = ?, updated_at = ? WHERE id = ?',
+              [targetStatus, now(), parentScanId],
+            )
+          }
+          requireCurrent()
+
           await transaction.runAsync(
             `INSERT INTO app_state (key, value_json) VALUES (?, ?)
              ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
             [ACTIVE_SESSION_KEY, JSON.stringify(session)],
           )
-          if (!isCurrent()) throw new ActiveSessionStaleError()
+          requireCurrent()
           return true
         })
       } catch (error) {
-        if (error instanceof ActiveSessionStaleError) return false
+        if (error instanceof FollowUpStartStaleError) return false
         throw error
       }
     },

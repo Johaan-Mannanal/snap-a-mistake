@@ -54,7 +54,7 @@ export default function FollowUp() {
     return () => {
       mounted.current = false
       alternateRequest.current?.abort()
-      void checkFence.current.invalidate()
+      void checkFence.current.invalidate().catch(() => {})
     }
   }, [])
 
@@ -126,11 +126,8 @@ export default function FollowUp() {
         if (!owns()) return
         const persisted = await startFollowUp(parentScanId, practice.followUp, { isCurrent: owns })
         if (!persisted || !owns()) return
-        await getLocalScanRepository().setFollowUpStatus(parentScanId, 'in-progress', owns)
-        if (!owns()) return
         router.dismissTo('/')
       } catch (error) {
-        if (!owns() && error instanceof Error && error.message === 'follow-up status is no longer current') return
         if (owns()) setCheckFailure('We couldn’t prepare your follow-up attempt. Your problem is still here; try again.')
         throw error
       } finally {

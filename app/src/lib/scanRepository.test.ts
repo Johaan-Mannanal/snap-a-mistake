@@ -19,6 +19,10 @@ class MemoryDatabase implements DatabasePort {
   failActiveSessionWrite = false
   exclusiveGate: Promise<void> | null = null
   activeSessionWriteGate: Promise<void> | null = null
+  activeSessionAfterWriteGate: Promise<void> | null = null
+  followUpStatusAfterWriteGate: Promise<void> | null = null
+  onActiveSessionWritten: (() => void) | null = null
+  onFollowUpStatusWritten: (() => void) | null = null
 
   async execAsync(sql: string): Promise<void> {
     for (const statement of sql.split(';').map((part) => part.trim()).filter(Boolean)) {
@@ -79,6 +83,8 @@ class MemoryDatabase implements DatabasePort {
       const scan = this.scans.get(String(id))
       if (!scan) return { changes: 0 }
       Object.assign(scan, { follow_up_status: followUpStatus, updated_at: updatedAt })
+      this.onFollowUpStatusWritten?.()
+      if (this.followUpStatusAfterWriteGate) await this.followUpStatusAfterWriteGate
       return { changes: 1 }
     }
     if (normalized.startsWith('insert') && normalized.includes('into cleanup_queue')) {
@@ -117,6 +123,8 @@ class MemoryDatabase implements DatabasePort {
       if (String(params[0]) === 'active-session' && this.failActiveSessionWrite) throw new Error('state unavailable')
       if (String(params[0]) === 'active-session' && this.activeSessionWriteGate) await this.activeSessionWriteGate
       this.appState.set(String(params[0]), String(params[1]))
+      if (String(params[0]) === 'active-session') this.onActiveSessionWritten?.()
+      if (String(params[0]) === 'active-session' && this.activeSessionAfterWriteGate) await this.activeSessionAfterWriteGate
       return { changes: 1 }
     }
     throw new Error(`Unhandled run: ${sql}`)
@@ -522,57 +530,104 @@ describe('scan repository records', () => {
   })
 })
 
-describe('conditional active-session commits', () => {
-  it('performs no write when ownership is invalid before the transaction starts', async () => {
+describe('atomic follow-up starts', () => {
+  async function parentReady(repository: ReturnType<typeof createScanRepository>) {
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+  }
+
+  it('performs no write when Back invalidates ownership before the transaction starts', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)
     await repository.migrate()
+    await parentReady(repository)
 
-    await expect(repository.commitActiveSessionIfCurrent(followUpSession(), () => false)).resolves.toBe(false)
+    await expect(repository.commitFollowUpStartIfCurrent('parent', followUpSession(), 'in-progress', () => false)).resolves.toBe(false)
 
     expect(db.appState.has('active-session')).toBe(false)
+    expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
   })
 
   it('performs no write when invalidated while waiting for the exclusive transaction', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)
     await repository.migrate()
+    await parentReady(repository)
     let release!: () => void
     db.exclusiveGate = new Promise<void>((resolve) => { release = resolve })
     let current = true
 
-    const pending = repository.commitActiveSessionIfCurrent(followUpSession(), () => current)
+    const pending = repository.commitFollowUpStartIfCurrent('parent', followUpSession(), 'in-progress', () => current)
     current = false
     release()
 
     await expect(pending).resolves.toBe(false)
     expect(db.appState.has('active-session')).toBe(false)
+    expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
   })
 
-  it('rolls back instead of compensating when invalidated after ownership check but before write completion', async () => {
+  it('rolls back both writes when Back occurs between the parent status and active-session writes', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)
     await repository.migrate()
+    await parentReady(repository)
     let release!: () => void
-    db.activeSessionWriteGate = new Promise<void>((resolve) => { release = resolve })
+    db.followUpStatusAfterWriteGate = new Promise<void>((resolve) => { release = resolve })
+    const statusWritten = new Promise<void>((resolve) => { db.onFollowUpStatusWritten = resolve })
     let current = true
 
-    const pending = repository.commitActiveSessionIfCurrent(followUpSession(), () => current)
+    const pending = repository.commitFollowUpStartIfCurrent('parent', followUpSession(), 'in-progress', () => current)
+    await statusWritten
     current = false
     release()
 
     await expect(pending).resolves.toBe(false)
     expect(db.appState.has('active-session')).toBe(false)
+    expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
   })
 
-  it('propagates a database failure without writing a follow-up session', async () => {
+  it('rolls back both writes when Back occurs after app_state is written but before commit', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)
     await repository.migrate()
+    await parentReady(repository)
+    let release!: () => void
+    db.activeSessionAfterWriteGate = new Promise<void>((resolve) => { release = resolve })
+    const sessionWritten = new Promise<void>((resolve) => { db.onActiveSessionWritten = resolve })
+    let current = true
+
+    const pending = repository.commitFollowUpStartIfCurrent('parent', followUpSession(), 'in-progress', () => current)
+    await sessionWritten
+    current = false
+    release()
+
+    await expect(pending).resolves.toBe(false)
+    expect(db.appState.has('active-session')).toBe(false)
+    expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
+  })
+
+  it('commits the parent status and follow-up session together before handoff', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await parentReady(repository)
+
+    await expect(repository.commitFollowUpStartIfCurrent('parent', followUpSession(), 'in-progress', () => true)).resolves.toBe(true)
+
+    expect((await repository.get('parent'))?.followUpStatus).toBe('in-progress')
+    expect(JSON.parse(db.appState.get('active-session') ?? 'null')).toEqual(followUpSession())
+  })
+
+  it('propagates database failure and rolls back both the status and follow-up session for retry', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await parentReady(repository)
     db.failActiveSessionWrite = true
 
-    await expect(repository.commitActiveSessionIfCurrent(followUpSession(), () => true)).rejects.toThrow('state unavailable')
+    await expect(repository.commitFollowUpStartIfCurrent('parent', followUpSession(), 'in-progress', () => true)).rejects.toThrow('state unavailable')
 
     expect(db.appState.has('active-session')).toBe(false)
+    expect((await repository.get('parent'))?.followUpStatus).toBe('ready')
   })
 })

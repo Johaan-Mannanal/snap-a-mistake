@@ -99,6 +99,15 @@ describe('follow-up check fence', () => {
 
     expect(effects).toEqual(['persist-session'])
   })
+
+  it('consumes a rejecting tracked task during unmount-style invalidation', async () => {
+    const fence = createFollowUpCheckFence()
+    const run = fence.begin()
+    const task = Promise.reject(new Error('state unavailable'))
+    fence.track(run, task)
+
+    await expect(fence.invalidate()).rejects.toThrow('state unavailable')
+  })
 })
 
 describe('follow-up leave lock', () => {
