@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, findNodeHandle, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, findNodeHandle, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import type { AnalyzeResponse } from '@snap/shared'
 import type { ApiFailure } from '../lib/api'
 import { correctionFailurePresentation, correctionStepOptions } from '../ui/diagnosisFeedback'
@@ -62,31 +63,33 @@ export function DiagnosisFeedback(props: {
       {props.busy ? <AppButton label="Cancel correction" onPress={props.onCancelRequest} variant="tertiary" /> : null}
       {props.failure ? <FeedbackFailure failure={props.failure} onRetry={props.onRetry} onCancel={props.onCancelRequest} /> : null}
       <Modal visible={open} transparent animationType={props.reduceMotion ? 'none' : 'slide'} onRequestClose={dismiss}>
-        <View style={styles.backdrop}>
+        <SafeAreaView edges={['bottom']} style={styles.backdrop}>
           <View accessibilityViewIsModal style={styles.sheet}>
-            <View ref={titleRef} accessible accessibilityRole="header">
-              <Text style={styles.eyebrow}>SECOND LOOK</Text>
-              <Text style={styles.title}>Choose the step that needs a second look</Text>
-            </View>
-            <View accessibilityRole="list" style={styles.list}>
-              {correctionStepOptions(props.response).map((step) => (
-                <Pressable
-                  key={step.index}
-                  accessibilityRole="button"
-                  accessibilityLabel={step.label}
-                  disabled={props.busy}
-                  onPress={() => { dismiss(); props.onCorrectStep(step.index) }}
-                  style={({ pressed }) => [styles.step, pressed && styles.pressed]}
-                >
-                  <Text style={styles.stepText}>{step.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <AppButton label="All steps are correct" onPress={() => { dismiss(); props.onAllCorrect() }} disabled={props.busy} variant="secondary" />
-            <AppButton label="The relevant step wasn’t captured" onPress={() => { dismiss(); props.onNotCaptured() }} disabled={props.busy} variant="tertiary" />
-            <AppButton label="Cancel" onPress={dismiss} disabled={props.busy} variant="tertiary" />
+            <ScrollView contentContainerStyle={styles.sheetContent} showsVerticalScrollIndicator>
+              <View ref={titleRef} accessible accessibilityRole="header">
+                <Text style={styles.eyebrow}>SECOND LOOK</Text>
+                <Text style={styles.title}>Choose the step that needs a second look</Text>
+              </View>
+              <View accessibilityRole="list" style={styles.list}>
+                {correctionStepOptions(props.response).map((step) => (
+                  <Pressable
+                    key={step.index}
+                    accessibilityRole="button"
+                    accessibilityLabel={step.label}
+                    disabled={props.busy}
+                    onPress={() => { dismiss(); props.onCorrectStep(step.index) }}
+                    style={({ pressed }) => [styles.step, pressed && styles.pressed]}
+                  >
+                    <Text style={styles.stepText}>{step.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <AppButton label="All steps are correct" onPress={() => { dismiss(); props.onAllCorrect() }} disabled={props.busy} variant="secondary" />
+              <AppButton label="The relevant step wasn’t captured" onPress={() => { dismiss(); props.onNotCaptured() }} disabled={props.busy} variant="tertiary" />
+              <AppButton label="Cancel" onPress={dismiss} disabled={props.busy} variant="tertiary" />
+            </ScrollView>
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
     </View>
   )
@@ -112,7 +115,8 @@ const styles = StyleSheet.create({
   notQuiteText: { color: colors.chalk, fontSize: 15, fontWeight: '700' },
   pressed: { opacity: 0.7 },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0, 0, 0, 0.72)' },
-  sheet: { gap: spacing.md, backgroundColor: colors.graphite, borderTopLeftRadius: radii.lg, borderTopRightRadius: radii.lg, padding: spacing.xl },
+  sheet: { maxHeight: '92%', backgroundColor: colors.graphite, borderTopLeftRadius: radii.lg, borderTopRightRadius: radii.lg },
+  sheetContent: { gap: spacing.md, padding: spacing.xl, paddingBottom: spacing.xxl },
   eyebrow: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1.4 },
   title: { color: colors.chalk, fontSize: 24, fontWeight: '700', lineHeight: 30, marginTop: spacing.xs },
   list: { gap: spacing.xs },

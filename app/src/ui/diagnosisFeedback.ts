@@ -7,6 +7,13 @@ export function canRequestDiagnosisFeedback(response: AnalyzeResponse): response
   return response.kind === 'analysis' && response.errorStepIndex !== null
 }
 
+export function isDurableFeedbackAvailable(
+  response: AnalyzeResponse,
+  state: { revisionId: string | null; isSaving: boolean; unsaved: boolean },
+): response is AnalysisResponse {
+  return canRequestDiagnosisFeedback(response) && state.revisionId !== null && !state.isSaving && !state.unsaved
+}
+
 export function correctionStepOptions(response: AnalysisResponse): Array<{ index: number; label: string }> {
   return response.steps.map((step) => ({ index: step.index, label: readableStep(step) }))
 }

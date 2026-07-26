@@ -7,6 +7,7 @@ import { getLocalScanRepository, recordAnalysis } from '../src/lib/history'
 import { adoptResultSession, adoptReviewSession, getSession, persistAnalysis, resetSession, resultSession, reviewSession } from '../src/lib/session'
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
 import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
+import { createCorrectionFence, type CorrectionRun } from '../src/lib/correctionAsync'
 import { createAnalysisFinalization, createCompletedReviewReturn } from '../src/lib/analysisFinalization'
 import type { ScanRevision } from '../src/lib/scanTypes'
 import { tagLabel } from '../src/lib/labels'
@@ -21,7 +22,7 @@ import { DiagnosisFeedback } from '../src/components/DiagnosisFeedback'
 import { analysisPresentation, analysisRecoveryPresentation } from '../src/ui/presentation'
 import { colors, spacing } from '../src/ui/theme'
 import { expandStepIndex, initialExpandedStepIndexes, selectStepIndex, toggleExpandedStepIndexes } from '../src/lib/resultInteraction'
-import { canRequestDiagnosisFeedback, synthesizeAllCorrectResponse } from '../src/ui/diagnosisFeedback'
+import { isDurableFeedbackAvailable, synthesizeAllCorrectResponse } from '../src/ui/diagnosisFeedback'
 
 type RecoverableFailure = ApiFailure | { kind: 'persistence' }
 
@@ -56,10 +57,11 @@ export default function Analyze() {
   const [feedbackBusy, setFeedbackBusy] = useState(false)
   const [correctionFailure, setCorrectionFailure] = useState<ApiFailure | null>(null)
   const [feedbackAccepted, setFeedbackAccepted] = useState(false)
+  const [durableResultRevisionId, setDurableResultRevisionId] = useState<string | null>(null)
   const { photoUri: uri, pendingScanId: scanId } = getSession()
   const resetTransition = useRef<(() => Promise<void>) | null>(null)
   const activeRequest = useRef<AbortController | null>(null)
-  const correctionRequest = useRef<AbortController | null>(null)
+  const correctionFence = useRef(createCorrectionFence())
   const feedbackLock = useRef(createAsyncLock<void>())
   const retryCorrection = useRef<(() => void) | null>(null)
   const requestInFlight = useRef(false)
@@ -82,16 +84,25 @@ export default function Analyze() {
     mounted.current && runFence.current.owns(token) && finalization.current.isActive()
   ), [])
 
+  const ownsCorrection = useCallback((run: CorrectionRun, analysis: Extract<AnalyzeResponse, { kind: 'analysis' }>) => (
+    mounted.current
+    && correctionFence.current.owns(run)
+    && getSession().pendingScanId === run.scanId
+    && JSON.stringify(getSession().analysis) === JSON.stringify(analysis)
+  ), [])
+
   const persistPendingSave = useCallback(async (pending: PendingSave, token: number) => {
     await saveLock.current.run(async () => {
       if (!owns(token)) return
       if (mounted.current) setIsSaving(true)
       try {
         if (!owns(token)) return
-        await getLocalScanRepository().saveRevision(scanId!, pending.revision, pending.durationMs)
+        const saved = await getLocalScanRepository().saveRevision(scanId!, pending.revision, pending.durationMs)
         if (!owns(token)) return
+        if (saved.activeRevision?.id !== pending.revision.id) throw new Error('saved revision is not active')
         await persistAnalysis(scanId!, pending.response, pending.durationMs)
         if (!owns(token)) return
+        setDurableResultRevisionId(pending.revision.id)
         if (mounted.current) setUnsaved(false)
         finalization.current.markSuccessfulHandoff()
         if (pending.response.kind === 'analysis' && !pending.historyRecorded) {
@@ -104,6 +115,7 @@ export default function Analyze() {
         }
       } catch {
         if (!owns(token)) return
+        setDurableResultRevisionId(null)
         if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'unsaved').catch(() => {})
         if (!owns(token)) return
         if (mounted.current) setUnsaved(true)
@@ -124,7 +136,7 @@ export default function Analyze() {
   const returnToReview = useCallback(() => {
     runFence.current.invalidate()
     activeRequest.current?.abort()
-    return finalization.current.cancel(finalizationDependencies(true)).then(
+    return correctionFence.current.invalidate().then(() => finalization.current.cancel(finalizationDependencies(true))).then(
       () => { if (mounted.current) setReviewReturnFailed(false) },
       () => { if (mounted.current) setReviewReturnFailed(true) },
     )
@@ -135,10 +147,10 @@ export default function Analyze() {
       setCompletedReturnFailed(false)
       setIsReturningCompleted(true)
     }
-    return completedReturn.current.returnToReview({
+    return correctionFence.current.invalidate().then(() => completedReturn.current.returnToReview({
       restoreReview: () => resetSession({ preserveDraft: true }),
       navigate: () => { if (mounted.current) router.replace('/review') },
-    }).then(
+    })).then(
       () => { if (mounted.current) setIsReturningCompleted(false) },
       () => {
         if (mounted.current) {
@@ -161,10 +173,12 @@ export default function Analyze() {
       setFailure(null)
       setUnsaved(false)
       setResult(null)
+      setDurableResultRevisionId(null)
       setElapsedSeconds(0)
     }
     const task = (async () => {
       try {
+        await correctionFence.current.invalidate()
         if (!owns(token)) return
         const scan = await getLocalScanRepository().setLifecycle(scanId, 'analyzing')
         if (!owns(token)) return
@@ -232,6 +246,7 @@ export default function Analyze() {
     mounted.current = false
     runFence.current.invalidate()
     activeRequest.current?.abort()
+    void correctionFence.current.invalidate()
     finalization.current.abandon(finalizationDependencies(false))
   }, [finalizationDependencies])
 
@@ -247,7 +262,11 @@ export default function Analyze() {
   const snapAnother = useCallback(() => {
     setIsResetting(true)
     setResetFailed(false)
-    void resetTransition.current!().catch(() => {
+    void (async () => {
+      await correctionFence.current.invalidate()
+      await resetTransition.current!()
+    })().catch(() => {
+      if (!mounted.current) return
       setIsResetting(false)
       setResetFailed(true)
     })
@@ -271,41 +290,49 @@ export default function Analyze() {
   }, [scanId])
 
   const submitCorrection = useCallback((analysis: Extract<AnalyzeResponse, { kind: 'analysis' }>, selectedStepIndex: number, replacement?: Extract<AnalyzeResponse, { kind: 'analysis' }>) => {
-    if (!scanId || !uri || feedbackLock.current.busy) return
+    if (!scanId || !uri || durableResultRevisionId === null || feedbackLock.current.busy) return
     const execute = () => {
-      void feedbackLock.current.run(async () => {
+      const correction = correctionFence.current.begin(scanId)
+      const task = feedbackLock.current.run(async () => {
+        if (!ownsCorrection(correction, analysis)) return
         setFeedbackBusy(true)
         setCorrectionFailure(null)
-        const controller = new AbortController()
-        correctionRequest.current = controller
         const startedAt = Date.now()
         try {
           const activeScan = await getLocalScanRepository().get(scanId)
+          if (!ownsCorrection(correction, analysis)) return
           const activeRevision = activeScan?.activeRevision
-          if (!activeRevision || activeRevision.feedback === 'rejected' || JSON.stringify(activeRevision.response) !== JSON.stringify(analysis))
-            throw new Error('the displayed diagnosis is no longer active')
-          const next = replacement ?? await correctDiagnosis(uri, { analysis, selectedStepIndex }, { signal: controller.signal })
-          if (controller.signal.aborted) throw new ApiError({ kind: 'cancelled' })
+          if (!activeRevision || activeRevision.id !== durableResultRevisionId || activeRevision.feedback === 'rejected' || JSON.stringify(activeRevision.response) !== JSON.stringify(analysis)) return
+          const next = replacement ?? await correctDiagnosis(uri, { analysis, selectedStepIndex }, { signal: correction.controller.signal })
+          if (!ownsCorrection(correction, analysis)) return
           if (next.kind !== 'analysis') throw new ApiError({ kind: 'invalid-response', status: 200 })
           const revision: ScanRevision = {
             id: allocateRevisionId(), reason: 'student-correction', response: next, feedback: 'corrected', createdAt: new Date().toISOString(),
           }
+          if (!ownsCorrection(correction, analysis)) return
           const resultState = resultSession(scanId, next)
-          await getLocalScanRepository().applyCorrection(scanId, activeRevision.id, revision, Math.max(0, Date.now() - startedAt), resultState)
+          if (!ownsCorrection(correction, analysis)) return
+          await getLocalScanRepository().applyCorrection(
+            scanId, activeRevision.id, revision, Math.max(0, Date.now() - startedAt), resultState,
+            () => ownsCorrection(correction, analysis),
+          )
+          if (!ownsCorrection(correction, analysis)) return
           adoptResultSession(scanId, next)
+          if (!ownsCorrection(correction, analysis)) return
+          setDurableResultRevisionId(revision.id)
           setResult(next)
         } catch (error) {
-          if (error instanceof ApiError && error.failure.kind === 'cancelled') return
+          if (!ownsCorrection(correction, analysis) || (error instanceof ApiError && error.failure.kind === 'cancelled')) return
           setCorrectionFailure(error instanceof ApiError ? error.failure : { kind: 'network' })
         } finally {
-          correctionRequest.current = null
-          setFeedbackBusy(false)
+          if (ownsCorrection(correction, analysis)) setFeedbackBusy(false)
         }
       })
+      correctionFence.current.track(correction, task)
     }
     retryCorrection.current = execute
     execute()
-  }, [scanId, uri])
+  }, [durableResultRevisionId, ownsCorrection, scanId, uri])
 
   const excludeDiagnosis = useCallback(() => {
     if (!scanId || feedbackLock.current.busy) return
@@ -313,6 +340,7 @@ export default function Analyze() {
     void feedbackLock.current.run(async () => {
       setFeedbackBusy(true)
       try {
+        await correctionFence.current.invalidate()
         await getLocalScanRepository().excludeDiagnosis(scanId, reviewSession())
         adoptReviewSession()
         retryCorrection.current = null
@@ -326,8 +354,7 @@ export default function Analyze() {
   }, [scanId])
 
   const cancelCorrection = useCallback(() => {
-    correctionRequest.current?.abort()
-    correctionRequest.current = null
+    void correctionFence.current.invalidate()
     setCorrectionFailure(null)
   }, [])
 
@@ -528,7 +555,7 @@ export default function Analyze() {
         <Text style={styles.diagnosisDetail}>{presentation.detail}</Text>
       </View>
       {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} /> : null}
-      {canRequestDiagnosisFeedback(result) && !feedbackAccepted ? (
+      {isDurableFeedbackAvailable(result, { revisionId: durableResultRevisionId, isSaving, unsaved }) && !feedbackAccepted ? (
         <DiagnosisFeedback
           response={result}
           busy={feedbackBusy}

@@ -4,6 +4,7 @@ import {
   canRequestDiagnosisFeedback,
   correctionFailurePresentation,
   correctionStepOptions,
+  isDurableFeedbackAvailable,
   synthesizeAllCorrectResponse,
 } from './diagnosisFeedback'
 
@@ -28,6 +29,12 @@ describe('diagnosis feedback', () => {
       { index: 0, label: 'Step 1: x plus 1' },
       { index: 3, label: 'Step 4: x minus 1' },
     ])
+  })
+
+  it('waits for the displayed diagnosis revision to be saved and active before enabling feedback', () => {
+    expect(isDurableFeedbackAvailable(diagnosis, { revisionId: null, isSaving: true, unsaved: false })).toBe(false)
+    expect(isDurableFeedbackAvailable(diagnosis, { revisionId: null, isSaving: false, unsaved: true })).toBe(false)
+    expect(isDurableFeedbackAvailable(diagnosis, { revisionId: 'revision-1', isSaving: false, unsaved: false })).toBe(true)
   })
 
   it('synthesizes a schema-valid all-correct revision without stale diagnosis copy', () => {

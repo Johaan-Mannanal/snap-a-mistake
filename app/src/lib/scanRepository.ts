@@ -31,7 +31,7 @@ export interface ScanRepository {
   createDraft(input: NewScanDraft): Promise<ScanRecord>
   setLifecycle(scanId: string, lifecycle: Extract<ScanLifecycle, 'analyzing' | 'interrupted' | 'unsaved'>): Promise<ScanRecord>
   saveRevision(scanId: string, revision: ScanRevision, durationMs: number): Promise<ScanRecord>
-  applyCorrection(scanId: string, rejectedRevisionId: string, revision: ScanRevision, durationMs: number, session?: PersistedSession): Promise<ScanRecord>
+  applyCorrection(scanId: string, rejectedRevisionId: string, revision: ScanRevision, durationMs: number, session?: PersistedSession, isCurrent?: () => boolean): Promise<ScanRecord>
   excludeDiagnosis(scanId: string, session?: PersistedSession): Promise<ScanRecord>
   setFeedback(scanId: string, feedback: FeedbackState): Promise<ScanRecord>
   setFollowUpStatus(scanId: string, status: FollowUpStatus): Promise<ScanRecord>
@@ -257,13 +257,18 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       })
     },
 
-    async applyCorrection(scanId, rejectedRevisionId, revision, durationMs, persistedSession): Promise<ScanRecord> {
+    async applyCorrection(scanId, rejectedRevisionId, revision, durationMs, persistedSession, isCurrent): Promise<ScanRecord> {
       const validatedRevision = ScanRevisionSchema.parse(revision)
       if (validatedRevision.reason !== 'student-correction') throw new Error('correction revisions must use student-correction')
       if (!Number.isInteger(durationMs) || durationMs < 0) throw new Error('durationMs must be a non-negative integer')
       const correctedRevision: ScanRevision = { ...validatedRevision, feedback: 'corrected' }
       return db.withExclusiveTransactionAsync(async (transaction) => {
+        const requireCurrent = () => {
+          if (isCurrent && !isCurrent()) throw new Error('correction is no longer current')
+        }
+        requireCurrent()
         const scan = await requireRecord(transaction, scanId)
+        requireCurrent()
         const rejectedRevision = scan.revisions.find((item) => item.id === rejectedRevisionId)
         if (!rejectedRevision) throw new Error(`revision ${rejectedRevisionId} not found`)
         if (rejectedRevision.feedback === 'rejected') throw new Error('cannot replace a rejected revision')
@@ -272,10 +277,12 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
         if (existing && JSON.stringify(existing) !== JSON.stringify(correctedRevision))
           throw new Error(`revision ${correctedRevision.id} does not match the saved revision`)
         await transaction.runAsync('UPDATE scan_revisions SET feedback = ? WHERE id = ?', ['rejected', rejectedRevisionId])
+        requireCurrent()
         if (!existing) await transaction.runAsync(
           'INSERT INTO scan_revisions (id, scan_id, reason, response_json, feedback, created_at) VALUES (?, ?, ?, ?, ?, ?)',
           [correctedRevision.id, scanId, correctedRevision.reason, JSON.stringify(correctedRevision.response), correctedRevision.feedback, correctedRevision.createdAt],
         )
+        requireCurrent()
         const followUp = responseFollowUp(correctedRevision.response)
         await transaction.runAsync(
           `UPDATE scans SET active_revision_id = ?, lifecycle = ?, analysis_duration_ms = ?, follow_up_json = ?,
@@ -283,12 +290,16 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
           [correctedRevision.id, 'complete', durationMs, followUp === null ? null : JSON.stringify(followUp),
             statusForResponse(correctedRevision.response, scan.followUpStatus), 'corrected', now(), scanId],
         )
+        requireCurrent()
         if (persistedSession) await transaction.runAsync(
           `INSERT INTO app_state (key, value_json) VALUES (?, ?)
            ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
           [ACTIVE_SESSION_KEY, JSON.stringify(persistedSession)],
         )
-        return requireRecord(transaction, scanId)
+        requireCurrent()
+        const record = await requireRecord(transaction, scanId)
+        requireCurrent()
+        return record
       })
     },
 
