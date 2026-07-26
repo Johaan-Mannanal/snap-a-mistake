@@ -468,6 +468,21 @@ describe('scan repository records', () => {
     expect(db.cleanup).toEqual(new Set(['file:///documents/scans/scan-1.jpg']))
   })
 
+  it('clears an active session that references a scan deleted in the same transaction', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft())
+    await repository.setState('active-session', {
+      routeIntent: 'analyze', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: null, followUp: null, parentScanId: null,
+    })
+
+    await repository.delete('scan-1')
+
+    expect(db.appState.has('active-session')).toBe(false)
+  })
+
   it('atomically removes a reviewed draft, queues its owned photo, and clears the active session', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)

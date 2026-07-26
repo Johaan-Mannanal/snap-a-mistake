@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -6,15 +6,23 @@ import { AppButton } from '../src/components/AppButton'
 import { AppIcon } from '../src/components/AppIcon'
 import { InsightsSwitcher, type InsightsSection } from '../src/components/InsightsSwitcher'
 import { ScanHistoryRow } from '../src/components/ScanHistoryRow'
+import { ConfirmAction } from '../src/components/ConfirmAction'
 import { getLocalScanRepository } from '../src/lib/history'
+import { flushCleanupQueue } from '../src/lib/scanFiles'
+import { clearSessionAfterAtomicDiscard } from '../src/lib/session'
 import { summarize } from '../src/lib/trends'
 import { insightsPresentation, type InsightsDataState } from '../src/ui/insightsPresentation'
+import { CLEAR_ALL_CONFIRMATION, DATA_PRIVACY_COPY } from '../src/ui/scanDetail'
 import { colors, spacing, typeScale } from '../src/ui/theme'
 
 export default function Insights() {
   const [section, setSection] = useState<InsightsSection>('patterns')
   const [state, setState] = useState<InsightsDataState>({ kind: 'loading' })
+  const [confirmingClear, setConfirmingClear] = useState(false)
+  const [clearFailure, setClearFailure] = useState<string | null>(null)
   const requestId = useRef(0)
+  const clearInFlight = useRef(false)
+  const clearTriggerRef = useRef<View | null>(null)
 
   const loadHistory = useCallback(() => {
     const currentRequest = ++requestId.current
@@ -38,6 +46,51 @@ export default function Insights() {
 
   const presentation = insightsPresentation(state)
   const header = <InsightsHeader section={section} onSectionChange={setSection} />
+  const retryCleanup = () => {
+    void (async () => {
+      const repository = getLocalScanRepository()
+      await flushCleanupQueue(repository)
+      const stillQueued = (await repository.getCleanupQueue()).length > 0
+      setClearFailure(stillQueued ? 'History is cleared, but one or more saved photos still need cleanup. Try again.' : null)
+      if (!stillQueued) router.dismissTo('/')
+    })().catch(() => setClearFailure('History is cleared, but one or more saved photos still need cleanup. Try again.'))
+  }
+  const clearAll = async () => {
+    if (clearInFlight.current) return
+    clearInFlight.current = true
+    setClearFailure(null)
+    try {
+      const repository = getLocalScanRepository()
+      await repository.clearAll()
+      clearSessionAfterAtomicDiscard()
+      await flushCleanupQueue(repository)
+      const cleanupPending = (await repository.getCleanupQueue()).length > 0
+      setConfirmingClear(false)
+      if (cleanupPending) {
+        setClearFailure('History is cleared, but one or more saved photos still need cleanup. Try again.')
+        loadHistory()
+        return
+      }
+      router.dismissTo('/')
+    } catch {
+      setConfirmingClear(false)
+      setClearFailure('We couldn’t clear local history. Your saved scans are still available. Try again.')
+    } finally {
+      clearInFlight.current = false
+    }
+  }
+  const privacy = <DataPrivacy clearTriggerRef={clearTriggerRef} clearFailure={clearFailure} onClear={() => setConfirmingClear(true)} onRetryCleanup={retryCleanup} />
+  const confirmation = (
+    <ConfirmAction
+      visible={confirmingClear}
+      title="Clear all history?"
+      copy={CLEAR_ALL_CONFIRMATION}
+      confirmLabel="Clear all history"
+      restoreFocusRef={clearTriggerRef}
+      onCancel={() => setConfirmingClear(false)}
+      onConfirm={clearAll}
+    />
+  )
 
   if (section === 'scans') {
     const scans = presentation.kind === 'ready' && presentation.scans.kind === 'list' ? presentation.scans.items : []
@@ -49,10 +102,12 @@ export default function Insights() {
           keyExtractor={(item) => item.id}
           ListHeaderComponent={header}
           ListEmptyComponent={<HistoryState presentation={presentation} onRetry={loadHistory} />}
+          ListFooterComponent={privacy}
           renderItem={({ item }) => (
             <ScanHistoryRow item={item} onPress={() => router.push(`/scan/${encodeURIComponent(item.id)}`)} />
           )}
         />
+        {confirmation}
       </SafeAreaView>
     )
   }
@@ -62,9 +117,13 @@ export default function Insights() {
       <ScrollView contentContainerStyle={styles.content}>
         {header}
         <PatternState presentation={presentation} onRetry={loadHistory} />
+        {privacy}
+        {confirmation}
       </ScrollView>
     </SafeAreaView>
   )
+
+  return null
 }
 
 function InsightsHeader(props: { section: InsightsSection; onSectionChange: (section: InsightsSection) => void }) {
@@ -137,6 +196,38 @@ function EmptyState(props: { presentation: Extract<ReturnType<typeof insightsPre
   )
 }
 
+function DataPrivacy(props: {
+  clearTriggerRef: RefObject<View | null>
+  clearFailure: string | null
+  onClear: () => void
+  onRetryCleanup: () => void
+}) {
+  return (
+    <>
+      <View style={styles.privacy}>
+        <Text style={styles.privacyTitle}>Data and privacy</Text>
+        <Text style={styles.privacyCopy}>{DATA_PRIVACY_COPY}</Text>
+      </View>
+      {props.clearFailure ? (
+        <View accessibilityRole="alert" style={styles.clearFailure}>
+          <Text style={styles.clearFailureCopy}>{props.clearFailure}</Text>
+          <AppButton label="Retry photo cleanup" onPress={props.onRetryCleanup} variant="secondary" />
+        </View>
+      ) : null}
+      <Pressable
+        ref={props.clearTriggerRef}
+        accessibilityRole="button"
+        accessibilityLabel="Clear all local history"
+        accessibilityHint="Permanently removes all saved scans from this device."
+        onPress={props.onClear}
+        style={styles.clearAction}
+      >
+        <Text style={styles.clearActionLabel}>Clear all history</Text>
+      </Pressable>
+    </>
+  )
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.ink },
   content: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: spacing.xxl, gap: spacing.lg },
@@ -156,4 +247,11 @@ const styles = StyleSheet.create({
   patternTitle: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '700' },
   patternDetail: { color: colors.muted, fontSize: typeScale.caption, lineHeight: 18 },
   resolution: { color: colors.success, fontSize: typeScale.caption, fontWeight: '700', lineHeight: 18 },
+  privacy: { gap: spacing.sm, marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.carbon },
+  privacyTitle: { color: colors.chalk, fontSize: typeScale.body, fontWeight: '700' },
+  privacyCopy: { color: colors.muted, fontSize: typeScale.caption, lineHeight: 18 },
+  clearFailure: { gap: spacing.sm, marginTop: spacing.md },
+  clearFailureCopy: { color: colors.error, fontSize: typeScale.body, lineHeight: 22 },
+  clearAction: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', marginTop: spacing.md, paddingVertical: spacing.sm },
+  clearActionLabel: { color: colors.error, fontSize: typeScale.body, fontWeight: '700', textDecorationLine: 'underline' },
 })

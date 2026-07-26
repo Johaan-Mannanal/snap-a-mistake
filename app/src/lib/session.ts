@@ -197,6 +197,11 @@ export async function resetSession(options: { preserveDraft?: boolean } = {}): P
   session = next
 }
 
+export async function clearSessionForDeletedScan(scanId: string): Promise<void> {
+  if (session.pendingScanId !== scanId && session.parentScanId !== scanId) return
+  await resetSession()
+}
+
 export function clearSessionAfterAtomicDiscard(): void {
   session = emptySession()
 }

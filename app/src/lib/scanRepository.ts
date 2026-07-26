@@ -182,6 +182,25 @@ async function requireRecord(db: DatabasePort, scanId: string): Promise<ScanReco
   return scan
 }
 
+async function clearActiveSessionForDeletedScans(db: DatabasePort, deletedScanIds: ReadonlySet<string>): Promise<void> {
+  const active = await db.getFirstAsync<{ value_json: string }>('SELECT value_json FROM app_state WHERE key = ?', [ACTIVE_SESSION_KEY])
+  if (!active) return
+  try {
+    const session = parseJson(active.value_json)
+    if (typeof session !== 'object' || session === null) return
+    const pendingScanDeleted = 'pendingScanId' in session
+      && typeof session.pendingScanId === 'string'
+      && deletedScanIds.has(session.pendingScanId)
+    const parentScanDeleted = 'parentScanId' in session
+      && typeof session.parentScanId === 'string'
+      && deletedScanIds.has(session.parentScanId)
+    if (pendingScanDeleted || parentScanDeleted)
+      await db.runAsync('DELETE FROM app_state WHERE key = ?', [ACTIVE_SESSION_KEY])
+  } catch {
+    // Invalid persisted state is handled during hydration; do not broaden deletion scope.
+  }
+}
+
 export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacyHistory {
   return {
     async migrate(): Promise<void> {
@@ -408,18 +427,19 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
       return db.withExclusiveTransactionAsync(async (transaction) => {
         const scan = await readRecord(transaction, scanId)
         if (!scan) return null
-        const descendants = await transaction.getAllAsync<{ image_uri: string }>(`
+        const descendants = await transaction.getAllAsync<{ id: string; image_uri: string }>(`
           WITH RECURSIVE descendant_scans(id, image_uri) AS (
             SELECT id, image_uri FROM scans WHERE id = ?
             UNION ALL
             SELECT scans.id, scans.image_uri
             FROM scans JOIN descendant_scans ON scans.parent_scan_id = descendant_scans.id
           )
-          SELECT image_uri FROM descendant_scans
+          SELECT id, image_uri FROM descendant_scans
         `, [scanId])
         for (const descendant of descendants)
           await transaction.runAsync('INSERT INTO cleanup_queue (image_uri, created_at) VALUES (?, ?)', [descendant.image_uri, now()])
         await transaction.runAsync('DELETE FROM scans WHERE id = ?', [scanId])
+        await clearActiveSessionForDeletedScans(transaction, new Set(descendants.map((descendant) => descendant.id)))
         return scan.imageUri
       })
     },

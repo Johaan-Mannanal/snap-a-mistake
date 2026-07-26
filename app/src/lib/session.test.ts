@@ -4,6 +4,7 @@ import { PersistedSessionSchema } from './scanTypes'
 import type { ScanRepository } from './scanRepository'
 import {
   acknowledgePrivacyDisclosure,
+  clearSessionForDeletedScan,
   getSession,
   hydrateSession,
   isPrivacyDisclosureAcknowledged,
@@ -218,6 +219,20 @@ describe('session', () => {
       repository.failDelete = false
       await resetSession()
     }
+  })
+
+  it('clears an active session that points at a deleted scan', async () => {
+    const repository = new MemorySessionRepository()
+    repository.state = PersistedSessionSchema.parse({
+      routeIntent: 'result', pendingScanId: 'scan-1', photoUri: 'file:///documents/scans/scan-1.jpg', origin: 'camera',
+      analysis: withFollowUp, followUp: withFollowUp.followUp, parentScanId: null,
+    })
+    await hydrateSession(repository as unknown as ScanRepository)
+
+    await clearSessionForDeletedScan('scan-1')
+
+    expect(getSession()).toMatchObject({ routeIntent: 'capture', pendingScanId: null, parentScanId: null })
+    expect(repository.deleted).toContain('active-session')
   })
 
   it('restores a terminated analysis as an interrupted review that retains the reviewed photo', async () => {
