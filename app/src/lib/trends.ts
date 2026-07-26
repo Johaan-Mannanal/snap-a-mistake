@@ -49,11 +49,13 @@ function weekFor(createdAt: string, now: Date): 'this-week' | 'last-week' | null
   return age < WEEK ? 'this-week' : 'last-week'
 }
 
-function isResolvedByChild(parent: ScanRecord, child: ScanRecord): boolean {
+function isResolvedByChild(parent: ScanRecord, child: ScanRecord, now: Date): boolean {
   const parentAnalysis = activeAnalysis(parent)
   const childAnalysis = activeAnalysis(child)
   const parentRevision = parent.activeRevision
   const childRevision = child.activeRevision
+  const parentRevisionTime = parentRevision === null ? Number.NaN : Date.parse(parentRevision.createdAt)
+  const childRevisionTime = childRevision === null ? Number.NaN : Date.parse(childRevision.createdAt)
   return parent.followUp !== null
     && parent.followUpStatus === 'resolved'
     && parentAnalysis?.misconceptionTag !== null
@@ -63,7 +65,11 @@ function isResolvedByChild(parent: ScanRecord, child: ScanRecord): boolean {
     && childAnalysis !== null
     && parentRevision !== null
     && childRevision !== null
-    && Date.parse(childRevision.createdAt) >= Date.parse(parentRevision.createdAt)
+    && Number.isFinite(parentRevisionTime)
+    && Number.isFinite(childRevisionTime)
+    && parentRevisionTime <= now.getTime()
+    && childRevisionTime <= now.getTime()
+    && childRevisionTime >= parentRevisionTime
     && (childAnalysis.errorStepIndex === null || childAnalysis.misconceptionTag !== parentAnalysis.misconceptionTag)
 }
 
@@ -72,7 +78,7 @@ function resolvedFollowUps(scans: ScanRecord[], now: Date): Map<MisconceptionTag
   for (const parent of scans) {
     const parentAttempt = taggedScanAttempt(parent)
     if (parentAttempt === null || weekFor(parentAttempt.createdAt, now) !== 'this-week') continue
-    if (!scans.some((child) => isResolvedByChild(parent, child))) continue
+    if (!scans.some((child) => isResolvedByChild(parent, child, now))) continue
     resolved.set(parentAttempt.tag, (resolved.get(parentAttempt.tag) ?? 0) + 1)
   }
   return resolved

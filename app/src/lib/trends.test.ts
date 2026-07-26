@@ -119,6 +119,20 @@ describe('summarize', () => {
     ])
   })
 
+  it('credits only valid child resolutions observed no later than now', () => {
+    const parent = scan('parent', 'sign-error', 1, { followUpStatus: 'resolved' })
+    const futureChild = scan('future-child', null, -1, { attemptKind: 'follow-up', parentScanId: 'parent' })
+    const invalidRevision = revision('invalid-child-active', null, 'not-a-date')
+    const invalidChild = scan('invalid-child', null, 0, { attemptKind: 'follow-up', parentScanId: 'parent', activeRevision: invalidRevision, revisions: [invalidRevision] })
+    const exactNowChild = scan('exact-now-child', null, 0, { attemptKind: 'follow-up', parentScanId: 'parent' })
+    const normalChild = scan('normal-child', null, 0.5, { attemptKind: 'follow-up', parentScanId: 'parent' })
+
+    expect(summarize([source(parent), source(futureChild)], now)[0]).toMatchObject({ resolvedFollowUps: 0 })
+    expect(summarize([source(parent), source(invalidChild)], now)[0]).toMatchObject({ resolvedFollowUps: 0 })
+    expect(summarize([source(parent), source(exactNowChild)], now)[0]).toMatchObject({ resolvedFollowUps: 1 })
+    expect(summarize([source(parent), source(normalChild)], now)[0]).toMatchObject({ resolvedFollowUps: 1 })
+  })
+
   it('keeps legacy aggregate rows as distinct migration-era attempts and sorts stable summaries', () => {
     const rows = summarize([
       legacy('sign-error', 1),
