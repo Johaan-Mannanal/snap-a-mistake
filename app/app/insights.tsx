@@ -4,7 +4,7 @@ import { router } from 'expo-router'
 import { AppButton } from '../src/components/AppButton'
 import { AppIcon } from '../src/components/AppIcon'
 import { AppScreen } from '../src/components/AppScreen'
-import { loadHistory } from '../src/lib/history'
+import { getLocalScanRepository } from '../src/lib/history'
 import { tagLabel } from '../src/lib/labels'
 import { summarize, type TagSummary } from '../src/lib/trends'
 import { trendPresentation } from '../src/ui/presentation'
@@ -14,7 +14,7 @@ export default function Insights() {
   const [rows, setRows] = useState<TagSummary[] | null>(null)
 
   useEffect(() => {
-    loadHistory().then((records) => setRows(summarize(records, new Date()))).catch(() => setRows([]))
+    getLocalScanRepository().loadTrendSources().then((sources) => setRows(summarize(sources, new Date()))).catch(() => setRows([]))
   }, [])
 
   return (
@@ -49,7 +49,9 @@ export default function Insights() {
               <View key={row.tag} style={styles.row}>
                 <View style={styles.rowCopy}>
                   <Text style={styles.label}>{tagLabel(row.tag)}</Text>
-                  <Text style={styles.count}>{row.thisWeek} this week</Text>
+                  <Text style={styles.count}>
+                    {row.thisWeek} this week{row.resolvedFollowUps > 0 ? ` · ${row.resolvedFollowUps} follow-up${row.resolvedFollowUps === 1 ? '' : 's'} resolved` : ''}
+                  </Text>
                 </View>
                 <Text style={[styles.trend, { color: trend.color }]}>{trend.symbol} {trend.label}</Text>
               </View>

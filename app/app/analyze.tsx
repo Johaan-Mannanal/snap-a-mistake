@@ -3,7 +3,7 @@ import { AccessibilityInfo, findNodeHandle, Pressable, ScrollView, StyleSheet, T
 import { router } from 'expo-router'
 import type { AnalyzeResponse } from '@snap/shared'
 import { ApiError, type ApiFailure, analyzePhoto, correctDiagnosis } from '../src/lib/api'
-import { getLocalScanRepository, recordAnalysis } from '../src/lib/history'
+import { getLocalScanRepository } from '../src/lib/history'
 import { adoptResultSession, adoptReviewSession, getSession, persistAnalysis, resetSession, resultSession, reviewSession } from '../src/lib/session'
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
 import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
@@ -31,7 +31,6 @@ type PendingSave = {
   response: AnalyzeResponse
   revision: ScanRevision
   durationMs: number
-  historyRecorded: boolean
 }
 
 function allocateRevisionId(): string {
@@ -116,14 +115,6 @@ export default function Analyze() {
         setDurableResultRevisionId(pending.revision.id)
         if (mounted.current) setUnsaved(false)
         finalization.current.markSuccessfulHandoff()
-        if (pending.response.kind === 'analysis' && !pending.historyRecorded) {
-          try {
-            await recordAnalysis({ tag: pending.response.misconceptionTag, correct: pending.response.errorStepIndex === null })
-            pending.historyRecorded = true
-          } catch {
-            // Legacy aggregate history is supplementary; the durable scan revision is already saved.
-          }
-        }
       } catch {
         if (!owns(token)) return
         setDurableResultRevisionId(null)
@@ -202,7 +193,6 @@ export default function Analyze() {
         const pending: PendingSave = {
           response,
           durationMs,
-          historyRecorded: false,
           revision: {
             id: allocateRevisionId(),
             reason: scan.activeRevision ? 'retry' : 'initial',

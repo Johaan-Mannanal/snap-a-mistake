@@ -34,9 +34,10 @@ export function cameraPermissionPresentation(permission: { granted: boolean; can
   }
 }
 
-export function trendPresentation(trend: 'fewer' | 'more' | 'same') {
+export function trendPresentation(trend: 'fewer' | 'more' | 'same' | 'not-enough-data') {
   if (trend === 'fewer') return { label: 'Improving', color: colors.success, symbol: '↗' } as const
   if (trend === 'more') return { label: 'Needs attention', color: colors.error, symbol: '↘' } as const
+  if (trend === 'not-enough-data') return { label: 'Need more evidence', color: colors.muted, symbol: '…' } as const
   return { label: 'Steady', color: colors.muted, symbol: '→' } as const
 }
 

@@ -316,6 +316,28 @@ describe('scan repository records', () => {
     expect((await repository.get('parent'))?.followUpStatus).toBe('resolved')
   })
 
+  it('resets a resolved parent when a correction replaces its active diagnosis', async () => {
+    const db = new MemoryDatabase()
+    const repository = createScanRepository(db)
+    await repository.migrate()
+    await repository.createDraft(draft('parent'))
+    await repository.saveRevision('parent', diagnosisRevision, 400)
+    await repository.createDraft({ ...draft('child'), attemptKind: 'follow-up', parentScanId: 'parent' })
+    await repository.saveRevision('child', revision('child-correct', 'initial'), 410)
+
+    const corrected = await repository.applyCorrection('parent', 'revision-with-follow-up', {
+      id: 'parent-corrected', reason: 'student-correction', feedback: 'corrected', createdAt: '2026-07-24T12:03:00.000Z',
+      response: {
+        kind: 'analysis', steps: [], errorStepIndex: 0, misconceptionTag: 'dropped-term',
+        explanation: 'A term was dropped in the current diagnosis.',
+        followUp: { problem: 'Simplify x + 0.', concept: 'preserving terms', hint: 'Keep each term.' },
+        verifierAgreed: true,
+      },
+    }, 420)
+
+    expect(corrected.followUpStatus).toBe('ready')
+  })
+
   it('leaves a parent unresolved when the child retains the original misconception', async () => {
     const db = new MemoryDatabase()
     const repository = createScanRepository(db)

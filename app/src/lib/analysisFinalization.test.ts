@@ -107,16 +107,16 @@ describe('analysis finalization integration', () => {
     expect(calls).toEqual([])
   })
 
-  it('treats unmount during supplementary history logging as a completed handoff', async () => {
+  it('treats unmount after a completed handoff as a completed handoff', async () => {
     const finalization = createAnalysisFinalization()
     const history = deferred<void>()
     const calls: Calls = []
     const persistence = (async () => {
       calls.push('saveRevision', 'persistAnalysis')
       finalization.markSuccessfulHandoff()
-      calls.push('recordAnalysis')
+      calls.push('postHandoffWork')
       await history.promise
-      calls.push('historyDone')
+      calls.push('postHandoffDone')
     })()
     finalization.track(persistence)
 
@@ -124,7 +124,7 @@ describe('analysis finalization integration', () => {
     history.resolve()
     await finalization.settle()
 
-    expect(calls).toEqual(['saveRevision', 'persistAnalysis', 'recordAnalysis', 'historyDone'])
+    expect(calls).toEqual(['saveRevision', 'persistAnalysis', 'postHandoffWork', 'postHandoffDone'])
   })
 
   it('releases a failed cancellation so returning to review can be retried', async () => {

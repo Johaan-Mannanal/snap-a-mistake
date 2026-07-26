@@ -272,6 +272,7 @@ describe('trendPresentation', () => {
     ['fewer', { label: 'Improving', color: colors.success, symbol: '↗' }],
     ['more', { label: 'Needs attention', color: colors.error, symbol: '↘' }],
     ['same', { label: 'Steady', color: colors.muted, symbol: '→' }],
+    ['not-enough-data', { label: 'Need more evidence', color: colors.muted, symbol: '…' }],
   ] as const)('maps %s without decorative color', (trend, expected) => {
     expect(trendPresentation(trend)).toEqual(expected)
   })

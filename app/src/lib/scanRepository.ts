@@ -49,9 +49,9 @@ export interface ScanRepository {
   deleteState(key: string): Promise<void>
 }
 
-export type ScanRepositoryWithLegacyHistory = ScanRepository & {
-  recordLegacyAnalysis(entry: { tag: MisconceptionTag | null; correct: boolean; createdAt: string }): Promise<void>
-}
+// Legacy aggregate rows predate scan IDs and therefore cannot be deduplicated against
+// scan records. They remain read-only migration-era attempts; new analyses use scans.
+export type ScanRepositoryWithLegacyHistory = ScanRepository
 
 type ScanRow = {
   id: string
@@ -265,6 +265,7 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
           throw new Error(`revision ${savedRevision.id} does not match the saved revision`)
         const followUp = responseFollowUp(savedRevision.response)
         const feedback: FeedbackState = savedRevision.reason === 'student-correction' ? 'corrected' : scan.feedback
+        const priorFollowUpStatus = existingRevision?.id === scan.activeRevision?.id ? scan.followUpStatus : 'none'
         const updatedAt = now()
         if (!existingRevision)
           await transaction.runAsync(
@@ -275,7 +276,7 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
           `UPDATE scans SET active_revision_id = ?, lifecycle = ?, analysis_duration_ms = ?, follow_up_json = ?,
            follow_up_status = ?, feedback = ?, updated_at = ? WHERE id = ?`,
           [savedRevision.id, 'complete', durationMs, followUp === null ? null : JSON.stringify(followUp),
-            statusForResponse(validatedRevision.response, scan.followUpStatus), feedback, updatedAt, scanId],
+            statusForResponse(validatedRevision.response, priorFollowUpStatus), feedback, updatedAt, scanId],
         )
         await updateParentFollowUpStatus(transaction, scan, validatedRevision.response)
         return requireRecord(transaction, scanId)
@@ -313,7 +314,7 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
           `UPDATE scans SET active_revision_id = ?, lifecycle = ?, analysis_duration_ms = ?, follow_up_json = ?,
            follow_up_status = ?, feedback = ?, updated_at = ? WHERE id = ?`,
           [correctedRevision.id, 'complete', durationMs, followUp === null ? null : JSON.stringify(followUp),
-            statusForResponse(correctedRevision.response, scan.followUpStatus), 'corrected', now(), scanId],
+            statusForResponse(correctedRevision.response, 'none'), 'corrected', now(), scanId],
         )
         requireCurrent()
         await updateParentFollowUpStatus(transaction, scan, correctedRevision.response)
@@ -401,13 +402,6 @@ export function createScanRepository(db: DatabasePort): ScanRepositoryWithLegacy
           kind: 'legacy', tag: row.tag as MisconceptionTag | null, correct: row.correct === 1, createdAt: row.createdAt,
         })),
       ]
-    },
-
-    async recordLegacyAnalysis(entry): Promise<void> {
-      await db.withExclusiveTransactionAsync((transaction) => transaction.runAsync(
-        'INSERT INTO analyses (tag, correct, createdAt) VALUES (?, ?, ?)',
-        [entry.tag, entry.correct ? 1 : 0, entry.createdAt],
-      ).then(() => undefined))
     },
 
     async delete(scanId): Promise<string | null> {
