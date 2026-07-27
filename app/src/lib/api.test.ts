@@ -30,6 +30,21 @@ describe('analyzePhoto', () => {
     expect(init.method).toBe('POST')
     expect(init.body).toBeInstanceOf(FormData)
   })
+  it('omits the uncertainty override on normal analysis', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(ok(analysis))
+    await analyzePhoto('file:///photo.jpg', { fetchFn })
+    const body = fetchFn.mock.calls[0]?.[1]?.body as FormData
+    expect(body.has('allowUncertainTranscript')).toBe(false)
+  })
+  it('sends the exact uncertainty override only when requested', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(ok(analysis))
+    await analyzePhoto('file:///photo.jpg', {
+      fetchFn,
+      allowUncertainTranscript: true,
+    })
+    const body = fetchFn.mock.calls[0]?.[1]?.body as FormData
+    expect(body.get('allowUncertainTranscript')).toBe('true')
+  })
   it('accepts a complete response whose steps have no photo bands', async () => {
     const unlocated = {
       kind: 'analysis',

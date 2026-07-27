@@ -31,6 +31,10 @@ export class ApiError extends Error {
 
 type RequestOptions = { signal?: AbortSignal; fetchFn?: typeof fetch }
 
+export type AnalyzeRequestOptions = RequestOptions & {
+  allowUncertainTranscript?: boolean
+}
+
 async function requestApi<T>(
   endpoint: string,
   init: Pick<RequestInit, 'body' | 'headers'>,
@@ -91,8 +95,11 @@ async function requestDiagnosis(
   return requestApi(endpoint, { body: form }, AnalyzeResponseSchema.safeParse, options)
 }
 
-export async function analyzePhoto(uri: string, options: RequestOptions = {}): Promise<AnalyzeResponse> {
-  return requestDiagnosis('/analyze', uri, null, options)
+export async function analyzePhoto(uri: string, options: AnalyzeRequestOptions = {}): Promise<AnalyzeResponse> {
+  const form = new FormData()
+  form.append('photo', new File(uri), 'photo.jpg')
+  if (options.allowUncertainTranscript) form.append('allowUncertainTranscript', 'true')
+  return requestApi('/analyze', { body: form }, AnalyzeResponseSchema.safeParse, options)
 }
 
 export async function correctDiagnosis(
