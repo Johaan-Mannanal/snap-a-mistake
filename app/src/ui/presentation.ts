@@ -100,7 +100,7 @@ export function analysisProgressPresentation(elapsedSeconds: number, description
   }
 }
 
-type RecoveryAction = 'retry' | 'review'
+type RecoveryAction = 'retry' | 'review' | 'capture' | 'proceed-anyway'
 type AnalysisRecovery = ApiFailure | { kind: 'not-math' } | { kind: 'unreadable'; tips: readonly string[] }
 
 export function analysisRecoveryPresentation(recovery: AnalysisRecovery): {
@@ -121,7 +121,7 @@ export function analysisRecoveryPresentation(recovery: AnalysisRecovery): {
     case 'not-math':
       return { eyebrow: 'NOT MATH', title: 'This photo doesn’t look like math.', detail: 'Return to review to choose another photo or adjust this one.', actions: ['review'] }
     case 'unreadable':
-      return { eyebrow: 'UNREADABLE', title: 'This photo is too hard to read.', detail: 'Return to review to retake it or choose another photo.', actions: ['review'] }
+      return { eyebrow: 'UNREADABLE', title: 'This photo is too hard to read.', detail: 'Take a new photo, or continue with a less certain reading.', actions: ['capture', 'proceed-anyway'] }
     default:
       throw new Error('unknown analysis recovery')
   }

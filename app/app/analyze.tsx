@@ -56,6 +56,10 @@ type PendingSave = {
   durationMs: number
 }
 
+type AnalysisRunOptions = {
+  allowUncertainTranscript: boolean
+}
+
 function allocateRevisionId(): string {
   return `revision-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
@@ -87,6 +91,7 @@ export default function Analyze() {
   const [followUpOpenFailed, setFollowUpOpenFailed] = useState(false)
   const [discardingUnreadable, setDiscardingUnreadable] = useState(false)
   const [unreadableDiscardFailed, setUnreadableDiscardFailed] = useState(false)
+  const [lastCompletedRunWasForced, setLastCompletedRunWasForced] = useState(false)
   const { photoUri: uri, pendingScanId: scanId } = getSession()
   const resetTransition = useRef<(() => Promise<void>) | null>(null)
   const unreadableDiscardTransition = useRef<ReturnType<typeof createUnreadableDiscardTransition> | null>(null)
@@ -97,6 +102,9 @@ export default function Analyze() {
   const retryCorrection = useRef<(() => void) | null>(null)
   const acceptDiagnosisRef = useRef<() => void>(() => {})
   const requestInFlight = useRef(false)
+  const retryRunOptions = useRef<AnalysisRunOptions>({
+    allowUncertainTranscript: false,
+  })
   const runFence = useRef(createRunFence())
   const saveLock = useRef(createAsyncLock<void>())
   const finalization = useRef(createAnalysisFinalization())
@@ -230,15 +238,21 @@ export default function Analyze() {
     )
   }, [])
 
-  const run = useCallback(() => {
+  const run = useCallback((options: AnalysisRunOptions) => {
     if (!uri || !scanId) { router.replace('/review'); return }
     if (requestInFlight.current) return
+    retryRunOptions.current = options
     requestInFlight.current = true
     finalization.current.begin()
     const token = runFence.current.begin()
     activeToken.current = token
     setAnalysisRunId(token)
-    announceForCurrentRun('started', 'Analysis started. Usually takes less than a minute.')
+    announceForCurrentRun(
+      'started',
+      options.allowUncertainTranscript
+        ? 'Analyzing with lower confidence.'
+        : 'Analysis started. Usually takes less than a minute.',
+    )
     pendingSave.current = null
     if (mounted.current) {
       setFailure(null)
@@ -256,8 +270,12 @@ export default function Analyze() {
         const controller = new AbortController()
         activeRequest.current = controller
         const startedAt = Date.now()
-        const response = await analyzePhoto(uri, { signal: controller.signal })
+        const response = await analyzePhoto(uri, {
+          signal: controller.signal,
+          allowUncertainTranscript: options.allowUncertainTranscript,
+        })
         if (!owns(token)) return
+        if (mounted.current) setLastCompletedRunWasForced(options.allowUncertainTranscript)
         const durationMs = Math.max(0, Date.now() - startedAt)
         const pending: PendingSave = {
           response,
@@ -291,7 +309,7 @@ export default function Analyze() {
   }, [announceForCurrentRun, owns, persistPendingSave, scanId, uri])
 
   useEffect(() => {
-    if (initialEntry.shouldRun) run()
+    if (initialEntry.shouldRun) run({ allowUncertainTranscript: false })
   }, [initialEntry.shouldRun, run])
   useEffect(() => {
     if (initialEntry.result === null || scanId === null) return
@@ -653,7 +671,7 @@ export default function Analyze() {
             <Text style={styles.stateTitle}>We couldn’t prepare this analysis.</Text>
             <Text style={styles.stateDetail}>Your reviewed photo is still saved. Try again or return to review it.</Text>
           </View>
-          <AppButton label="Try again" onPress={() => { void run() }} />
+          <AppButton label="Try again" onPress={() => { void run(retryRunOptions.current) }} />
           <AppButton label="Return to review" onPress={() => { void returnToReview() }} variant="secondary" />
         </AppScreen>
       )
@@ -666,7 +684,7 @@ export default function Analyze() {
           <Text style={styles.stateTitle}>{presentation.title}</Text>
           <Text style={styles.stateDetail}>{presentation.detail}</Text>
         </View>
-        {presentation.actions.includes('retry') ? <AppButton label="Try again" onPress={() => { void run() }} /> : null}
+        {presentation.actions.includes('retry') ? <AppButton label="Try again" onPress={() => { void run(retryRunOptions.current) }} /> : null}
         <AppButton label="Return to review" onPress={() => { void returnToReview() }} variant="secondary" />
       </AppScreen>
     )
@@ -698,6 +716,11 @@ export default function Analyze() {
         <View style={styles.stateCopy}>
           <Text style={styles.stateEyebrow}>{presentation.eyebrow}</Text>
           <Text style={styles.stateTitle}>{presentation.title}</Text>
+          <Text style={styles.stateDetail}>
+            {lastCompletedRunWasForced
+              ? 'There still wasn’t enough readable math to analyze.'
+              : presentation.detail}
+          </Text>
           <View style={styles.tips}>
             {result.tips.map((tip) => <Text key={tip} style={styles.tip}>— {tip}</Text>)}
           </View>
@@ -705,9 +728,16 @@ export default function Analyze() {
         {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} disabled={discardingUnreadable} /> : null}
         {unreadableDiscardFailed ? <Text accessibilityRole="alert" style={styles.resetFailureCopy}>We couldn’t remove this scan. Your photo is still saved. Try again.</Text> : null}
         <AppButton
-          label={discardingUnreadable ? 'Discarding…' : 'Take a new photo'}
+          label={discardingUnreadable ? 'Removing photo…' : 'Take a new photo'}
           disabled={discardingUnreadable}
           onPress={takeNewUnreadablePhoto}
+        />
+        <Text style={styles.stateWarning}>Results may be less accurate.</Text>
+        <AppButton
+          label="Proceed anyway"
+          disabled={discardingUnreadable}
+          onPress={() => run({ allowUncertainTranscript: true })}
+          variant="secondary"
         />
       </AppScreen>
     )
@@ -836,6 +866,7 @@ const styles = StyleSheet.create({
   stateEyebrow: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1.6 },
   stateTitle: { color: colors.chalk, fontSize: 28, fontWeight: '700', letterSpacing: -0.7 },
   stateDetail: { color: colors.muted, fontSize: 15 },
+  stateWarning: { color: colors.error, fontSize: 13 },
   tips: { gap: spacing.sm, marginTop: spacing.xs },
   tip: { color: colors.muted, fontSize: 15 },
   resultContent: { paddingTop: spacing.xs },

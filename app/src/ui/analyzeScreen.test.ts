@@ -14,6 +14,34 @@ describe('analysis result screen', () => {
     expect(analyzeScreen).toContain('Take a new photo')
   })
 
+  it('offers an explicit lower-confidence retry without returning unreadable scans to review', () => {
+    expect(analyzeScreen).toContain('label="Proceed anyway"')
+    expect(analyzeScreen).toContain('Results may be less accurate.')
+    expect(analyzeScreen).toContain("run({ allowUncertainTranscript: true })")
+    expect(analyzeScreen).toContain('Analyzing with lower confidence.')
+    const unreadableStart = analyzeScreen.indexOf("if (result.kind === 'unreadable')")
+    const unreadableEnd = analyzeScreen.indexOf('const correct =', unreadableStart)
+    const unreadableBranch = analyzeScreen.slice(unreadableStart, unreadableEnd)
+    expect(unreadableStart).toBeGreaterThan(-1)
+    expect(unreadableEnd).toBeGreaterThan(unreadableStart)
+    expect(unreadableBranch).not.toContain('Return to review')
+  })
+
+  it('starts strictly and preserves the explicit override across transport retries', () => {
+    expect(analyzeScreen).toContain('if (initialEntry.shouldRun) run({ allowUncertainTranscript: false })')
+    expect(analyzeScreen).toContain('retryRunOptions.current = options')
+    expect(analyzeScreen).toContain('allowUncertainTranscript: options.allowUncertainTranscript')
+    expect(analyzeScreen).toContain('run(retryRunOptions.current)')
+  })
+
+  it('leaves a forced unreadable result recoverable without automatically running again', () => {
+    expect(analyzeScreen).toContain('There still wasn’t enough readable math to analyze.')
+    const unreadableStart = analyzeScreen.indexOf("if (result.kind === 'unreadable')")
+    const unreadableEnd = analyzeScreen.indexOf('const correct =', unreadableStart)
+    const unreadableBranch = analyzeScreen.slice(unreadableStart, unreadableEnd)
+    expect(unreadableBranch).not.toContain('useEffect')
+  })
+
   it('does not offer the unfinished lesson action', () => {
     expect(analyzeScreen).not.toMatch(unfinishedLessonAction)
     expect(analyzeScreen).not.toMatch(parkedFeatureMessage)

@@ -187,9 +187,19 @@ describe('analysis progress presentation', () => {
     [{ kind: 'server', status: 503 }, ['retry', 'review']],
     [{ kind: 'invalid-response', status: 200 }, ['retry', 'review']],
     [{ kind: 'not-math' }, ['review']],
-    [{ kind: 'unreadable', tips: ['Use better light.'] }, ['review']],
   ] as const)('keeps the reviewed photo available for %o', (input, actions) => {
     expect(analysisRecoveryPresentation(input).actions).toEqual(actions)
+  })
+
+  it('offers a new capture or an explicitly less certain reading for an unreadable photo', () => {
+    expect(analysisRecoveryPresentation({
+      kind: 'unreadable',
+      tips: ['Use better light.'],
+    })).toMatchObject({
+      title: 'This photo is too hard to read.',
+      detail: 'Take a new photo, or continue with a less certain reading.',
+      actions: ['capture', 'proceed-anyway'],
+    })
   })
 
   it('uses specific recovery copy for network, timeout, server, and invalid responses', () => {
