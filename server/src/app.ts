@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import multipart from '@fastify/multipart'
+import { Busboy } from '@fastify/busboy'
 import sharp from 'sharp'
 import {
   AlternateFollowUpContextSchema,
@@ -25,6 +26,14 @@ export type BuildAppDeps = {
   logger?: boolean
 }
 
+const MULTIPART_LIMITS = {
+  fileSize: 15 * 1024 * 1024,
+  files: 1,
+  fields: 1,
+  fieldSize: 64 * 1024,
+  parts: 2,
+}
+
 function hasMultipartBoundary(contentType: string | undefined): boolean {
   return typeof contentType === 'string' && /;\s*boundary=(?:"[^"]+"|[^;\s]+)/i.test(contentType)
 }
@@ -38,11 +47,73 @@ async function normalizeJpeg(raw: Buffer): Promise<{ base64: string; mediaType: 
   return { base64: jpeg.toString('base64'), mediaType: 'image/jpeg' }
 }
 
+async function parseAnalyzeMultipart(raw: NodeJS.ReadableStream, contentType: string): Promise<{
+  photo: Buffer | undefined
+  allowUncertainTranscript: boolean
+  invalid: boolean
+}> {
+  return await new Promise((resolve) => {
+    const parser = new Busboy({
+      headers: { 'content-type': contentType },
+      limits: MULTIPART_LIMITS,
+    })
+    let photo: Buffer | undefined
+    let photoSeen = false
+    let allowUncertainTranscript = false
+    let overrideSeen = false
+    let invalid = false
+    let settled = false
+
+    const finish = () => {
+      if (settled) return
+      settled = true
+      resolve({ photo, allowUncertainTranscript, invalid })
+    }
+
+    parser.on('file', (fieldname, file) => {
+      const isPhoto = fieldname === 'photo' && !photoSeen
+      if (!isPhoto) invalid = true
+      else photoSeen = true
+
+      const chunks: Buffer[] = []
+      file.on('error', () => { invalid = true })
+      file.on('limit', () => { invalid = true })
+      file.on('data', (chunk: Buffer) => {
+        if (isPhoto) chunks.push(chunk)
+      })
+      file.on('end', () => {
+        if (isPhoto && !file.truncated) photo = Buffer.concat(chunks)
+      })
+      file.resume()
+    })
+    parser.on('field', (fieldname, value, fieldnameTruncated, valueTruncated) => {
+      if (
+        fieldname !== 'allowUncertainTranscript'
+        || fieldnameTruncated
+        || overrideSeen
+        || valueTruncated
+        || value !== 'true'
+      ) {
+        invalid = true
+      } else {
+        overrideSeen = true
+        allowUncertainTranscript = true
+      }
+    })
+    parser.on('partsLimit', () => { invalid = true })
+    parser.on('filesLimit', () => { invalid = true })
+    parser.on('fieldsLimit', () => { invalid = true })
+    parser.on('error', () => { invalid = true })
+    parser.on('finish', finish)
+    parser.on('close', finish)
+    raw.on('error', () => { invalid = true })
+    raw.pipe(parser)
+  })
+}
+
 export function buildApp(deps: BuildAppDeps): FastifyInstance {
   const app = Fastify({ logger: deps.logger ?? false, bodyLimit: 15 * 1024 * 1024 })
-  app.register(multipart, {
-    limits: { fileSize: 15 * 1024 * 1024, files: 1, fields: 1, fieldSize: 64 * 1024, parts: 2 },
-  })
+  app.register(multipart, { limits: MULTIPART_LIMITS })
 
   app.get('/health', async () => ({ ok: true }))
 
@@ -61,33 +132,14 @@ export function buildApp(deps: BuildAppDeps): FastifyInstance {
 
   app.post('/analyze', async (req, reply) => {
     try {
-      if (!req.isMultipart() || !hasMultipartBoundary(req.headers['content-type']))
+      const contentType = req.headers['content-type']
+      if (!req.isMultipart() || typeof contentType !== 'string' || !hasMultipartBoundary(contentType))
         return reply.code(400).send({ error: 'invalid analysis request' })
 
-      let photo: Buffer | undefined
-      let allowUncertainTranscript = false
-      let overrideSeen = false
-      let invalid = false
-      for await (const part of req.parts()) {
-        if (part.type === 'file') {
-          if (part.fieldname !== 'photo' || photo !== undefined) {
-            invalid = true
-            await part.toBuffer()
-          } else {
-            photo = await part.toBuffer()
-          }
-        } else if (
-          part.fieldname !== 'allowUncertainTranscript'
-          || overrideSeen
-          || part.valueTruncated
-          || part.value !== 'true'
-        ) {
-          invalid = true
-        } else {
-          overrideSeen = true
-          allowUncertainTranscript = true
-        }
-      }
+      const { photo, allowUncertainTranscript, invalid } = await parseAnalyzeMultipart(
+        req.raw,
+        contentType,
+      )
       if (invalid || !photo) return reply.code(400).send({ error: 'invalid analysis request' })
 
       return await deps.runAnalysis(await normalizeJpeg(photo), { allowUncertainTranscript })

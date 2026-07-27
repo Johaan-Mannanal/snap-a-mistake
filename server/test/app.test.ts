@@ -161,6 +161,17 @@ function multipartForm(parts: Array<{ name: string; value: Buffer | string; file
   }
 }
 
+function incompletePhotoForm(photo: Buffer) {
+  const boundary = '----snap-incomplete-photo-boundary'
+  return {
+    payload: Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="photo.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),
+      photo,
+    ]),
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+  }
+}
+
 describe('POST /analyze', () => {
   it('returns the pipeline result for an uploaded photo', async () => {
     let received = ''
@@ -193,6 +204,34 @@ describe('POST /analyze', () => {
 
     expect(response.statusCode).toBe(200)
     expect(received).toEqual({ allowUncertainTranscript: true })
+  })
+  it('rejects an incomplete photo part without unhandled stream errors', async () => {
+    let called = false
+    const uncaught: unknown[] = []
+    const captureUncaught = (error: unknown) => uncaught.push(error)
+    process.on('uncaughtException', captureUncaught)
+    try {
+      const app = buildApp(appDeps({
+        runAnalysis: async () => {
+          called = true
+          return { kind: 'not-math' }
+        },
+      }))
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/analyze',
+        ...incompletePhotoForm(await tinyJpeg()),
+      })
+      await new Promise<void>((resolve) => setImmediate(resolve))
+
+      expect(uncaught).toEqual([])
+      expect(response.statusCode).toBe(400)
+      expect(response.json()).toEqual({ error: 'invalid analysis request' })
+      expect(called).toBe(false)
+    } finally {
+      process.off('uncaughtException', captureUncaught)
+    }
   })
   it.each([
     ['false override', async () => formAutoContent({ photo: await tinyJpeg(), allowUncertainTranscript: 'false' })],
