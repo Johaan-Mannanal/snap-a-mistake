@@ -16,7 +16,7 @@ The diagnosis is shown alongside the original page so the feedback stays connect
 
 I built Snap-a-Mistake as a TypeScript monorepo with three shared parts: an Expo and React Native mobile app, a stateless Fastify server, and a shared package of Zod schemas used by both sides.
 
-The AI workflow has three stages. First, a multimodal transcription pass converts the photographed page into ordered steps and estimates where each step appears vertically. Second, a reasoning pass re-derives the solution, identifies the first incorrect step, selects a label from a controlled misconception vocabulary, and creates an explanation and follow-up problem. Third, an independent verifier checks the diagnosis. If it disagrees, the app shows a softer “second look” state instead of confidently telling the student that a step is wrong.
+The AI workflow uses separate checks for reading and reasoning. First, a multimodal transcription pass converts the photographed page into ordered steps and estimates where each step appears vertically. A second image pass compares that transcript with the marks on the page; if the writing is too blurry or the transcript looks reconstructed, the app asks for a clearer photo instead of grading a guess. Then a reasoning pass re-derives the solution, identifies the first incorrect step, selects a label from a controlled misconception vocabulary, and creates an explanation and follow-up problem. A final independent verifier checks the diagnosis. If it disagrees, the app shows a softer “second look” state instead of confidently telling the student that a step is wrong.
 
 I used structured JSON responses and shared validation because model output is part of the product interface, not just text to display. Invalid output receives one correction attempt before reaching the app. The server does not store photos or learning history, while misconception trends are saved locally with SQLite.
 
@@ -34,7 +34,7 @@ Model reliability also required more than prompt tuning. Responses can be malfor
 
 The biggest thing I learned is that building a useful AI product is not the same as making one impressive model call. Reliability comes from the system around the model: clear interfaces, validation, disagreement handling, good fallback states, and tests that represent real inputs.
 
-I created a 25-case validation set with 15 synthetic cases and 10 licensed FERMAT handwriting images, and the repository now has 518 passing automated tests across the app, server, shared schemas, and dataset importer. That process taught me to treat model behavior as something that needs evaluation, not something I should assume will stay consistent.
+I created a 25-case validation set with 15 synthetic cases and 10 licensed FERMAT handwriting images, and the repository now has 521 passing automated tests across the app, server, shared schemas, and dataset importer. That process taught me to treat model behavior as something that needs evaluation, not something I should assume will stay consistent.
 
 I also learned that educational feedback needs restraint. When the verifier is uncertain, admitting that uncertainty is better than giving a confident but incorrect diagnosis.
 

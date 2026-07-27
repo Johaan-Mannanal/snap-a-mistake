@@ -15,7 +15,9 @@ Rules:
 - Include both band endpoints together. Omit both when you cannot reliably locate that line in the photo.
 - "legibility": 0..1 — your confidence you read every symbol correctly. Be honest; below 0.4 means unusable.
 - "isMath": false if the image is not primarily handwritten or typed mathematics (essay, doodle, blank page, photo of a cat).
-- Transcribe faithfully, INCLUDING any mistakes the student made. Never correct their work.`
+- Transcribe faithfully, INCLUDING any mistakes the student made. Never correct their work.
+- Do not reconstruct a familiar problem or fill in a likely correct step from context. Report only marks you can actually see.
+- If a line or important symbol is blurred, faint, cut off, crossed out ambiguously, or otherwise unreadable, lower legibility below 0.4. Never replace it with the mathematically expected version.`
 
 export async function transcribe(
   client: OpenAI,

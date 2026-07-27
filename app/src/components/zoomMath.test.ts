@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clampPhotoTranslation, normalizeImageSize, normalizeLoadedImageSize, photoTransform } from './zoomMath'
+import { clampPhotoScale, clampPhotoTranslation, normalizeImageSize, normalizeLoadedImageSize, photoTransform } from './zoomMath'
 
 describe('normalizeImageSize', () => {
   it('accepts dimensions reported by the displayed image and rejects unusable load data', () => {
@@ -50,5 +50,13 @@ describe('photoTransform', () => {
       { translateY: -18 },
       { scale: 3 },
     ])
+  })
+})
+
+describe('clampPhotoScale', () => {
+  it('keeps photo zoom between the supported bounds', () => {
+    expect(clampPhotoScale(0.5)).toBe(1)
+    expect(clampPhotoScale(2.5)).toBe(2.5)
+    expect(clampPhotoScale(8)).toBe(4)
   })
 })

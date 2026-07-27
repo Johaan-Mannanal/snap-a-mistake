@@ -1,3 +1,8 @@
+export function clampPhotoScale(value: number): number {
+  'worklet'
+  return Math.min(4, Math.max(1, value))
+}
+
 export function normalizeImageSize(width: number, height: number): { width: number; height: number } | null {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
   return { width, height }

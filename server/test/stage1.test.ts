@@ -25,6 +25,8 @@ describe('transcribe', () => {
     expect(system).toMatch(/tight band around only that line/i)
     expect(system).toMatch(/exclude.*neighboring line/i)
     expect(system).toMatch(/omit both.*cannot reliably locate/i)
+    expect(system).toMatch(/do not reconstruct/i)
+    expect(system).toMatch(/blurred.*unreadable/i)
     expect(call.model).toBe('gpt-5.6-sol')
   })
 })

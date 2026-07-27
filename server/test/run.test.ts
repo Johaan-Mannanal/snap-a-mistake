@@ -26,6 +26,7 @@ const cleanDiag: Stage2Result = { errorStepIndex: null, misconceptionTag: null, 
 function run(opts: { s1?: Stage1Result; s2?: Stage2Result; v?: VerifierResult }) {
   return makeRunAnalysis(client, config, {
     transcribe: async () => opts.s1 ?? s1(),
+    verifyTranscription: async () => ({ faithful: true, legible: true, note: '' }),
     analyzeSteps: async () => opts.s2 ?? cleanDiag,
     verifyDiagnosis: async () => opts.v ?? { agrees: true, note: '' },
   })(image)
@@ -42,6 +43,20 @@ describe('runAnalysis', () => {
   it('returns unreadable when no steps were found', async () => {
     const r = await run({ s1: s1({ steps: [] }) })
     expect(r.kind).toBe('unreadable')
+  })
+  it('returns unreadable when the image-to-transcript check finds reconstructed work', async () => {
+    const analyze = makeRunAnalysis(client, config, {
+      transcribe: async () => s1(),
+      verifyTranscription: async () => ({
+        faithful: false,
+        legible: false,
+        note: 'Step 4 is too blurry to compare and the transcript appears corrected.',
+      }),
+      analyzeSteps: async () => cleanDiag,
+      verifyDiagnosis: async () => ({ agrees: true, note: '' }),
+    })
+
+    await expect(analyze(image)).resolves.toEqual({ kind: 'unreadable', tips: expect.any(Array) })
   })
   it('marks all steps ok for correct work', async () => {
     const r = await run({ s2: cleanDiag })
@@ -92,6 +107,7 @@ describe('runAnalysis', () => {
     const timings: StageTiming[] = []
     const analyze = makeRunAnalysis(client, config, {
       transcribe: async () => s1(),
+      verifyTranscription: async () => ({ faithful: true, legible: true, note: '' }),
       analyzeSteps: async () => errorDiag,
       verifyDiagnosis: async () => ({ agrees: true, note: '' }),
     }, (timing) => timings.push(timing))
@@ -100,6 +116,7 @@ describe('runAnalysis', () => {
 
     expect(timings.map(({ stage, status }) => ({ stage, status }))).toEqual([
       { stage: 'transcription', status: 'completed' },
+      { stage: 'transcription-verification', status: 'completed' },
       { stage: 'analysis', status: 'completed' },
       { stage: 'verification', status: 'completed' },
     ])
@@ -109,6 +126,7 @@ describe('runAnalysis', () => {
     const timings: StageTiming[] = []
     const analyze = makeRunAnalysis(client, config, {
       transcribe: async () => s1(),
+      verifyTranscription: async () => ({ faithful: true, legible: true, note: '' }),
       analyzeSteps: async () => { throw new Error('Request timed out.') },
       verifyDiagnosis: async () => ({ agrees: true, note: '' }),
     }, (timing) => timings.push(timing))
@@ -116,6 +134,7 @@ describe('runAnalysis', () => {
     await expect(analyze(image)).rejects.toThrow('Request timed out.')
     expect(timings.map(({ stage, status }) => ({ stage, status }))).toEqual([
       { stage: 'transcription', status: 'completed' },
+      { stage: 'transcription-verification', status: 'completed' },
       { stage: 'analysis', status: 'failed' },
     ])
   })

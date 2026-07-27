@@ -4,6 +4,7 @@ import { ModelJsonError } from '../llm/client.js'
 import type { Config } from '../config.js'
 import type { RunAnalysisFn } from '../app.js'
 import { transcribe } from './stage1.js'
+import { verifyTranscription } from './transcription-verifier.js'
 import { analyzeSteps } from './stage2.js'
 import { verifyDiagnosis } from './verifier.js'
 
@@ -15,12 +16,13 @@ export const RETAKE_TIPS = [
 
 type Deps = {
   transcribe: typeof transcribe
+  verifyTranscription: typeof verifyTranscription
   analyzeSteps: typeof analyzeSteps
   verifyDiagnosis: typeof verifyDiagnosis
 }
 
 export type StageTiming = {
-  stage: 'transcription' | 'analysis' | 'verification'
+  stage: 'transcription' | 'transcription-verification' | 'analysis' | 'verification'
   status: 'completed' | 'failed'
   durationMs: number
 }
@@ -58,7 +60,7 @@ export function withVerdicts(steps: TranscribedStep[], errorIndex: number | null
 export function makeRunAnalysis(
   client: OpenAI,
   config: Config,
-  deps: Deps = { transcribe, analyzeSteps, verifyDiagnosis },
+  deps: Deps = { transcribe, verifyTranscription, analyzeSteps, verifyDiagnosis },
   onStageTiming: (timing: StageTiming) => void = () => {},
 ): RunAnalysisFn {
   return async (image) => {
@@ -69,6 +71,14 @@ export function makeRunAnalysis(
     )
     if (!s1.isMath) return { kind: 'not-math' }
     if (s1.legibility < config.legibilityThreshold || s1.steps.length === 0)
+      return { kind: 'unreadable', tips: RETAKE_TIPS }
+
+    const transcriptionCheck = await timeStage(
+      'transcription-verification',
+      () => deps.verifyTranscription(client, config.models.vision, image, s1.steps),
+      onStageTiming,
+    )
+    if (!transcriptionCheck.faithful || !transcriptionCheck.legible)
       return { kind: 'unreadable', tips: RETAKE_TIPS }
 
     const s2 = await timeStage(

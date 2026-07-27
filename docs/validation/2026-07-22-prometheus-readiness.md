@@ -12,12 +12,21 @@ npm run typecheck
 npm run lint -w app
 ```
 
-- `npm test`: **518 tests passed** — 42 shared Vitest, 122 server Vitest, 4 stock-Python importer tests, and 350 app Vitest tests.
+- `npm test`: **521 tests passed** — 42 shared Vitest, 124 server Vitest, 4 stock-Python importer tests, and 351 app Vitest tests.
 - `npm run typecheck`: shared, server, and app each completed `tsc --noEmit`.
 - `npm run lint -w app`: Expo lint completed with zero warnings and zero errors.
 - The app’s lint setup uses SDK 57-compatible `eslint` and `eslint-config-expo`. Its only targeted configuration exceptions are for React Native object-ref forwarding and Reanimated shared-value mutation; ordinary Expo lint rules remain enabled.
 
 The committed golden manifest still contains 25 inspectable cases: 15 synthetic cases and 10 CC BY 4.0 FERMAT handwriting photographs (2 correct and 8 intentional-error cases). Attribution and provenance are in [FERMAT-ATTRIBUTION.md](../../server/golden/FERMAT-ATTRIBUTION.md) and [fermat-provenance.json](../../server/golden/fermat-provenance.json).
+
+## Focused live-model regression
+
+Two paid, single-case checks completed on July 27, 2026 after adding the image-to-transcript fidelity gate:
+
+- A deliberately blurred copy of `parts-error.jpg` returned `unreadable`.
+- The clear `parts-error.jpg` control returned an analysis with step 1 marked wrong and the `integration-by-parts-error` tag. Its transcript preserved the incorrect remaining integral instead of repairing it.
+
+These focused checks cover the reported blur/reconstruction failure mode. They are not a substitute for the full 25-case golden run below.
 
 ## Paid golden gate
 

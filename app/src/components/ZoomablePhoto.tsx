@@ -4,14 +4,10 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 import { colors, spacing } from '../ui/theme'
 import { containedPhotoRect, type ContainedPhotoRect } from '../lib/overlay'
-import { clampPhotoTranslation, normalizeLoadedImageSize, photoTransform } from './zoomMath'
+import { clampPhotoScale, clampPhotoTranslation, normalizeLoadedImageSize, photoTransform } from './zoomMath'
 
 const MIN_SCALE = 1
 const MAX_SCALE = 4
-
-function clampScale(value: number) {
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value))
-}
 
 export function ZoomablePhoto(props: {
   uri: string
@@ -71,7 +67,7 @@ export function ZoomablePhoto(props: {
   }, [applyImageSize, imageHeight, imageWidth, props.uri])
 
   const setScale = (nextScale: number) => {
-    const clamped = clampScale(nextScale)
+    const clamped = clampPhotoScale(nextScale)
     scale.value = withTiming(clamped, { duration: reduceMotion ? 0 : 160 })
     const translation = clampPhotoTranslation({
       x: translateX.value, y: translateY.value,
@@ -88,7 +84,7 @@ export function ZoomablePhoto(props: {
       scaleAtGestureStart.value = scale.value
     })
     .onUpdate((event) => {
-      const nextScale = clampScale(scaleAtGestureStart.value * event.scale)
+      const nextScale = clampPhotoScale(scaleAtGestureStart.value * event.scale)
       scale.value = nextScale
       const translation = clampPhotoTranslation({
         x: translateX.value, y: translateY.value,
@@ -99,7 +95,7 @@ export function ZoomablePhoto(props: {
       translateY.value = translation.y
     })
     .onEnd(() => {
-      const nextScale = clampScale(scale.value)
+      const nextScale = clampPhotoScale(scale.value)
       scale.value = withTiming(nextScale, { duration: reduceMotion ? 0 : 160 })
       const translation = clampPhotoTranslation({
         x: translateX.value, y: translateY.value,
