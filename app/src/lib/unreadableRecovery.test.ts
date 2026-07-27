@@ -8,7 +8,7 @@ describe('createUnreadableDiscardTransition', () => {
 
     await transition.discard('scan-1', {
       deleteScan: async () => { calls.push('delete') },
-      clearSession: async () => { calls.push('clear') },
+      clearInMemorySession: () => { calls.push('clear') },
       flushOwnedPhotos: async () => { calls.push('flush') },
       navigate: () => { calls.push('navigate') },
     })
@@ -22,7 +22,7 @@ describe('createUnreadableDiscardTransition', () => {
 
     await expect(transition.discard('scan-1', {
       deleteScan: async () => { throw new Error('database unavailable') },
-      clearSession: async () => { calls.push('clear') },
+      clearInMemorySession: () => { calls.push('clear') },
       flushOwnedPhotos: async () => { calls.push('flush') },
       navigate: () => { calls.push('navigate') },
     })).rejects.toThrow('database unavailable')
@@ -40,7 +40,7 @@ describe('createUnreadableDiscardTransition', () => {
         calls.push(`delete:${scanId}`)
         await deletion
       },
-      clearSession: async (scanId: string) => { calls.push(`clear:${scanId}`) },
+      clearInMemorySession: (scanId: string) => { calls.push(`clear:${scanId}`) },
       flushOwnedPhotos: async () => { calls.push('flush') },
       navigate: () => { calls.push('navigate') },
     }
@@ -59,7 +59,7 @@ describe('createUnreadableDiscardTransition', () => {
 
     await expect(transition.discard('scan-1', {
       deleteScan: async () => { calls.push('delete') },
-      clearSession: async () => { calls.push('clear') },
+      clearInMemorySession: () => { calls.push('clear') },
       flushOwnedPhotos: async () => {
         calls.push('flush')
         throw new Error('file unavailable')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createAsyncLock, createRunFence } from './analysisAsync'
+import { createAnalysisActionCoordinator, createAsyncLock, createRunFence } from './analysisAsync'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -127,5 +127,67 @@ describe('analysis async save lock', () => {
     await lock.run(async () => { attempts += 1 })
 
     expect(attempts).toBe(2)
+  })
+})
+
+describe('analysis action coordination', () => {
+  it('does not drop a forced run into an in-flight retry-save body', async () => {
+    const coordinator = createAnalysisActionCoordinator()
+    const save = deferred<void>()
+    const calls: string[] = []
+    const saving = coordinator.start('retry-save', async () => {
+      calls.push('retry-save')
+      await save.promise
+    })
+
+    const forcedWhileSaving = coordinator.start('run', async () => {
+      calls.push('forced-run')
+    })
+
+    expect(saving).not.toBeNull()
+    expect(forcedWhileSaving).toBeNull()
+    expect(coordinator.active).toBe('retry-save')
+    expect(calls).toEqual(['retry-save'])
+
+    save.resolve()
+    await saving
+    await coordinator.start('run', async () => {
+      calls.push('forced-run')
+    })
+
+    expect(calls).toEqual(['retry-save', 'forced-run'])
+    expect(coordinator.active).toBeNull()
+  })
+
+  it('invalidates and aborts synchronously, then waits for active work before discard', async () => {
+    const coordinator = createAnalysisActionCoordinator()
+    const activeWork = deferred<void>()
+    const calls: string[] = []
+    const run = coordinator.start('run', async () => {
+      calls.push('run:start')
+      await activeWork.promise
+      calls.push('run:settled')
+    })
+
+    const discard = coordinator.transition('discard', async (previous) => {
+      calls.push('invalidate')
+      calls.push('abort')
+      await previous
+      calls.push('delete')
+    })
+
+    expect(run).not.toBeNull()
+    expect(discard).not.toBeNull()
+    expect(coordinator.active).toBe('discard')
+    expect(calls).toEqual(['run:start', 'invalidate', 'abort'])
+    expect(coordinator.start('retry-save', async () => {
+      calls.push('late-save')
+    })).toBeNull()
+
+    activeWork.resolve()
+    await discard
+
+    expect(calls).toEqual(['run:start', 'invalidate', 'abort', 'run:settled', 'delete'])
+    expect(coordinator.active).toBeNull()
   })
 })

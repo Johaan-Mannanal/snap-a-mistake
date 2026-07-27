@@ -1,6 +1,6 @@
 export type DiscardUnreadableDependencies = {
   deleteScan(scanId: string): Promise<unknown>
-  clearSession(scanId: string): Promise<void>
+  clearInMemorySession(scanId: string): void
   flushOwnedPhotos(): Promise<void>
   navigate(): void
 }
@@ -15,7 +15,7 @@ export function createUnreadableDiscardTransition(): {
       if (active) return active
       const work = (async () => {
         await deps.deleteScan(scanId)
-        await deps.clearSession(scanId)
+        deps.clearInMemorySession(scanId)
         await deps.flushOwnedPhotos().catch(() => {})
         deps.navigate()
       })()

@@ -143,8 +143,10 @@ async function tinyJpeg(): Promise<Buffer> {
     .jpeg().toBuffer()
 }
 
-function multipartForm(parts: Array<{ name: string; value: Buffer | string; filename?: string }>) {
-  const boundary = '----snap-analysis-test-boundary'
+function multipartForm(
+  parts: Array<{ name: string; value: Buffer | string; filename?: string }>,
+  boundary = '----snap-analysis-test-boundary',
+) {
   const chunks: Buffer[] = []
   for (const part of parts) {
     const disposition = part.filename
@@ -158,6 +160,20 @@ function multipartForm(parts: Array<{ name: string; value: Buffer | string; file
   return {
     payload: Buffer.concat(chunks),
     headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+  }
+}
+
+async function settlesWithin<T>(promise: Promise<T>, message: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), 250)
+      }),
+    ])
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout)
   }
 }
 
@@ -234,6 +250,30 @@ describe('POST /analyze', () => {
     }
   })
   it.each([
+    ['a raw upload error', { error: true, end: false }],
+    ['a prematurely closed upload', { close: true, end: false }],
+  ] as const)('settles %s as an invalid request without invoking the model', async (_caseName, simulate) => {
+    let called = false
+    const app = buildApp(appDeps({
+      runAnalysis: async () => {
+        called = true
+        return { kind: 'not-math' }
+      },
+    }))
+    const form = formAutoContent({ photo: await tinyJpeg() })
+
+    const response = await settlesWithin(app.inject({
+      method: 'POST',
+      url: '/analyze',
+      ...form,
+      simulate,
+    }), `${_caseName} left multipart parsing pending`)
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: 'invalid analysis request' })
+    expect(called).toBe(false)
+  })
+  it.each([
     ['false override', async () => formAutoContent({ photo: await tinyJpeg(), allowUncertainTranscript: 'false' })],
     ['numeric override', async () => formAutoContent({ photo: await tinyJpeg(), allowUncertainTranscript: '1' })],
     ['unknown field', async () => formAutoContent({ photo: await tinyJpeg(), unknown: 'true' })],
@@ -291,6 +331,33 @@ describe('POST /analyze', () => {
     })
     expect(res.statusCode).toBe(400)
     expect(res.json()).toEqual({ error: 'invalid analysis request' })
+  })
+  it.each([
+    ['an empty quoted boundary', ''],
+    ['an overlong boundary', 'b'.repeat(71)],
+    ['a boundary containing a non-RFC character', 'snap[boundary]'],
+  ])('rejects %s before parsing or invoking the model', async (_caseName, boundary) => {
+    let called = false
+    const app = buildApp(appDeps({
+      runAnalysis: async () => {
+        called = true
+        return { kind: 'not-math' }
+      },
+    }))
+    const form = multipartForm([
+      { name: 'photo', value: await tinyJpeg(), filename: 'photo.jpg' },
+    ], boundary)
+
+    const response = await settlesWithin(app.inject({
+      method: 'POST',
+      url: '/analyze',
+      payload: form.payload,
+      headers: { 'content-type': `multipart/form-data; boundary="${boundary}"` },
+    }), `invalid boundary ${JSON.stringify(boundary)} left multipart parsing pending`)
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: 'invalid analysis request' })
+    expect(called).toBe(false)
   })
   it('502s on ModelJsonError', async () => {
     const app = buildApp(appDeps({ runAnalysis: async () => { throw new ModelJsonError('bad') } }))

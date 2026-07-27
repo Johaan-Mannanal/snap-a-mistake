@@ -51,7 +51,9 @@ describe('stateful route navigation', () => {
     for (const route of ['review', 'analyze', 'followup'])
       expect(layoutSource).toContain(`name="${route}" options={statefulRouteScreenOptions('${route}')}`)
     expect(reviewSource).toContain('useSystemBackTransition(retake)')
-    expect(analyzeSource).toContain('useSystemBackTransition(analysisSystemBackAction(result !== null')
+    expect(analyzeSource).toContain('useSystemBackTransition(() => {')
+    expect(analyzeSource).toContain('analysisSystemBackAction(')
+    expect(analyzeSource).toContain("analysisActions.current.active === 'run'")
     expect(followUpSource).toContain('useSystemBackTransition(leave)')
   })
 
@@ -120,6 +122,16 @@ describe('stateful route navigation', () => {
     analysisSystemBackAction(true, { active, result })()
     expect(active).toHaveBeenCalledOnce()
     expect(result).toHaveBeenCalledOnce()
+  })
+
+  it('selects active cancellation when a new run starts before the prior result rerenders', () => {
+    const active = vi.fn()
+    const result = vi.fn()
+
+    analysisSystemBackAction(true, { active, result }, true)()
+
+    expect(active).toHaveBeenCalledOnce()
+    expect(result).not.toHaveBeenCalled()
   })
 
   it('coalesces Result reset and Follow-up parent return on double back', async () => {

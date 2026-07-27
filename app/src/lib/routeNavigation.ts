@@ -26,6 +26,7 @@ export function registerSystemBackTransition(
 export function analysisSystemBackAction(
   hasResult: boolean,
   actions: { active(): void; result(): void },
+  activeRun = false,
 ): () => void {
-  return hasResult ? actions.result : actions.active
+  return hasResult && !activeRun ? actions.result : actions.active
 }

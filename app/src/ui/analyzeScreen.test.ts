@@ -9,7 +9,8 @@ const parkedFeatureMessage = new RegExp(['coming', 'soon'].join('\\s+'), 'i')
 describe('analysis result screen', () => {
   it('discards unreadable scans before offering a new photo', () => {
     expect(analyzeScreen).toContain('createUnreadableDiscardTransition')
-    expect(analyzeScreen).toContain('clearSessionForDeletedScan')
+    expect(analyzeScreen).toContain('clearSessionAfterAtomicDiscard')
+    expect(analyzeScreen).not.toContain('clearSessionForDeletedScan')
     expect(analyzeScreen).toContain('flushCleanupQueue')
     expect(analyzeScreen).toContain('Take a new photo')
   })

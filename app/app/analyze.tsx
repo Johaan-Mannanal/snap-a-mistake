@@ -8,7 +8,7 @@ import {
   adoptResultSession,
   adoptReviewSession,
   beginFollowUp,
-  clearSessionForDeletedScan,
+  clearSessionAfterAtomicDiscard,
   getSession,
   persistAnalysis,
   recoverAnalysis,
@@ -19,7 +19,7 @@ import {
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
 import { flushCleanupQueue } from '../src/lib/scanFiles'
 import { createUnreadableDiscardTransition } from '../src/lib/unreadableRecovery'
-import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
+import { createAnalysisActionCoordinator, createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
 import { analysisRevisionReason, beginAnalysisReset, persistAnalysisRun } from '../src/lib/analysisPersistence'
 import {
   CorrectionStorageError,
@@ -101,12 +101,11 @@ export default function Analyze() {
   const feedbackLock = useRef(createAsyncLock<void>())
   const retryCorrection = useRef<(() => void) | null>(null)
   const acceptDiagnosisRef = useRef<() => void>(() => {})
-  const requestInFlight = useRef(false)
   const retryRunOptions = useRef<AnalysisRunOptions>({
     allowUncertainTranscript: false,
   })
+  const analysisActions = useRef(createAnalysisActionCoordinator())
   const runFence = useRef(createRunFence())
-  const saveLock = useRef(createAsyncLock<void>())
   const finalization = useRef(createAnalysisFinalization())
   const restoredResultFinalized = useRef(false)
   const completedReturn = useRef(createCompletedReviewReturn())
@@ -159,38 +158,36 @@ export default function Analyze() {
   }, [])
 
   const persistPendingSave = useCallback(async (pending: PendingSave, token: number) => {
-    await saveLock.current.run(async () => {
-      if (!owns(token)) return
-      if (mounted.current) setIsSaving(true)
-      try {
-        const saved = await persistAnalysisRun({
-          isCurrent: () => owns(token),
-          saveRevision: () => getLocalScanRepository().saveRevision(scanId!, pending.revision, pending.durationMs),
-          validateSaved: (record) => record.activeRevision?.id === pending.revision.id,
-          persistSession: () => persistAnalysis(scanId!, pending.response, pending.durationMs),
-        })
-        if (saved === null || !owns(token)) return
-        if (mounted.current) setResult(pending.response)
-        setDurableResultRevisionId(pending.revision.id)
-        if (mounted.current) setUnsaved(false)
-        finalization.current.markSuccessfulHandoff()
-        if (pending.response.kind === 'analysis') {
-          announceForCurrentRun('completed', 'Analysis completed.')
-        }
-        void feedbackEvents.current.completeOnce(pending.revision.id, systemHaptics)
-      } catch {
-        if (!owns(token)) return
-        setDurableResultRevisionId(null)
-        if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'unsaved').catch(() => {})
-        if (!owns(token)) return
-        if (mounted.current) {
-          setResult(pending.response)
-          setUnsaved(true)
-        }
-      } finally {
-        if (mounted.current && runFence.current.owns(token)) setIsSaving(false)
+    if (!owns(token)) return
+    if (mounted.current) setIsSaving(true)
+    try {
+      const saved = await persistAnalysisRun({
+        isCurrent: () => owns(token),
+        saveRevision: () => getLocalScanRepository().saveRevision(scanId!, pending.revision, pending.durationMs),
+        validateSaved: (record) => record.activeRevision?.id === pending.revision.id,
+        persistSession: () => persistAnalysis(scanId!, pending.response, pending.durationMs),
+      })
+      if (saved === null || !owns(token)) return
+      if (mounted.current) setResult(pending.response)
+      setDurableResultRevisionId(pending.revision.id)
+      if (mounted.current) setUnsaved(false)
+      finalization.current.markSuccessfulHandoff()
+      if (pending.response.kind === 'analysis') {
+        announceForCurrentRun('completed', 'Analysis completed.')
       }
-    })
+      void feedbackEvents.current.completeOnce(pending.revision.id, systemHaptics)
+    } catch {
+      if (!owns(token)) return
+      setDurableResultRevisionId(null)
+      if (scanId) await getLocalScanRepository().setLifecycle(scanId, 'unsaved').catch(() => {})
+      if (!owns(token)) return
+      if (mounted.current) {
+        setResult(pending.response)
+        setUnsaved(true)
+      }
+    } finally {
+      if (mounted.current && runFence.current.owns(token)) setIsSaving(false)
+    }
   }, [announceForCurrentRun, owns, scanId])
 
   const finalizationDependencies = useCallback((navigate: boolean) => {
@@ -208,9 +205,24 @@ export default function Analyze() {
   }, [scanId])
 
   const returnToReview = useCallback(() => {
-    runFence.current.invalidate()
-    activeRequest.current?.abort()
-    return correctionFence.current.invalidate().then(() => finalization.current.cancel(finalizationDependencies(true))).then(
+    const transition = analysisActions.current.transition('back', async (previous) => {
+      const activeRun = runFence.current.invalidate()
+      activeRequest.current?.abort()
+      const corrections = correctionFence.current.invalidate()
+      const dependencies = finalizationDependencies(true)
+      const cancellation = finalization.current.cancel({
+        ...dependencies,
+        interrupt: async () => {
+          await corrections
+          await dependencies.interrupt()
+        },
+      })
+      await previous.catch(() => {})
+      await activeRun?.catch(() => {})
+      await cancellation
+    })
+    if (transition === null) return Promise.resolve()
+    return transition.then(
       () => {
         announceForCurrentRun('cancelled', 'Analysis cancelled. Your reviewed photo is still available.')
         if (mounted.current) setReviewReturnFailed(false)
@@ -240,72 +252,72 @@ export default function Analyze() {
 
   const run = useCallback((options: AnalysisRunOptions) => {
     if (!uri || !scanId) { router.replace('/review'); return }
-    if (requestInFlight.current) return
-    retryRunOptions.current = options
-    requestInFlight.current = true
-    finalization.current.begin()
-    const token = runFence.current.begin()
-    activeToken.current = token
-    setAnalysisRunId(token)
-    announceForCurrentRun(
-      'started',
-      options.allowUncertainTranscript
-        ? 'Analyzing with lower confidence.'
-        : 'Analysis started. Usually takes less than a minute.',
-    )
-    pendingSave.current = null
-    if (mounted.current) {
-      setFailure(null)
-      setUnsaved(false)
-      setResult(null)
-      setDurableResultRevisionId(null)
-      setElapsedSeconds(0)
-    }
-    const task = (async () => {
-      try {
-        await correctionFence.current.invalidate()
-        if (!owns(token)) return
-        const scan = await getLocalScanRepository().setLifecycle(scanId, 'analyzing')
-        if (!owns(token)) return
-        const controller = new AbortController()
-        activeRequest.current = controller
-        const startedAt = Date.now()
-        const response = await analyzePhoto(uri, {
-          signal: controller.signal,
-          allowUncertainTranscript: options.allowUncertainTranscript,
-        })
-        if (!owns(token)) return
-        if (mounted.current) setLastCompletedRunWasForced(options.allowUncertainTranscript)
-        const durationMs = Math.max(0, Date.now() - startedAt)
-        const pending: PendingSave = {
-          response,
-          durationMs,
-          revision: {
-            id: allocateRevisionId(),
-            reason: analysisRevisionReason(scan),
-            response,
-            feedback: 'unreviewed',
-            createdAt: new Date().toISOString(),
-          },
-        }
-        if (!owns(token)) return
-        pendingSave.current = pending
-        await persistPendingSave(pending, token)
-      } catch (error) {
-        if (!owns(token)) return
-        if (mounted.current) {
-          if (error instanceof ApiError) setFailure(error.failure)
-          else setFailure({ kind: 'persistence' })
-        }
-      } finally {
-        if (runFence.current.owns(token)) {
-          activeRequest.current = null
-          requestInFlight.current = false
-        }
+    const action = analysisActions.current.start('run', () => {
+      retryRunOptions.current = options
+      finalization.current.begin()
+      const token = runFence.current.begin()
+      activeToken.current = token
+      setAnalysisRunId(token)
+      announceForCurrentRun(
+        'started',
+        options.allowUncertainTranscript
+          ? 'Analyzing with lower confidence.'
+          : 'Analysis started. Usually takes less than a minute.',
+      )
+      pendingSave.current = null
+      if (mounted.current) {
+        setFailure(null)
+        setUnsaved(false)
+        setResult(null)
+        setDurableResultRevisionId(null)
+        setElapsedSeconds(0)
       }
-    })()
-    runFence.current.track(token, task)
-    finalization.current.track(task)
+      let request: AbortController | null = null
+      const task = (async () => {
+        try {
+          await correctionFence.current.invalidate()
+          if (!owns(token)) return
+          const scan = await getLocalScanRepository().setLifecycle(scanId, 'analyzing')
+          if (!owns(token)) return
+          request = new AbortController()
+          activeRequest.current = request
+          const startedAt = Date.now()
+          const response = await analyzePhoto(uri, {
+            signal: request.signal,
+            allowUncertainTranscript: options.allowUncertainTranscript,
+          })
+          if (!owns(token)) return
+          if (mounted.current) setLastCompletedRunWasForced(options.allowUncertainTranscript)
+          const durationMs = Math.max(0, Date.now() - startedAt)
+          const pending: PendingSave = {
+            response,
+            durationMs,
+            revision: {
+              id: allocateRevisionId(),
+              reason: analysisRevisionReason(scan),
+              response,
+              feedback: 'unreviewed',
+              createdAt: new Date().toISOString(),
+            },
+          }
+          if (!owns(token)) return
+          pendingSave.current = pending
+          await persistPendingSave(pending, token)
+        } catch (error) {
+          if (!owns(token)) return
+          if (mounted.current) {
+            if (error instanceof ApiError) setFailure(error.failure)
+            else setFailure({ kind: 'persistence' })
+          }
+        } finally {
+          if (activeRequest.current === request) activeRequest.current = null
+        }
+      })()
+      runFence.current.track(token, task)
+      finalization.current.track(task)
+      return task
+    })
+    void action?.catch(() => {})
   }, [announceForCurrentRun, owns, persistPendingSave, scanId, uri])
 
   useEffect(() => {
@@ -371,9 +383,13 @@ export default function Analyze() {
     const token = activeToken.current
     const pending = pendingSave.current
     if (token === null || pending === null || !owns(token)) return
-    const task = persistPendingSave(pending, token)
-    runFence.current.track(token, task)
-    finalization.current.track(task)
+    const action = analysisActions.current.start('retry-save', () => {
+      const task = persistPendingSave(pending, token)
+      runFence.current.track(token, task)
+      finalization.current.track(task)
+      return task
+    })
+    void action?.catch(() => {})
   }, [owns, persistPendingSave])
 
   const snapAnother = useCallback(() => {
@@ -395,33 +411,49 @@ export default function Analyze() {
 
   const takeNewUnreadablePhoto = useCallback(() => {
     if (!scanId) return
+    const priorAction = analysisActions.current.active
+    const recoverableResult = result?.kind === 'unreadable' ? result : null
+    const action = analysisActions.current.transition('discard', async (previous) => {
+      const activeRun = priorAction === 'run' ? runFence.current.invalidate() : null
+      if (priorAction === 'run') activeRequest.current?.abort()
+      const corrections = correctionFence.current.invalidate()
+      await previous.catch(() => {})
+      await activeRun?.catch(() => {})
+      await corrections
+      const repository = getLocalScanRepository()
+      await unreadableDiscardTransition.current!.discard(scanId, {
+        deleteScan: (discardedScanId) => repository.delete(discardedScanId),
+        clearInMemorySession: () => {
+          finalization.current.markSuccessfulHandoff()
+          clearSessionAfterAtomicDiscard()
+        },
+        flushOwnedPhotos: () => flushCleanupQueue(repository),
+        navigate: () => {
+          if (mounted.current) router.dismissTo('/')
+        },
+      })
+    })
+    if (action === null) return
     setDiscardingUnreadable(true)
     setUnreadableDiscardFailed(false)
-    const repository = getLocalScanRepository()
-    void unreadableDiscardTransition.current!.discard(scanId, {
-      deleteScan: async (discardedScanId) => {
-        await correctionFence.current.invalidate()
-        return repository.delete(discardedScanId)
-      },
-      clearSession: async (discardedScanId) => {
-        finalization.current.markSuccessfulHandoff()
-        await clearSessionForDeletedScan(discardedScanId)
-      },
-      flushOwnedPhotos: () => flushCleanupQueue(repository),
-      navigate: () => {
-        if (mounted.current) router.dismissTo('/')
-      },
-    }).catch(() => {
+    void action.catch(() => {
       if (!mounted.current) return
+      if (recoverableResult !== null) setResult(recoverableResult)
       setDiscardingUnreadable(false)
       setUnreadableDiscardFailed(true)
     })
-  }, [scanId])
+  }, [result, scanId])
 
-  useSystemBackTransition(analysisSystemBackAction(result !== null, {
-    active: () => { void returnToReview() },
-    result: result?.kind === 'unreadable' ? takeNewUnreadablePhoto : snapAnother,
-  }))
+  useSystemBackTransition(() => {
+    analysisSystemBackAction(
+      result !== null,
+      {
+        active: () => { void returnToReview() },
+        result: result?.kind === 'unreadable' ? takeNewUnreadablePhoto : snapAnother,
+      },
+      analysisActions.current.active === 'run',
+    )()
+  })
 
   const openFollowUp = useCallback(() => {
     if (!scanId || openingFollowUp) return
@@ -729,13 +761,13 @@ export default function Analyze() {
         {unreadableDiscardFailed ? <Text accessibilityRole="alert" style={styles.resetFailureCopy}>We couldn’t remove this scan. Your photo is still saved. Try again.</Text> : null}
         <AppButton
           label={discardingUnreadable ? 'Removing photo…' : 'Take a new photo'}
-          disabled={discardingUnreadable}
+          disabled={discardingUnreadable || isSaving}
           onPress={takeNewUnreadablePhoto}
         />
         <Text style={styles.stateWarning}>Results may be less accurate.</Text>
         <AppButton
           label="Proceed anyway"
-          disabled={discardingUnreadable}
+          disabled={discardingUnreadable || isSaving}
           onPress={() => run({ allowUncertainTranscript: true })}
           variant="secondary"
         />
