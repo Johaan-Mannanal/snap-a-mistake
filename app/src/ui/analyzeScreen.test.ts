@@ -7,6 +7,13 @@ const unfinishedLessonAction = new RegExp(['video', 'lesson'].join('\\s+'), 'i')
 const parkedFeatureMessage = new RegExp(['coming', 'soon'].join('\\s+'), 'i')
 
 describe('analysis result screen', () => {
+  it('discards unreadable scans before offering a new photo', () => {
+    expect(analyzeScreen).toContain('createUnreadableDiscardTransition')
+    expect(analyzeScreen).toContain('clearSessionForDeletedScan')
+    expect(analyzeScreen).toContain('flushCleanupQueue')
+    expect(analyzeScreen).toContain('Take a new photo')
+  })
+
   it('does not offer the unfinished lesson action', () => {
     expect(analyzeScreen).not.toMatch(unfinishedLessonAction)
     expect(analyzeScreen).not.toMatch(parkedFeatureMessage)

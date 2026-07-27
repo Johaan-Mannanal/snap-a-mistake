@@ -4,8 +4,21 @@ import { router } from 'expo-router'
 import type { AnalyzeResponse } from '@snap/shared'
 import { ApiError, type ApiFailure, analyzePhoto, correctDiagnosis } from '../src/lib/api'
 import { getLocalScanRepository } from '../src/lib/history'
-import { adoptResultSession, adoptReviewSession, beginFollowUp, getSession, persistAnalysis, recoverAnalysis, resetSession, resultSession, reviewSession } from '../src/lib/session'
+import {
+  adoptResultSession,
+  adoptReviewSession,
+  beginFollowUp,
+  clearSessionForDeletedScan,
+  getSession,
+  persistAnalysis,
+  recoverAnalysis,
+  resetSession,
+  resultSession,
+  reviewSession,
+} from '../src/lib/session'
 import { createSessionResetTransition } from '../src/lib/sessionResetTransition'
+import { flushCleanupQueue } from '../src/lib/scanFiles'
+import { createUnreadableDiscardTransition } from '../src/lib/unreadableRecovery'
 import { createAsyncLock, createRunFence } from '../src/lib/analysisAsync'
 import { analysisRevisionReason, beginAnalysisReset, persistAnalysisRun } from '../src/lib/analysisPersistence'
 import {
@@ -72,8 +85,11 @@ export default function Analyze() {
   const [durableResultRevisionId, setDurableResultRevisionId] = useState<string | null>(null)
   const [openingFollowUp, setOpeningFollowUp] = useState(false)
   const [followUpOpenFailed, setFollowUpOpenFailed] = useState(false)
+  const [discardingUnreadable, setDiscardingUnreadable] = useState(false)
+  const [unreadableDiscardFailed, setUnreadableDiscardFailed] = useState(false)
   const { photoUri: uri, pendingScanId: scanId } = getSession()
   const resetTransition = useRef<(() => Promise<void>) | null>(null)
+  const unreadableDiscardTransition = useRef<ReturnType<typeof createUnreadableDiscardTransition> | null>(null)
   const activeRequest = useRef<AbortController | null>(null)
   const correctionFence = useRef(createCorrectionFence())
   const correctionBusy = useRef(createCorrectionBusyState())
@@ -105,6 +121,8 @@ export default function Analyze() {
       () => router.dismissTo('/'),
       () => mounted.current,
     )
+  if (unreadableDiscardTransition.current === null)
+    unreadableDiscardTransition.current = createUnreadableDiscardTransition()
 
   const announceForCurrentRun = useCallback((event: string, message: string) => {
     const token = activeToken.current
@@ -357,9 +375,34 @@ export default function Analyze() {
     })
   }, [])
 
+  const takeNewUnreadablePhoto = useCallback(() => {
+    if (!scanId) return
+    setDiscardingUnreadable(true)
+    setUnreadableDiscardFailed(false)
+    const repository = getLocalScanRepository()
+    void unreadableDiscardTransition.current!.discard(scanId, {
+      deleteScan: async (discardedScanId) => {
+        await correctionFence.current.invalidate()
+        return repository.delete(discardedScanId)
+      },
+      clearSession: async (discardedScanId) => {
+        finalization.current.markSuccessfulHandoff()
+        await clearSessionForDeletedScan(discardedScanId)
+      },
+      flushOwnedPhotos: () => flushCleanupQueue(repository),
+      navigate: () => {
+        if (mounted.current) router.dismissTo('/')
+      },
+    }).catch(() => {
+      if (!mounted.current) return
+      setDiscardingUnreadable(false)
+      setUnreadableDiscardFailed(true)
+    })
+  }, [scanId])
+
   useSystemBackTransition(analysisSystemBackAction(result !== null, {
     active: () => { void returnToReview() },
-    result: snapAnother,
+    result: result?.kind === 'unreadable' ? takeNewUnreadablePhoto : snapAnother,
   }))
 
   const openFollowUp = useCallback(() => {
@@ -659,8 +702,13 @@ export default function Analyze() {
             {result.tips.map((tip) => <Text key={tip} style={styles.tip}>— {tip}</Text>)}
           </View>
         </View>
-        {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} /> : null}
-        <AppButton label={isReturningCompleted ? 'Returning…' : 'Return to review'} disabled={isReturningCompleted} onPress={() => { void returnCompletedResultToReview() }} />
+        {unsaved ? <UnsavedBanner onRetry={retrySaving} isSaving={isSaving} disabled={discardingUnreadable} /> : null}
+        {unreadableDiscardFailed ? <Text accessibilityRole="alert" style={styles.resetFailureCopy}>We couldn’t remove this scan. Your photo is still saved. Try again.</Text> : null}
+        <AppButton
+          label={discardingUnreadable ? 'Discarding…' : 'Take a new photo'}
+          disabled={discardingUnreadable}
+          onPress={takeNewUnreadablePhoto}
+        />
       </AppScreen>
     )
   }
@@ -764,11 +812,11 @@ export default function Analyze() {
   )
 }
 
-function UnsavedBanner({ onRetry, isSaving }: { onRetry: () => void; isSaving: boolean }) {
+function UnsavedBanner({ onRetry, isSaving, disabled = false }: { onRetry: () => void; isSaving: boolean; disabled?: boolean }) {
   return (
     <View style={styles.unsavedBanner}>
       <Text accessibilityRole="alert" style={styles.unsavedCopy}>{isSaving ? 'Saving this result…' : 'This result is visible, but it isn’t saved yet.'}</Text>
-      <AppButton label={isSaving ? 'Saving…' : 'Retry saving'} onPress={onRetry} disabled={isSaving} variant="secondary" />
+      <AppButton label={isSaving ? 'Saving…' : 'Retry saving'} onPress={onRetry} disabled={isSaving || disabled} variant="secondary" />
     </View>
   )
 }
