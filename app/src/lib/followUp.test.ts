@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { FollowUp } from '@snap/shared'
 import {
   buildAlternateFollowUpContext,
+  beginFollowUpRouteActivation,
   canStartAlternateFollowUp,
+  createFollowUpRouteGate,
   createFollowUpHandoffCoordinator,
   createFollowUpPracticeState,
   createFollowUpCheckFence,
@@ -83,6 +85,36 @@ describe('follow-up practice state', () => {
       'Simplify −(7x + 8).',
     ])
     expect(context.previousProblems).toHaveLength(5)
+  })
+})
+
+describe('follow-up route gate', () => {
+  it('rejects check-work activation until the newly presented route is ready', () => {
+    const gate = createFollowUpRouteGate()
+
+    expect(gate.canCheck()).toBe(false)
+    gate.arm()
+    expect(gate.canCheck()).toBe(true)
+    gate.invalidate()
+    expect(gate.canCheck()).toBe(false)
+  })
+
+  it('arms only after the focused route delay and cancels plus disarms on blur', () => {
+    const gate = createFollowUpRouteGate()
+    const activations: (() => void)[] = []
+    let cancellations = 0
+    const blur = beginFollowUpRouteActivation(gate, (callback) => {
+      activations.push(callback)
+      return () => { cancellations += 1 }
+    })
+
+    expect(gate.canCheck()).toBe(false)
+    activations[0]!()
+    expect(gate.canCheck()).toBe(true)
+
+    blur()
+    expect(cancellations).toBe(1)
+    expect(gate.canCheck()).toBe(false)
   })
 })
 

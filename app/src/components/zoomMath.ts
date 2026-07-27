@@ -1,3 +1,16 @@
+export function normalizeImageSize(width: number, height: number): { width: number; height: number } | null {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
+  return { width, height }
+}
+
+export function normalizeLoadedImageSize(
+  expectedUri: string,
+  source: { uri: string; width: number; height: number },
+): { width: number; height: number } | null {
+  if (source.uri !== expectedUri) return null
+  return normalizeImageSize(source.width, source.height)
+}
+
 export function photoTransform(input: { x: number; y: number; scale: number }) {
   'worklet'
   return [

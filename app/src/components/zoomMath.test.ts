@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { clampPhotoTranslation, photoTransform } from './zoomMath'
+import { clampPhotoTranslation, normalizeImageSize, normalizeLoadedImageSize, photoTransform } from './zoomMath'
+
+describe('normalizeImageSize', () => {
+  it('accepts dimensions reported by the displayed image and rejects unusable load data', () => {
+    expect(normalizeImageSize(1200, 800)).toEqual({ width: 1200, height: 800 })
+    expect(normalizeImageSize(0, 800)).toBeNull()
+    expect(normalizeImageSize(Number.NaN, 800)).toBeNull()
+  })
+
+  it('rejects a late load event from a replaced image source', () => {
+    expect(normalizeLoadedImageSize('file:///new.jpg', {
+      uri: 'file:///old.jpg',
+      width: 1200,
+      height: 800,
+    })).toBeNull()
+    expect(normalizeLoadedImageSize('file:///new.jpg', {
+      uri: 'file:///new.jpg',
+      width: 900,
+      height: 1200,
+    })).toEqual({ width: 900, height: 1200 })
+  })
+})
 
 describe('clampPhotoTranslation', () => {
   it('keeps panning at zero when the contained photo is at 1x', () => {

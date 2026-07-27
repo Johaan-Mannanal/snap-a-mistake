@@ -26,6 +26,12 @@ export type FollowUpLeaveLock = {
   run(task: () => Promise<void>): { started: boolean; promise: Promise<void> }
 }
 
+export type FollowUpRouteGate = {
+  arm(): void
+  canCheck(): boolean
+  invalidate(): void
+}
+
 export type FollowUpAlternateResult =
   | { kind: 'updated'; practice: FollowUpPracticeState }
   | { kind: 'storage-failed'; practice: FollowUpPracticeState }
@@ -161,6 +167,27 @@ export function createFollowUpLeaveLock(): FollowUpLeaveLock {
       active = current
       return { started: true, promise: current }
     },
+  }
+}
+
+export function createFollowUpRouteGate(): FollowUpRouteGate {
+  let armed = false
+  return {
+    arm() { armed = true },
+    canCheck() { return armed },
+    invalidate() { armed = false },
+  }
+}
+
+export function beginFollowUpRouteActivation(
+  gate: FollowUpRouteGate,
+  schedule: (activate: () => void) => () => void,
+): () => void {
+  gate.invalidate()
+  const cancel = schedule(() => gate.arm())
+  return () => {
+    cancel()
+    gate.invalidate()
   }
 }
 

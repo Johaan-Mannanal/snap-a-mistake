@@ -1,10 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 import { colors, spacing } from '../ui/theme'
 import { containedPhotoRect, type ContainedPhotoRect } from '../lib/overlay'
-import { clampPhotoTranslation, photoTransform } from './zoomMath'
+import { clampPhotoTranslation, normalizeLoadedImageSize, photoTransform } from './zoomMath'
 
 const MIN_SCALE = 1
 const MAX_SCALE = 4
@@ -27,37 +27,48 @@ export function ZoomablePhoto(props: {
   const imageHeight = useSharedValue(0)
   const [zoomLevel, setZoomLevel] = useState(MIN_SCALE)
   const [reduceMotion, setReduceMotion] = useState(false)
+  const reduceMotionRef = useRef(false)
   const [frame, setFrame] = useState({ width: 0, height: 0 })
-  const [imageSize, setImageSize] = useState({ width: 0, height: 0 })
+  const [loadedImage, setLoadedImage] = useState({ uri: props.uri, width: 0, height: 0 })
+  const imageSize = loadedImage.uri === props.uri
+    ? loadedImage
+    : { width: 0, height: 0 }
 
   useEffect(() => {
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion)
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion)
+    const updateReduceMotion = (enabled: boolean) => {
+      reduceMotionRef.current = enabled
+      setReduceMotion(enabled)
+    }
+    void AccessibilityInfo.isReduceMotionEnabled().then(updateReduceMotion)
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', updateReduceMotion)
     return () => subscription.remove()
   }, [])
 
+  const applyImageSize = useCallback((source: { uri: string; width: number; height: number }) => {
+    const next = normalizeLoadedImageSize(props.uri, source)
+    if (next === null) return
+    imageWidth.value = next.width
+    imageHeight.value = next.height
+    setLoadedImage({ uri: props.uri, ...next })
+    const translation = clampPhotoTranslation({
+      x: translateX.value, y: translateY.value,
+      frameWidth: frameWidth.value, frameHeight: frameHeight.value,
+      imageWidth: next.width, imageHeight: next.height, scale: scale.value,
+    })
+    translateX.value = withTiming(translation.x, { duration: reduceMotionRef.current ? 0 : 160 })
+    translateY.value = withTiming(translation.y, { duration: reduceMotionRef.current ? 0 : 160 })
+  }, [frameHeight, frameWidth, imageHeight, imageWidth, props.uri, scale, translateX, translateY])
+
   useEffect(() => {
     let active = true
+    imageWidth.value = 0
+    imageHeight.value = 0
     Image.getSize(props.uri, (width, height) => {
       if (!active) return
-      imageWidth.value = width
-      imageHeight.value = height
-      setImageSize({ width, height })
-      const translation = clampPhotoTranslation({
-        x: translateX.value, y: translateY.value,
-        frameWidth: frameWidth.value, frameHeight: frameHeight.value,
-        imageWidth: width, imageHeight: height, scale: scale.value,
-      })
-      translateX.value = withTiming(translation.x, { duration: reduceMotion ? 0 : 160 })
-      translateY.value = withTiming(translation.y, { duration: reduceMotion ? 0 : 160 })
-    }, () => {
-      if (!active) return
-      imageWidth.value = 0
-      imageHeight.value = 0
-      setImageSize({ width: 0, height: 0 })
-    })
+      applyImageSize({ uri: props.uri, width, height })
+    }, () => {})
     return () => { active = false }
-  }, [props.uri, reduceMotion])
+  }, [applyImageSize, imageHeight, imageWidth, props.uri])
 
   const setScale = (nextScale: number) => {
     const clamped = clampScale(nextScale)
@@ -149,6 +160,9 @@ export function ZoomablePhoto(props: {
             <Image
               accessible
               accessibilityLabel={`Selected photo. Zoom ${Math.round(zoomLevel * 100)} percent.`}
+              onLoad={(event) => {
+                applyImageSize(event.nativeEvent.source)
+              }}
               source={{ uri: props.uri }}
               resizeMode="contain"
               style={styles.photo}

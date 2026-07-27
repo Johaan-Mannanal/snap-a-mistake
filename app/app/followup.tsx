@@ -1,15 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { AppButton } from '../src/components/AppButton'
 import { AppScreen } from '../src/components/AppScreen'
 import { ApiError, requestAlternateFollowUp } from '../src/lib/api'
 import {
   buildAlternateFollowUpContext,
+  beginFollowUpRouteActivation,
   canStartAlternateFollowUp,
   createFollowUpPracticeState,
   createFollowUpHandoffCoordinator,
   createFollowUpLeaveLock,
+  createFollowUpRouteGate,
   revealFollowUpHint,
   replaceFollowUpProblem,
   type FollowUpPracticeState,
@@ -20,6 +22,7 @@ import { colors, spacing, typeScale } from '../src/ui/theme'
 import { useSystemBackTransition } from '../src/lib/useSystemBackTransition'
 
 type AlternateFailure = 'duplicate' | 'link' | 'network' | 'storage'
+const ROUTE_ACTIVATION_DELAY_MS = 500
 
 function currentParentId(): string | null {
   const session = getSession()
@@ -49,6 +52,7 @@ export default function FollowUp() {
   const [leaveFailure, setLeaveFailure] = useState<string | null>(null)
   const handoff = useRef(createFollowUpHandoffCoordinator())
   const leaveLock = useRef(createFollowUpLeaveLock())
+  const routeGate = useRef(createFollowUpRouteGate())
   const mounted = useRef(true)
   const practiceRouteCurrent = useRef(true)
   const parentScanId = useRef(currentParentId()).current
@@ -62,6 +66,12 @@ export default function FollowUp() {
       void coordinator.invalidate().catch(() => {})
     }
   }, [])
+  useFocusEffect(useCallback(() => (
+    beginFollowUpRouteActivation(routeGate.current, (activate) => {
+      const activation = setTimeout(activate, ROUTE_ACTIVATION_DELAY_MS)
+      return () => clearTimeout(activation)
+    })
+  ), []))
   const leave = () => {
     practiceRouteCurrent.current = false
     const operation = leaveLock.current.run(async () => {
@@ -144,6 +154,7 @@ export default function FollowUp() {
       || handoff.current.checkBusy
       || leaveLock.current.busy
       || !practiceRouteCurrent.current
+      || !routeGate.current.canCheck()
     ) return
     if (parentScanId === null) {
       setAlternateFailure('link')
