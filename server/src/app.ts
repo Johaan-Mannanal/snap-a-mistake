@@ -11,7 +11,12 @@ import { ModelJsonError } from './llm/client.js'
 import type { RunCorrectionFn } from './pipeline/correction.js'
 import type { GenerateFollowUpFn } from './pipeline/followup.js'
 
-export type RunAnalysisFn = (image: { base64: string; mediaType: 'image/jpeg' }) => Promise<AnalyzeResponse>
+export type AnalysisOptions = { allowUncertainTranscript?: boolean }
+
+export type RunAnalysisFn = (
+  image: { base64: string; mediaType: 'image/jpeg' },
+  options?: AnalysisOptions,
+) => Promise<AnalyzeResponse>
 
 export type BuildAppDeps = {
   runAnalysis: RunAnalysisFn
@@ -56,14 +61,46 @@ export function buildApp(deps: BuildAppDeps): FastifyInstance {
 
   app.post('/analyze', async (req, reply) => {
     try {
-      if (!req.isMultipart() || !hasMultipartBoundary(req.headers['content-type'])) {
-        return reply.code(400).send({ error: 'no file' })
+      if (!req.isMultipart() || !hasMultipartBoundary(req.headers['content-type']))
+        return reply.code(400).send({ error: 'invalid analysis request' })
+
+      let photo: Buffer | undefined
+      let allowUncertainTranscript = false
+      let overrideSeen = false
+      let invalid = false
+      for await (const part of req.parts()) {
+        if (part.type === 'file') {
+          if (part.fieldname !== 'photo' || photo !== undefined) {
+            invalid = true
+            await part.toBuffer()
+          } else {
+            photo = await part.toBuffer()
+          }
+        } else if (
+          part.fieldname !== 'allowUncertainTranscript'
+          || overrideSeen
+          || part.valueTruncated
+          || part.value !== 'true'
+        ) {
+          invalid = true
+        } else {
+          overrideSeen = true
+          allowUncertainTranscript = true
+        }
       }
-      const file = await req.file()
-      if (!file) return reply.code(400).send({ error: 'no file' })
-      return await deps.runAnalysis(await normalizeJpeg(await file.toBuffer()))
+      if (invalid || !photo) return reply.code(400).send({ error: 'invalid analysis request' })
+
+      return await deps.runAnalysis(await normalizeJpeg(photo), { allowUncertainTranscript })
     } catch (err) {
       if (err instanceof ModelJsonError) return reply.code(502).send({ error: 'analysis-failed' })
+      if (
+        err instanceof app.multipartErrors.PartsLimitError
+        || err instanceof app.multipartErrors.FilesLimitError
+        || err instanceof app.multipartErrors.FieldsLimitError
+        || err instanceof app.multipartErrors.RequestFileTooLargeError
+        || err instanceof app.multipartErrors.PrototypeViolationError
+        || (typeof err === 'object' && err !== null && 'code' in err && err.code === 'FST_INVALID_JSON_FIELD_ERROR')
+      ) return reply.code(400).send({ error: 'invalid analysis request' })
       return reply.code(500).send({ error: 'internal' })
     }
   })

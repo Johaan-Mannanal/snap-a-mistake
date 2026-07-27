@@ -63,14 +63,16 @@ export function makeRunAnalysis(
   deps: Deps = { transcribe, verifyTranscription, analyzeSteps, verifyDiagnosis },
   onStageTiming: (timing: StageTiming) => void = () => {},
 ): RunAnalysisFn {
-  return async (image) => {
+  return async (image, options = {}) => {
     const s1 = await timeStage(
       'transcription',
       () => deps.transcribe(client, config.models.vision, image),
       onStageTiming,
     )
     if (!s1.isMath) return { kind: 'not-math' }
-    if (s1.legibility < config.legibilityThreshold || s1.steps.length === 0)
+    if (s1.steps.length === 0)
+      return { kind: 'unreadable', tips: RETAKE_TIPS }
+    if (!options.allowUncertainTranscript && s1.legibility < config.legibilityThreshold)
       return { kind: 'unreadable', tips: RETAKE_TIPS }
 
     const transcriptionCheck = await timeStage(
@@ -78,7 +80,10 @@ export function makeRunAnalysis(
       () => deps.verifyTranscription(client, config.models.vision, image, s1.steps),
       onStageTiming,
     )
-    if (!transcriptionCheck.faithful || !transcriptionCheck.legible)
+    if (
+      !options.allowUncertainTranscript
+      && (!transcriptionCheck.faithful || !transcriptionCheck.legible)
+    )
       return { kind: 'unreadable', tips: RETAKE_TIPS }
 
     const s2 = await timeStage(

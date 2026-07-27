@@ -2,7 +2,7 @@ import { createRequire } from 'module'
 import { describe, expect, it } from 'vitest'
 import sharp from 'sharp'
 import type { AlternateFollowUpContext, AnalyzeResponse, CorrectionContext, FollowUp } from '@snap/shared'
-import { buildApp, type BuildAppDeps } from '../src/app.js'
+import { buildApp, type AnalysisOptions, type BuildAppDeps } from '../src/app.js'
 import { ModelJsonError } from '../src/llm/client.js'
 
 const formAutoContent = createRequire(import.meta.url)('form-auto-content')
@@ -143,6 +143,24 @@ async function tinyJpeg(): Promise<Buffer> {
     .jpeg().toBuffer()
 }
 
+function multipartForm(parts: Array<{ name: string; value: Buffer | string; filename?: string }>) {
+  const boundary = '----snap-analysis-test-boundary'
+  const chunks: Buffer[] = []
+  for (const part of parts) {
+    const disposition = part.filename
+      ? `Content-Disposition: form-data; name="${part.name}"; filename="${part.filename}"\r\nContent-Type: image/jpeg`
+      : `Content-Disposition: form-data; name="${part.name}"`
+    chunks.push(Buffer.from(`--${boundary}\r\n${disposition}\r\n\r\n`))
+    chunks.push(typeof part.value === 'string' ? Buffer.from(part.value) : part.value)
+    chunks.push(Buffer.from('\r\n'))
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`))
+  return {
+    payload: Buffer.concat(chunks),
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+  }
+}
+
 describe('POST /analyze', () => {
   it('returns the pipeline result for an uploaded photo', async () => {
     let received = ''
@@ -158,6 +176,61 @@ describe('POST /analyze', () => {
     expect(res.json().kind).toBe('unreadable')
     expect(received).toBe('image/jpeg')
   })
+  it('forwards the exact proceed-anyway override', async () => {
+    let received: AnalysisOptions | undefined
+    const app = buildApp(appDeps({
+      runAnalysis: async (_image, options) => {
+        received = options
+        return { kind: 'unreadable', tips: ['more light'] }
+      },
+    }))
+    const form = formAutoContent({
+      photo: await tinyJpeg(),
+      allowUncertainTranscript: 'true',
+    })
+
+    const response = await app.inject({ method: 'POST', url: '/analyze', ...form })
+
+    expect(response.statusCode).toBe(200)
+    expect(received).toEqual({ allowUncertainTranscript: true })
+  })
+  it.each([
+    ['false override', async () => formAutoContent({ photo: await tinyJpeg(), allowUncertainTranscript: 'false' })],
+    ['numeric override', async () => formAutoContent({ photo: await tinyJpeg(), allowUncertainTranscript: '1' })],
+    ['unknown field', async () => formAutoContent({ photo: await tinyJpeg(), unknown: 'true' })],
+    ['duplicate photo', async () => multipartForm([
+      { name: 'photo', value: await tinyJpeg(), filename: 'first.jpg' },
+      { name: 'photo', value: await tinyJpeg(), filename: 'second.jpg' },
+    ])],
+    ['duplicate override', async () => multipartForm([
+      { name: 'photo', value: await tinyJpeg(), filename: 'photo.jpg' },
+      { name: 'allowUncertainTranscript', value: 'true' },
+      { name: 'allowUncertainTranscript', value: 'true' },
+    ])],
+    ['missing photo', async () => formAutoContent(
+      { allowUncertainTranscript: 'true' },
+      { forceMultiPart: true },
+    )],
+    ['truncated field', async () => formAutoContent({
+      photo: await tinyJpeg(),
+      allowUncertainTranscript: 't'.repeat(64 * 1024),
+    })],
+  ])('rejects an invalid analysis request with %s before invoking the pipeline', async (_caseName, createForm) => {
+    let called = false
+    const app = buildApp(appDeps({
+      runAnalysis: async () => {
+        called = true
+        return { kind: 'not-math' }
+      },
+    }))
+    const form = await createForm()
+
+    const response = await app.inject({ method: 'POST', url: '/analyze', ...form })
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: 'invalid analysis request' })
+    expect(called).toBe(false)
+  })
   it('returns the API error contract for a non-multipart request', async () => {
     const app = buildApp(appDeps())
     const res = await app.inject({
@@ -167,7 +240,7 @@ describe('POST /analyze', () => {
       headers: { 'content-type': 'text/plain' },
     })
     expect(res.statusCode).toBe(400)
-    expect(res.json()).toEqual({ error: 'no file' })
+    expect(res.json()).toEqual({ error: 'invalid analysis request' })
   })
   it('returns the API error contract for multipart data without a boundary', async () => {
     const app = buildApp(appDeps())
@@ -178,7 +251,7 @@ describe('POST /analyze', () => {
       headers: { 'content-type': 'multipart/form-data' },
     })
     expect(res.statusCode).toBe(400)
-    expect(res.json()).toEqual({ error: 'no file' })
+    expect(res.json()).toEqual({ error: 'invalid analysis request' })
   })
   it('502s on ModelJsonError', async () => {
     const app = buildApp(appDeps({ runAnalysis: async () => { throw new ModelJsonError('bad') } }))

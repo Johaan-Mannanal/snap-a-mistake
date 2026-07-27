@@ -23,22 +23,84 @@ const errorDiag: Stage2Result = {
 }
 const cleanDiag: Stage2Result = { errorStepIndex: null, misconceptionTag: null, explanation: null, followUp: null }
 
-function run(opts: { s1?: Stage1Result; s2?: Stage2Result; v?: VerifierResult }) {
+function run(
+  opts: { s1?: Stage1Result; s2?: Stage2Result; v?: VerifierResult },
+  options?: { allowUncertainTranscript?: boolean },
+) {
   return makeRunAnalysis(client, config, {
     transcribe: async () => opts.s1 ?? s1(),
     verifyTranscription: async () => ({ faithful: true, legible: true, note: '' }),
     analyzeSteps: async () => opts.s2 ?? cleanDiag,
     verifyDiagnosis: async () => opts.v ?? { agrees: true, note: '' },
-  })(image)
+  })(image, options)
 }
 
 describe('runAnalysis', () => {
   it('returns not-math without calling stage 2', async () => {
     expect(await run({ s1: s1({ isMath: false }) })).toEqual({ kind: 'not-math' })
   })
-  it('returns unreadable below the legibility threshold', async () => {
-    const r = await run({ s1: s1({ legibility: 0.3 }) })
-    expect(r.kind).toBe('unreadable')
+  it('does not force non-math inputs through', async () => {
+    let fidelityChecked = false
+    const analyze = makeRunAnalysis(client, config, {
+      transcribe: async () => s1({ isMath: false }),
+      verifyTranscription: async () => {
+        fidelityChecked = true
+        return { faithful: true, legible: true, note: '' }
+      },
+      analyzeSteps: async () => errorDiag,
+      verifyDiagnosis: async () => ({ agrees: true, note: '' }),
+    })
+
+    await expect(analyze(image, { allowUncertainTranscript: true }))
+      .resolves.toEqual({ kind: 'not-math' })
+    expect(fidelityChecked).toBe(false)
+  })
+  it('keeps low-legibility rejection strict by default', async () => {
+    let fidelityChecked = false
+    const analyze = makeRunAnalysis(client, config, {
+      transcribe: async () => s1({ legibility: 0.3 }),
+      verifyTranscription: async () => {
+        fidelityChecked = true
+        return { faithful: true, legible: true, note: '' }
+      },
+      analyzeSteps: async () => errorDiag,
+      verifyDiagnosis: async () => ({ agrees: true, note: '' }),
+    })
+
+    await expect(analyze(image)).resolves.toMatchObject({ kind: 'unreadable' })
+    expect(fidelityChecked).toBe(false)
+  })
+  it('continues past uncertain transcription only for an explicit override', async () => {
+    let fidelityChecked = false
+    const analyze = makeRunAnalysis(client, config, {
+      transcribe: async () => s1({ legibility: 0.3 }),
+      verifyTranscription: async () => {
+        fidelityChecked = true
+        return { faithful: false, legible: false, note: 'uncertain' }
+      },
+      analyzeSteps: async () => errorDiag,
+      verifyDiagnosis: async () => ({ agrees: true, note: '' }),
+    })
+
+    const result = await analyze(image, { allowUncertainTranscript: true })
+
+    expect(result).toMatchObject({
+      kind: 'analysis',
+      errorStepIndex: 1,
+      misconceptionTag: 'sign-error',
+    })
+    expect(fidelityChecked).toBe(true)
+  })
+  it('does not force an empty transcript through', async () => {
+    const analyze = makeRunAnalysis(client, config, {
+      transcribe: async () => s1({ legibility: 0.2, steps: [] }),
+      verifyTranscription: async () => ({ faithful: false, legible: false, note: 'empty' }),
+      analyzeSteps: async () => cleanDiag,
+      verifyDiagnosis: async () => ({ agrees: true, note: '' }),
+    })
+
+    await expect(analyze(image, { allowUncertainTranscript: true }))
+      .resolves.toMatchObject({ kind: 'unreadable' })
   })
   it('returns unreadable when no steps were found', async () => {
     const r = await run({ s1: s1({ steps: [] }) })
