@@ -26,8 +26,8 @@ phone photo
 ```
 
 - `shared/` defines the Zod request/response contracts and misconception tags.
-- `server/` normalizes a submitted image, verifies that the transcript is supported by visible ink, then runs diagnosis and an independent diagnosis check. Ambiguous or reconstructed transcriptions return a retake state instead of a confident result. The server has no accounts, database, or photo/history store.
-- `app/` owns reviewed photos in its application document storage and stores scans, revisions, follow-up links, and session recovery state in SQLite on the device. A photo and its scan history remain local until that scan (or Clear all history) is deleted; delete queues the owned photo for safe cleanup.
+- `server/` normalizes a submitted image, verifies that the transcript is supported by visible ink, then runs diagnosis and an independent diagnosis check. Strict analysis is the default: ambiguous or reconstructed transcriptions return an unreadable/retake state instead of a confident result. Blank and non-math inputs remain blocked. The optional `allowUncertainTranscript=true` flag is a one-request override for a student who chooses **Proceed anyway**; it may be less accurate and does not weaken the default safeguard for later requests. The server has no accounts, database, or photo/history store.
+- `app/` owns reviewed photos in its application document storage and stores scans, revisions, follow-up links, and session recovery state in SQLite on the device. A photo and its scan history remain local until that scan (or Clear all history) is deleted; delete queues the owned photo for safe cleanup. On an unreadable result, **Take a new photo** permanently deletes that unreadable scan and its owned image from device-local Previous scans and Patterns before opening capture.
 
 For analysis, the configured external AI service receives the submitted photo. For a diagnosis correction, it receives that photo plus the selected existing analysis context. Follow-up generation sends only the diagnosis, concept, and previous-problem text needed to avoid repetition; it does not send a photo. The server intentionally does not retain those inputs or outputs after responding. This repository does not make claims about the AI provider’s retention practices; review the provider’s applicable terms before using a live service. Use HTTPS for any hosted server.
 
@@ -81,7 +81,7 @@ npm run lint -w app
 npm run golden -w server
 ```
 
-The first three commands completed on this branch on July 27, 2026: **521 automated tests** (42 shared Vitest, 124 server Vitest, 4 stock-Python importer, and 351 app Vitest), all-workspace typechecking, and Expo lint with no warnings or errors. `npm run golden -w server` is the paid 25-image live-model gate and requires `OPENAI_API_KEY`; it cannot be treated as a local mock test. Its result is recorded honestly in the [validation record](docs/validation/2026-07-22-prometheus-readiness.md).
+The final automated run on July 27, 2026 completed **543 tests** (42 shared Vitest, 136 server Vitest, 4 stock-Python importer, and 361 app Vitest), all-workspace typechecking, Expo lint, an iOS Expo export, and a whitespace check. The exact command results are in the [validation record](docs/validation/2026-07-22-prometheus-readiness.md). `npm run golden -w server` is the paid 25-image live-model gate and requires `OPENAI_API_KEY`; it cannot be treated as a local mock test. Its result is recorded honestly in the validation record.
 
 ## Submission and manual verification
 

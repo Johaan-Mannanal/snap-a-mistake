@@ -10,11 +10,15 @@ The following commands completed on July 27, 2026:
 npm test
 npm run typecheck
 npm run lint -w app
+(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-unreadable-recovery)
+git diff --check
 ```
 
-- `npm test`: **521 tests passed** — 42 shared Vitest, 124 server Vitest, 4 stock-Python importer tests, and 351 app Vitest tests.
+- `npm test`: **543 tests passed** — 42 shared Vitest, 136 server Vitest, 4 stock-Python importer tests, and 361 app Vitest tests.
 - `npm run typecheck`: shared, server, and app each completed `tsc --noEmit`.
 - `npm run lint -w app`: Expo lint completed with zero warnings and zero errors.
+- `(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-unreadable-recovery)`: completed successfully.
+- `git diff --check`: completed successfully with no whitespace errors.
 - The app’s lint setup uses SDK 57-compatible `eslint` and `eslint-config-expo`. Its only targeted configuration exceptions are for React Native object-ref forwarding and Reanimated shared-value mutation; ordinary Expo lint rules remain enabled.
 
 The committed golden manifest still contains 25 inspectable cases: 15 synthetic cases and 10 CC BY 4.0 FERMAT handwriting photographs (2 correct and 8 intentional-error cases). Attribution and provenance are in [FERMAT-ATTRIBUTION.md](../../server/golden/FERMAT-ATTRIBUTION.md) and [fermat-provenance.json](../../server/golden/fermat-provenance.json).
@@ -27,6 +31,14 @@ Two paid, single-case checks completed on July 27, 2026 after adding the image-t
 - The clear `parts-error.jpg` control returned an analysis with step 1 marked wrong and the `integration-by-parts-error` tag. Its transcript preserved the incorrect remaining integral instead of repairing it.
 
 These focused checks cover the reported blur/reconstruction failure mode. They are not a substitute for the full 25-case golden run below.
+
+The recovery-specific focused live recheck was not run during this final verification because this worktree has no configured approved `OPENAI_API_KEY`. Consequently, no new claim is made here about the forced blurred request; the acceptable live outcome remains a schema-valid analysis preserving visible work, or `unreadable` only when zero steps were transcribed.
+
+## Unreadable-photo recovery behavior
+
+Strict analysis remains the default. An unreadable transcript returns the recovery screen instead of a diagnosis, and blank or non-math inputs remain blocked. **Proceed anyway** sends `allowUncertainTranscript=true` for that request only; it can be less accurate and does not relax the strict default for subsequent submissions. A forced request may either return a schema-valid analysis that preserves visible work or remain unreadable only when no steps were transcribed.
+
+**Take a new photo** is deliberately destructive for the unreadable attempt: it permanently deletes the unreadable scan and its owned image from device-local history and Patterns, then opens capture. It is not a retry of the same stored photo.
 
 ## Paid golden gate
 
@@ -57,6 +69,13 @@ cd app && EXPO_PUBLIC_API_URL=http://<MAC-LAN-IP>:3000 npx expo start --go
 - [ ] Camera and gallery both reach review.
 - [ ] Cancel returns to review with the photo intact.
 - [ ] Offline, timeout, server, unreadable, and not-math states offer the correct actions.
+- [ ] With `MOCK=unreadable`, submit a photo and confirm the default unreadable result presents the warning plus both **Take a new photo** and **Proceed anyway**.
+- [ ] Select **Take a new photo**, confirm capture opens, restart the app, and confirm the deleted unreadable attempt is absent from both Previous scans and Patterns.
+- [ ] From the unreadable recovery screen, select **Proceed anyway** and confirm progress appears without automatically returning to camera.
+- [ ] Force a network failure while using **Proceed anyway** and confirm the retry keeps the forced mode.
+- [ ] Make a forced request return unreadable a second time and confirm the app remains on the recovery screen.
+- [ ] Rapidly tap either recovery action and confirm busy states prevent a double submission.
+- [ ] With VoiceOver enabled, confirm it announces the unreadable warning before **Proceed anyway**.
 - [ ] Correction replaces the active diagnosis and does not add a Pattern attempt.
 - [ ] Follow-up remains visible on camera and links to its parent.
 - [ ] App restart restores review, result, and follow-up states.
