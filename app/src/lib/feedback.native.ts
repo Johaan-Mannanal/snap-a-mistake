@@ -1,6 +1,6 @@
 import { AccessibilityInfo } from 'react-native'
 import * as Haptics from 'expo-haptics'
-import { setAnnouncementPort, type HapticsPort } from './feedback'
+import { setAnnouncementPort, type HapticsPort } from './feedbackCore'
 
 setAnnouncementPort({ announce: (message) => AccessibilityInfo.announceForAccessibility(message) })
 
@@ -10,7 +10,7 @@ export {
   captureFeedback,
   createFeedbackEventGate,
   createProgressAnnouncementGate,
-} from './feedback'
+} from './feedbackCore'
 
 export const systemHaptics: HapticsPort = {
   lightImpact: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),

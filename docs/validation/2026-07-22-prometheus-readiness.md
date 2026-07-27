@@ -1,10 +1,10 @@
-# Prometheus readiness and final verification record — July 26, 2026
+# Prometheus readiness and final verification record — July 27, 2026
 
 This record separates repository-reproducible evidence from paid, device, and rehearsal work that still needs a human operator. It does not contain API keys, private photos, raw provider responses, device identifiers, or recording artifacts.
 
 ## Automated evidence recorded on this branch
 
-The following commands completed on July 26, 2026:
+The following commands completed on July 27, 2026:
 
 ```bash
 npm test
@@ -12,7 +12,7 @@ npm run typecheck
 npm run lint -w app
 ```
 
-- `npm test`: **512 tests passed** — 42 shared Vitest, 122 server Vitest, 4 stock-Python importer tests, and 344 app Vitest tests.
+- `npm test`: **513 tests passed** — 42 shared Vitest, 122 server Vitest, 4 stock-Python importer tests, and 345 app Vitest tests.
 - `npm run typecheck`: shared, server, and app each completed `tsc --noEmit`.
 - `npm run lint -w app`: Expo lint completed with zero warnings and zero errors.
 - The app’s lint setup uses SDK 57-compatible `eslint` and `eslint-config-expo`. Its only targeted configuration exceptions are for React Native object-ref forwarding and Reanimated shared-value mutation; ordinary Expo lint rules remain enabled.
