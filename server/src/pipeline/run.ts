@@ -72,8 +72,6 @@ export function makeRunAnalysis(
     if (!s1.isMath) return { kind: 'not-math' }
     if (s1.steps.length === 0)
       return { kind: 'unreadable', tips: RETAKE_TIPS }
-    if (!options.allowUncertainTranscript && s1.legibility < config.legibilityThreshold)
-      return { kind: 'unreadable', tips: RETAKE_TIPS }
 
     const transcriptionCheck = await timeStage(
       'transcription-verification',
