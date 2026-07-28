@@ -10,14 +10,14 @@ The following commands completed on July 27, 2026:
 npm test
 npm run typecheck
 npm run lint -w app
-(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-unreadable-recovery)
+(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-readable-handoff)
 git diff --check
 ```
 
-- `npm test`: **543 tests passed** — 42 shared Vitest, 136 server Vitest, 4 stock-Python importer tests, and 361 app Vitest tests.
+- `npm test`: **559 tests passed** — 42 shared Vitest, 142 server Vitest, 4 stock-Python importer tests, and 371 app Vitest tests.
 - `npm run typecheck`: shared, server, and app each completed `tsc --noEmit`.
 - `npm run lint -w app`: Expo lint completed with zero warnings and zero errors.
-- `(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-unreadable-recovery)`: completed successfully.
+- `(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-readable-handoff)`: completed successfully.
 - `git diff --check`: completed successfully with no whitespace errors.
 - The app’s lint setup uses SDK 57-compatible `eslint` and `eslint-config-expo`. Its only targeted configuration exceptions are for React Native object-ref forwarding and Reanimated shared-value mutation; ordinary Expo lint rules remain enabled.
 
@@ -76,8 +76,11 @@ cd app && EXPO_PUBLIC_API_URL=http://<MAC-LAN-IP>:3000 npx expo start --go
 - [ ] Make a forced request return unreadable a second time and confirm the app remains on the recovery screen.
 - [ ] Rapidly tap either recovery action and confirm busy states prevent a double submission.
 - [ ] With VoiceOver enabled, confirm it announces the unreadable warning before **Proceed anyway**.
+- [ ] Submit a clear handwritten page that receives a low Stage 1 confidence score and confirm the strict verifier can continue without **Proceed anyway** when it confirms the transcript.
 - [ ] Correction replaces the active diagnosis and does not add a Pattern attempt.
 - [ ] Follow-up remains visible on camera and links to its parent.
+- [ ] Use both a normal and deliberately long press on **Try a similar problem**, confirm the problem remains visible, and confirm capture opens only after a new **Check my work** activation.
+- [ ] Confirm VoiceOver/TalkBack activation of **Check my work** still works.
 - [ ] App restart restores review, result, and follow-up states.
 - [ ] Previous scan opens, deletes individually, and clear-all removes every owned image.
 - [ ] VoiceOver and maximum Dynamic Type complete the core journey.
