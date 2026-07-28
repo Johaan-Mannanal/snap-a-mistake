@@ -14,6 +14,7 @@ import {
   createFollowUpRouteGate,
   revealFollowUpHint,
   replaceFollowUpProblem,
+  type FollowUpPressCancellationScheduler,
   type FollowUpPracticeState,
 } from '../src/lib/followUp'
 import { getLocalScanRepository } from '../src/lib/history'
@@ -22,6 +23,10 @@ import { colors, spacing, typeScale } from '../src/ui/theme'
 import { useSystemBackTransition } from '../src/lib/useSystemBackTransition'
 
 type AlternateFailure = 'duplicate' | 'link' | 'network' | 'storage'
+
+const scheduleWebPressCancellation: FollowUpPressCancellationScheduler = (cancel) => {
+  setTimeout(cancel, 0)
+}
 
 function currentParentId(): string | null {
   const session = getSession()
@@ -51,7 +56,9 @@ export default function FollowUp() {
   const [leaveFailure, setLeaveFailure] = useState<string | null>(null)
   const handoff = useRef(createFollowUpHandoffCoordinator())
   const leaveLock = useRef(createFollowUpLeaveLock())
-  const routeGate = useRef(createFollowUpRouteGate())
+  const routeGate = useRef(createFollowUpRouteGate(
+    Platform.OS === 'web' ? scheduleWebPressCancellation : undefined,
+  ))
   const navigation = useNavigation<NativeStackNavigationProp<Record<string, object | undefined>>>()
   const mounted = useRef(true)
   const practiceRouteCurrent = useRef(true)

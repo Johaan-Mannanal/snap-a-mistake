@@ -26,6 +26,8 @@ export type FollowUpLeaveLock = {
   run(task: () => Promise<void>): { started: boolean; promise: Promise<void> }
 }
 
+export type FollowUpPressCancellationScheduler = (cancel: () => void) => void
+
 export type FollowUpRouteGate = {
   arm(): void
   beginPress(): void
@@ -177,7 +179,13 @@ export function createFollowUpLeaveLock(): FollowUpLeaveLock {
   }
 }
 
-export function createFollowUpRouteGate(): FollowUpRouteGate {
+const scheduleFollowUpPressCancellationMicrotask: FollowUpPressCancellationScheduler = (cancel) => {
+  void Promise.resolve().then(cancel)
+}
+
+export function createFollowUpRouteGate(
+  scheduleCancellation: FollowUpPressCancellationScheduler = scheduleFollowUpPressCancellationMicrotask,
+): FollowUpRouteGate {
   let armed = false
   let pressEligible = false
   let pressGeneration = 0
@@ -193,7 +201,7 @@ export function createFollowUpRouteGate(): FollowUpRouteGate {
     },
     cancelPress() {
       const canceledGeneration = pressGeneration
-      void Promise.resolve().then(() => {
+      scheduleCancellation(() => {
         if (pressGeneration === canceledGeneration) pressEligible = false
       })
     },
