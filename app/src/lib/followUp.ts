@@ -30,7 +30,12 @@ export type FollowUpRouteGate = {
   arm(): void
   beginPress(): void
   consumePress(): boolean
+  consumeNonPointerActivation(): boolean
   invalidate(): void
+}
+
+export type FollowUpTransitionEndEvent = {
+  data: { closing: boolean }
 }
 
 export type FollowUpAlternateResult =
@@ -187,6 +192,10 @@ export function createFollowUpRouteGate(): FollowUpRouteGate {
       pressEligible = false
       return accepted
     },
+    consumeNonPointerActivation() {
+      pressEligible = false
+      return armed
+    },
     invalidate() {
       armed = false
       pressEligible = false
@@ -196,12 +205,14 @@ export function createFollowUpRouteGate(): FollowUpRouteGate {
 
 export function beginFollowUpRouteActivation(
   gate: FollowUpRouteGate,
-  schedule: (activate: () => void) => () => void,
+  subscribe: (listener: (event: FollowUpTransitionEndEvent) => void) => () => void,
 ): () => void {
   gate.invalidate()
-  const cancel = schedule(() => gate.arm())
+  const unsubscribe = subscribe((event) => {
+    if (!event.data.closing) gate.arm()
+  })
   return () => {
-    cancel()
+    unsubscribe()
     gate.invalidate()
   }
 }

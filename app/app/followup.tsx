@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { InteractionManager, Pressable, StyleSheet, Text, View } from 'react-native'
-import { router, useFocusEffect } from 'expo-router'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { router, useFocusEffect, useNavigation, type NativeStackNavigationProp } from 'expo-router'
 import { AppButton } from '../src/components/AppButton'
 import { AppScreen } from '../src/components/AppScreen'
 import { ApiError, requestAlternateFollowUp } from '../src/lib/api'
@@ -52,6 +52,7 @@ export default function FollowUp() {
   const handoff = useRef(createFollowUpHandoffCoordinator())
   const leaveLock = useRef(createFollowUpLeaveLock())
   const routeGate = useRef(createFollowUpRouteGate())
+  const navigation = useNavigation<NativeStackNavigationProp<Record<string, object | undefined>>>()
   const mounted = useRef(true)
   const practiceRouteCurrent = useRef(true)
   const parentScanId = useRef(currentParentId()).current
@@ -66,11 +67,11 @@ export default function FollowUp() {
     }
   }, [])
   useFocusEffect(useCallback(() => (
-    beginFollowUpRouteActivation(routeGate.current, (activate) => {
-      const interaction = InteractionManager.runAfterInteractions(activate)
-      return () => interaction.cancel()
-    })
-  ), []))
+    beginFollowUpRouteActivation(
+      routeGate.current,
+      (listener) => navigation.addListener('transitionEnd', listener),
+    )
+  ), [navigation]))
   const leave = () => {
     practiceRouteCurrent.current = false
     const operation = leaveLock.current.run(async () => {
@@ -284,6 +285,9 @@ export default function FollowUp() {
               onPress={() => {
                 if (routeGate.current.consumePress()) checkWork()
               }}
+              onNonPointerPress={() => {
+                if (routeGate.current.consumeNonPointerActivation()) checkWork()
+              }}
               disabled={checkingWork || isLeaving}
               variant="tertiary"
             />
@@ -294,6 +298,9 @@ export default function FollowUp() {
           onPressIn={() => routeGate.current.beginPress()}
           onPress={() => {
             if (routeGate.current.consumePress()) checkWork()
+          }}
+          onNonPointerPress={() => {
+            if (routeGate.current.consumeNonPointerActivation()) checkWork()
           }}
           disabled={checkingWork || isLeaving}
         />

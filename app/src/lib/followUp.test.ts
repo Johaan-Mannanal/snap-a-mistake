@@ -89,7 +89,7 @@ describe('follow-up practice state', () => {
 })
 
 describe('follow-up route gate', () => {
-  it('rejects a press that began before route activation', () => {
+  it('rejects a pointer press that began before route activation even when released after activation', () => {
     const gate = createFollowUpRouteGate()
 
     gate.beginPress()
@@ -108,6 +108,23 @@ describe('follow-up route gate', () => {
     expect(gate.consumePress()).toBe(false)
   })
 
+  it('accepts deliberate non-pointer activation only after route activation', () => {
+    const gate = createFollowUpRouteGate()
+
+    expect(gate.consumeNonPointerActivation()).toBe(false)
+
+    gate.arm()
+
+    expect(gate.consumeNonPointerActivation()).toBe(true)
+  })
+
+  it('rejects a tokenless pointer or responder press after route activation', () => {
+    const gate = createFollowUpRouteGate()
+    gate.arm()
+
+    expect(gate.consumePress()).toBe(false)
+  })
+
   it('clears a pending press on blur', () => {
     const gate = createFollowUpRouteGate()
     gate.arm()
@@ -118,18 +135,23 @@ describe('follow-up route gate', () => {
     expect(gate.consumePress()).toBe(false)
   })
 
-  it('arms only after the focused route activation and cancels plus disarms on blur', () => {
+  it('arms only after the focused route opening transition ends and unsubscribes plus disarms on blur', () => {
     const gate = createFollowUpRouteGate()
-    const activations: (() => void)[] = []
+    const transitionEnds: ((event: { data: { closing: boolean } }) => void)[] = []
     let cancellations = 0
-    const blur = beginFollowUpRouteActivation(gate, (callback) => {
-      activations.push(callback)
+    const blur = beginFollowUpRouteActivation(gate, (listener) => {
+      transitionEnds.push(listener)
       return () => { cancellations += 1 }
     })
 
     gate.beginPress()
     expect(gate.consumePress()).toBe(false)
-    activations[0]!()
+
+    transitionEnds[0]!({ data: { closing: true } })
+    gate.beginPress()
+    expect(gate.consumePress()).toBe(false)
+
+    transitionEnds[0]!({ data: { closing: false } })
     gate.beginPress()
     expect(gate.consumePress()).toBe(true)
 
