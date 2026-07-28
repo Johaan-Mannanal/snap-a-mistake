@@ -29,6 +29,7 @@ export type FollowUpLeaveLock = {
 export type FollowUpRouteGate = {
   arm(): void
   beginPress(): void
+  cancelPress(): void
   consumePress(): boolean
   consumeNonPointerActivation(): boolean
   invalidate(): void
@@ -179,26 +180,38 @@ export function createFollowUpLeaveLock(): FollowUpLeaveLock {
 export function createFollowUpRouteGate(): FollowUpRouteGate {
   let armed = false
   let pressEligible = false
+  let pressGeneration = 0
   return {
     arm() {
       armed = true
       pressEligible = false
+      pressGeneration += 1
     },
     beginPress() {
+      pressGeneration += 1
       pressEligible = armed
+    },
+    cancelPress() {
+      const canceledGeneration = pressGeneration
+      void Promise.resolve().then(() => {
+        if (pressGeneration === canceledGeneration) pressEligible = false
+      })
     },
     consumePress() {
       const accepted = armed && pressEligible
       pressEligible = false
+      pressGeneration += 1
       return accepted
     },
     consumeNonPointerActivation() {
       pressEligible = false
+      pressGeneration += 1
       return armed
     },
     invalidate() {
       armed = false
       pressEligible = false
+      pressGeneration += 1
     },
   }
 }

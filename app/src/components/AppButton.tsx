@@ -1,17 +1,13 @@
-import type { ComponentProps, ComponentType } from 'react'
+import { useRef } from 'react'
 import { Platform, Pressable, StyleSheet, Text, type GestureResponderEvent } from 'react-native'
+import { classifyAppButtonPress } from '../lib/appButtonPress'
 import { buttonPalette, colors, radii, type ButtonVariant } from '../ui/theme'
-
-type KeyAwarePressableProps = ComponentProps<typeof Pressable> & {
-  onKeyUp?: (event: { nativeEvent: { key: string } }) => void
-}
-
-const KeyAwarePressable = Pressable as ComponentType<KeyAwarePressableProps>
 
 type AppButtonProps = {
   label: string
   onPress?: () => void
   onPressIn?: () => void
+  onPressOut?: () => void
   onNonPointerPress?: () => void
   disabled?: boolean
   variant?: ButtonVariant
@@ -20,25 +16,22 @@ type AppButtonProps = {
 export function AppButton(props: AppButtonProps) {
   const variant = props.variant ?? 'primary'
   const palette = buttonPalette(variant, props.disabled ?? false)
+  const focused = useRef(false)
   const activateWithoutPointer = () => {
     if (!props.disabled) props.onNonPointerPress?.()
   }
-  const handleKeyUp = (event: { nativeEvent: { key: string } }) => {
-    if (
-      Platform.OS !== 'web'
-      && (event.nativeEvent.key === 'Enter' || event.nativeEvent.key === ' ')
-    ) activateWithoutPointer()
-  }
   const handlePress = (event: GestureResponderEvent) => {
-    const detail = (event.nativeEvent as GestureResponderEvent['nativeEvent'] & { detail?: number }).detail
-    if (Platform.OS === 'web' && detail === 0 && props.onNonPointerPress) {
+    if (
+      classifyAppButtonPress(Platform.OS, event.nativeEvent, focused.current) === 'non-pointer'
+      && props.onNonPointerPress
+    ) {
       activateWithoutPointer()
     } else {
       props.onPress?.()
     }
   }
   return (
-    <KeyAwarePressable
+    <Pressable
       accessibilityActions={props.onNonPointerPress ? [{ name: 'activate' }] : undefined}
       accessibilityRole="button"
       accessibilityState={{ disabled: props.disabled }}
@@ -47,13 +40,15 @@ export function AppButton(props: AppButtonProps) {
         if (event.nativeEvent.actionName === 'activate') activateWithoutPointer()
       } : undefined}
       onAccessibilityTap={props.onNonPointerPress ? activateWithoutPointer : undefined}
-      onKeyUp={props.onNonPointerPress ? handleKeyUp : undefined}
+      onBlur={() => { focused.current = false }}
+      onFocus={() => { focused.current = true }}
       onPress={handlePress}
       onPressIn={props.onPressIn}
+      onPressOut={props.onPressOut}
       style={({ pressed }) => [styles.base, { backgroundColor: palette.background, borderColor: palette.border, opacity: pressed ? 0.72 : 1 }]}
     >
       <Text style={[styles.label, { color: palette.foreground }]}>{props.label}</Text>
-    </KeyAwarePressable>
+    </Pressable>
   )
 }
 

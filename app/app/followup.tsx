@@ -283,6 +283,7 @@ export default function FollowUp() {
             <AppButton
               label="Try checking my work again"
               onPressIn={() => routeGate.current.beginPress()}
+              onPressOut={() => routeGate.current.cancelPress()}
               onPress={() => {
                 if (routeGate.current.consumePress()) checkWork()
               }}
@@ -297,6 +298,7 @@ export default function FollowUp() {
         <AppButton
           label={checkingWork ? 'Preparing camera…' : 'Check my work'}
           onPressIn={() => routeGate.current.beginPress()}
+          onPressOut={() => routeGate.current.cancelPress()}
           onPress={() => {
             if (routeGate.current.consumePress()) checkWork()
           }}

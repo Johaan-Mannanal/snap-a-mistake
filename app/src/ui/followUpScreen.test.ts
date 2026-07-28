@@ -18,12 +18,14 @@ describe('follow-up screen handoff', () => {
     expect(source).not.toContain('ROUTE_ACTIVATION_DELAY_MS')
   })
 
-  it('gives assistive technology and native keyboards an explicit non-pointer path', () => {
+  it('wires explicit accessibility, focus classification, and press cancellation paths', () => {
     expect(buttonSource).toContain('onNonPointerPress?: () => void')
     expect(buttonSource).toContain("accessibilityActions={props.onNonPointerPress ? [{ name: 'activate' }] : undefined}")
     expect(buttonSource).toContain('onAccessibilityAction=')
     expect(buttonSource).toContain('onAccessibilityTap=')
-    expect(buttonSource).toContain('onKeyUp=')
-    expect(buttonSource).toContain("Platform.OS === 'web' && detail === 0")
+    expect(buttonSource).toContain('onFocus=')
+    expect(buttonSource).toContain('onBlur=')
+    expect(source.match(/routeGate\.current\.cancelPress\(\)/g)).toHaveLength(2)
+    expect(source.match(/onPressOut=/g)).toHaveLength(2)
   })
 })

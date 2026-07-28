@@ -135,6 +135,29 @@ describe('follow-up route gate', () => {
     expect(gate.consumePress()).toBe(false)
   })
 
+  it('clears a press token after a canceled responder settles', async () => {
+    const gate = createFollowUpRouteGate()
+    gate.arm()
+    gate.beginPress()
+
+    gate.cancelPress()
+    await Promise.resolve()
+
+    expect(gate.consumePress()).toBe(false)
+  })
+
+  it('keeps a normal long-held release eligible for its synchronous onPress', async () => {
+    const gate = createFollowUpRouteGate()
+    gate.arm()
+    gate.beginPress()
+
+    gate.cancelPress()
+    expect(gate.consumePress()).toBe(true)
+
+    await Promise.resolve()
+    expect(gate.consumePress()).toBe(false)
+  })
+
   it('arms only after the focused route opening transition ends and unsubscribes plus disarms on blur', () => {
     const gate = createFollowUpRouteGate()
     const transitionEnds: ((event: { data: { closing: boolean } }) => void)[] = []
