@@ -14,7 +14,7 @@ npm run lint -w app
 git diff --check
 ```
 
-- `npm test`: **559 tests passed** — 42 shared Vitest, 142 server Vitest, 4 stock-Python importer tests, and 371 app Vitest tests.
+- `npm test`: **567 tests passed** — 42 shared Vitest, 142 server Vitest, 4 stock-Python importer tests, and 379 app Vitest tests.
 - `npm run typecheck`: shared, server, and app each completed `tsc --noEmit`.
 - `npm run lint -w app`: Expo lint completed with zero warnings and zero errors.
 - `(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-readable-handoff)`: completed successfully.

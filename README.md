@@ -83,7 +83,7 @@ npm run lint -w app
 npm run golden -w server
 ```
 
-The final automated run on July 27, 2026 completed **559 tests** (42 shared Vitest, 142 server Vitest, 4 stock-Python importer, and 371 app Vitest), all-workspace typechecking, Expo lint, an iOS Expo export to `/tmp/snap-a-mistake-readable-handoff`, and a whitespace check. The exact command results are in the [validation record](docs/validation/2026-07-22-prometheus-readiness.md). `npm run golden -w server` is the paid 25-image live-model gate and requires `OPENAI_API_KEY`; it cannot be treated as a local mock test. Its result is recorded honestly in the validation record.
+The final automated run on July 27, 2026 completed **567 tests** (42 shared Vitest, 142 server Vitest, 4 stock-Python importer, and 379 app Vitest), all-workspace typechecking, Expo lint, an iOS Expo export to `/tmp/snap-a-mistake-readable-handoff`, and a whitespace check. The exact command results are in the [validation record](docs/validation/2026-07-22-prometheus-readiness.md). `npm run golden -w server` is the paid 25-image live-model gate and requires `OPENAI_API_KEY`; it cannot be treated as a local mock test. Its result is recorded honestly in the validation record.
 
 ## Submission and manual verification
 
