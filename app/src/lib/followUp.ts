@@ -206,8 +206,13 @@ export function createFollowUpRouteGate(): FollowUpRouteGate {
 export function beginFollowUpRouteActivation(
   gate: FollowUpRouteGate,
   subscribe: (listener: (event: FollowUpTransitionEndEvent) => void) => () => void,
+  options: { armOnFocus?: boolean } = {},
 ): () => void {
   gate.invalidate()
+  if (options.armOnFocus) {
+    gate.arm()
+    return () => gate.invalidate()
+  }
   const unsubscribe = subscribe((event) => {
     if (!event.data.closing) gate.arm()
   })

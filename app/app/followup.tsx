@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { router, useFocusEffect, useNavigation, type NativeStackNavigationProp } from 'expo-router'
 import { AppButton } from '../src/components/AppButton'
 import { AppScreen } from '../src/components/AppScreen'
@@ -70,6 +70,7 @@ export default function FollowUp() {
     beginFollowUpRouteActivation(
       routeGate.current,
       (listener) => navigation.addListener('transitionEnd', listener),
+      { armOnFocus: Platform.OS === 'web' },
     )
   ), [navigation]))
   const leave = () => {

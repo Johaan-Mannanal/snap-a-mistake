@@ -160,6 +160,26 @@ describe('follow-up route gate', () => {
     gate.beginPress()
     expect(gate.consumePress()).toBe(false)
   })
+
+  it('arms on web focus without minting a pointer token and disarms on blur', () => {
+    const gate = createFollowUpRouteGate()
+    let subscriptions = 0
+    const blur = beginFollowUpRouteActivation(
+      gate,
+      () => {
+        subscriptions += 1
+        return () => {}
+      },
+      { armOnFocus: true },
+    )
+
+    expect(subscriptions).toBe(0)
+    expect(gate.consumePress()).toBe(false)
+    expect(gate.consumeNonPointerActivation()).toBe(true)
+
+    blur()
+    expect(gate.consumeNonPointerActivation()).toBe(false)
+  })
 })
 
 describe('follow-up check fence', () => {

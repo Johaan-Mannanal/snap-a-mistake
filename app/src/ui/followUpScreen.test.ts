@@ -9,6 +9,7 @@ describe('follow-up screen handoff', () => {
   it('waits for the opening navigation transition and guards both check-work buttons', () => {
     expect(source).toContain('useNavigation<NativeStackNavigationProp')
     expect(source).toContain("navigation.addListener('transitionEnd'")
+    expect(source).toContain("armOnFocus: Platform.OS === 'web'")
     expect(source.match(/routeGate\.current\.beginPress\(\)/g)).toHaveLength(2)
     expect(source.match(/routeGate\.current\.consumePress\(\)/g)).toHaveLength(2)
     expect(source.match(/routeGate\.current\.consumeNonPointerActivation\(\)/g)).toHaveLength(2)
