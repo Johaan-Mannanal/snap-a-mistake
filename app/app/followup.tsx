@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { InteractionManager, Pressable, StyleSheet, Text, View } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { AppButton } from '../src/components/AppButton'
 import { AppScreen } from '../src/components/AppScreen'
@@ -22,7 +22,6 @@ import { colors, spacing, typeScale } from '../src/ui/theme'
 import { useSystemBackTransition } from '../src/lib/useSystemBackTransition'
 
 type AlternateFailure = 'duplicate' | 'link' | 'network' | 'storage'
-const ROUTE_ACTIVATION_DELAY_MS = 500
 
 function currentParentId(): string | null {
   const session = getSession()
@@ -68,8 +67,8 @@ export default function FollowUp() {
   }, [])
   useFocusEffect(useCallback(() => (
     beginFollowUpRouteActivation(routeGate.current, (activate) => {
-      const activation = setTimeout(activate, ROUTE_ACTIVATION_DELAY_MS)
-      return () => clearTimeout(activation)
+      const interaction = InteractionManager.runAfterInteractions(activate)
+      return () => interaction.cancel()
     })
   ), []))
   const leave = () => {
@@ -154,7 +153,6 @@ export default function FollowUp() {
       || handoff.current.checkBusy
       || leaveLock.current.busy
       || !practiceRouteCurrent.current
-      || !routeGate.current.canCheck()
     ) return
     if (parentScanId === null) {
       setAlternateFailure('link')
@@ -280,10 +278,25 @@ export default function FollowUp() {
         {checkFailure ? (
           <View style={styles.failure}>
             <Text accessibilityRole="alert" style={styles.failureCopy}>{checkFailure}</Text>
-            <AppButton label="Try checking my work again" onPress={checkWork} disabled={checkingWork || isLeaving} variant="tertiary" />
+            <AppButton
+              label="Try checking my work again"
+              onPressIn={() => routeGate.current.beginPress()}
+              onPress={() => {
+                if (routeGate.current.consumePress()) checkWork()
+              }}
+              disabled={checkingWork || isLeaving}
+              variant="tertiary"
+            />
           </View>
         ) : null}
-        <AppButton label={checkingWork ? 'Preparing camera…' : 'Check my work'} onPress={checkWork} disabled={checkingWork || isLeaving} />
+        <AppButton
+          label={checkingWork ? 'Preparing camera…' : 'Check my work'}
+          onPressIn={() => routeGate.current.beginPress()}
+          onPress={() => {
+            if (routeGate.current.consumePress()) checkWork()
+          }}
+          disabled={checkingWork || isLeaving}
+        />
       </View>
     </AppScreen>
   )

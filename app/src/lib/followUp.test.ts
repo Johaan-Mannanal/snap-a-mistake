@@ -89,17 +89,36 @@ describe('follow-up practice state', () => {
 })
 
 describe('follow-up route gate', () => {
-  it('rejects check-work activation until the newly presented route is ready', () => {
+  it('rejects a press that began before route activation', () => {
     const gate = createFollowUpRouteGate()
 
-    expect(gate.canCheck()).toBe(false)
+    gate.beginPress()
     gate.arm()
-    expect(gate.canCheck()).toBe(true)
-    gate.invalidate()
-    expect(gate.canCheck()).toBe(false)
+
+    expect(gate.consumePress()).toBe(false)
   })
 
-  it('arms only after the focused route delay and cancels plus disarms on blur', () => {
+  it('accepts one fresh press that begins after route activation', () => {
+    const gate = createFollowUpRouteGate()
+    gate.arm()
+
+    gate.beginPress()
+
+    expect(gate.consumePress()).toBe(true)
+    expect(gate.consumePress()).toBe(false)
+  })
+
+  it('clears a pending press on blur', () => {
+    const gate = createFollowUpRouteGate()
+    gate.arm()
+    gate.beginPress()
+
+    gate.invalidate()
+
+    expect(gate.consumePress()).toBe(false)
+  })
+
+  it('arms only after the focused route activation and cancels plus disarms on blur', () => {
     const gate = createFollowUpRouteGate()
     const activations: (() => void)[] = []
     let cancellations = 0
@@ -108,13 +127,16 @@ describe('follow-up route gate', () => {
       return () => { cancellations += 1 }
     })
 
-    expect(gate.canCheck()).toBe(false)
+    gate.beginPress()
+    expect(gate.consumePress()).toBe(false)
     activations[0]!()
-    expect(gate.canCheck()).toBe(true)
+    gate.beginPress()
+    expect(gate.consumePress()).toBe(true)
 
     blur()
     expect(cancellations).toBe(1)
-    expect(gate.canCheck()).toBe(false)
+    gate.beginPress()
+    expect(gate.consumePress()).toBe(false)
   })
 })
 
