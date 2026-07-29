@@ -68,7 +68,7 @@ describe('runAnalysis', () => {
       errorStepIndex: 1,
     })
   })
-  it('keeps a low-confidence transcript unreadable when the verifier rejects it', async () => {
+  it('continues a nonempty moderate-confidence transcript when the verifier rejects it', async () => {
     let diagnosisCalls = 0
     const analyze = makeRunAnalysis(client, config, {
       transcribe: async () => s1({ legibility: 0.3 }),
@@ -80,13 +80,65 @@ describe('runAnalysis', () => {
       verifyDiagnosis: async () => ({ agrees: true, note: '' }),
     })
 
-    await expect(analyze(image)).resolves.toMatchObject({ kind: 'unreadable' })
+    await expect(analyze(image)).resolves.toMatchObject({
+      kind: 'analysis',
+      errorStepIndex: 1,
+    })
+    expect(diagnosisCalls).toBe(1)
+  })
+  it('returns unreadable only when low stage-one confidence and both verifier rejections agree', async () => {
+    let diagnosisCalls = 0
+    const analyze = makeRunAnalysis(client, config, {
+      transcribe: async () => s1({ legibility: 0.15 }),
+      verifyTranscription: async () => ({ faithful: false, legible: false, note: 'unusable' }),
+      analyzeSteps: async () => {
+        diagnosisCalls += 1
+        return errorDiag
+      },
+      verifyDiagnosis: async () => ({ agrees: true, note: '' }),
+    })
+
+    await expect(analyze(image)).resolves.toEqual({
+      kind: 'unreadable',
+      tips: expect.any(Array),
+    })
     expect(diagnosisCalls).toBe(0)
+  })
+
+  it('continues just above the catastrophic legibility boundary', async () => {
+    const analyze = makeRunAnalysis(client, config, {
+      transcribe: async () => s1({ legibility: 0.151 }),
+      verifyTranscription: async () => ({ faithful: false, legible: false, note: 'uncertain' }),
+      analyzeSteps: async () => errorDiag,
+      verifyDiagnosis: async () => ({ agrees: true, note: '' }),
+    })
+
+    await expect(analyze(image)).resolves.toMatchObject({
+      kind: 'analysis',
+      errorStepIndex: 1,
+    })
+  })
+
+  it.each([
+    { faithful: true, legible: false },
+    { faithful: false, legible: true },
+  ])('continues catastrophic-confidence work when one verifier signal passes: %o', async (check) => {
+    const analyze = makeRunAnalysis(client, config, {
+      transcribe: async () => s1({ legibility: 0.1 }),
+      verifyTranscription: async () => ({ ...check, note: 'partially supported' }),
+      analyzeSteps: async () => errorDiag,
+      verifyDiagnosis: async () => ({ agrees: true, note: '' }),
+    })
+
+    await expect(analyze(image)).resolves.toMatchObject({
+      kind: 'analysis',
+      errorStepIndex: 1,
+    })
   })
   it('continues past uncertain transcription only for an explicit override', async () => {
     let fidelityChecked = false
     const analyze = makeRunAnalysis(client, config, {
-      transcribe: async () => s1({ legibility: 0.3 }),
+      transcribe: async () => s1({ legibility: 0.1 }),
       verifyTranscription: async () => {
         fidelityChecked = true
         return { faithful: false, legible: false, note: 'uncertain' }
@@ -124,19 +176,22 @@ describe('runAnalysis', () => {
     const r = await run({ s1: s1({ steps: [] }) })
     expect(r.kind).toBe('unreadable')
   })
-  it('returns unreadable when the image-to-transcript check finds reconstructed work', async () => {
+  it('continues a high-confidence nonempty transcript despite a verifier reconstruction concern', async () => {
     const analyze = makeRunAnalysis(client, config, {
-      transcribe: async () => s1(),
+      transcribe: async () => s1({ legibility: 0.9 }),
       verifyTranscription: async () => ({
         faithful: false,
         legible: false,
-        note: 'Step 4 is too blurry to compare and the transcript appears corrected.',
+        note: 'Step 4 may be reconstructed.',
       }),
       analyzeSteps: async () => cleanDiag,
       verifyDiagnosis: async () => ({ agrees: true, note: '' }),
     })
 
-    await expect(analyze(image)).resolves.toEqual({ kind: 'unreadable', tips: expect.any(Array) })
+    await expect(analyze(image)).resolves.toMatchObject({
+      kind: 'analysis',
+      errorStepIndex: null,
+    })
   })
   it('marks all steps ok for correct work', async () => {
     const r = await run({ s2: cleanDiag })

@@ -14,6 +14,8 @@ export const RETAKE_TIPS = [
   'Fit just one problem in the frame',
 ]
 
+const CATASTROPHIC_LEGIBILITY_THRESHOLD = 0.15
+
 type Deps = {
   transcribe: typeof transcribe
   verifyTranscription: typeof verifyTranscription
@@ -78,10 +80,11 @@ export function makeRunAnalysis(
       () => deps.verifyTranscription(client, config.models.vision, image, s1.steps),
       onStageTiming,
     )
-    if (
-      !options.allowUncertainTranscript
-      && (!transcriptionCheck.faithful || !transcriptionCheck.legible)
-    )
+    const overwhelminglyUnreadable =
+      s1.legibility <= CATASTROPHIC_LEGIBILITY_THRESHOLD
+      && !transcriptionCheck.faithful
+      && !transcriptionCheck.legible
+    if (!options.allowUncertainTranscript && overwhelminglyUnreadable)
       return { kind: 'unreadable', tips: RETAKE_TIPS }
 
     const s2 = await timeStage(
