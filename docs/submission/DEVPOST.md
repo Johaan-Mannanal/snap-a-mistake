@@ -18,7 +18,7 @@ Patterns and Previous scans are stored locally on the device. The app retains it
 
 1. The Expo app captures or selects a photo and asks the Fastify API to analyze it.
 2. A multimodal transcription pass returns ordered handwritten steps and vertical position bands.
-3. A second image check compares that transcript with the visible ink. If a line is blurry, ambiguous, or appears reconstructed, the app asks for a clearer photo instead of grading guessed work.
+3. A second image check compares every nonempty transcript with the visible ink. The strict path continues only when that check considers the transcript faithful and legible; blank or non-math work remains blocked. If the check rejects a nonempty transcript, the student can retake the photo or choose a clearly warned, request-scoped **Proceed anyway** attempt.
 4. A diagnosis pass identifies the earliest error and selects one controlled misconception tag.
 5. An independent diagnosis verifier can soften a disputed result into a suspect state.
 6. Shared Zod schemas validate the response before the app renders Unicode math such as ∫, √, ×, −, eˣ, and x². Student-facing text does not expose raw LaTeX.
@@ -28,8 +28,8 @@ The server is stateless: it has no account system, database, or history store. A
 ## Technical evidence
 
 - TypeScript npm-workspace monorepo: Expo/React Native app, Fastify API, Zod shared contracts, and device-local SQLite.
-- 521 automated tests passed on this branch on July 27, 2026: 42 shared Vitest, 124 server Vitest, 4 stock-Python importer, and 351 app Vitest tests.
-- All three workspaces typechecked and Expo lint completed with zero warnings and zero errors on that same run.
+- 567 automated tests passed in the final repository run: 42 shared Vitest, 142 server Vitest, 4 stock-Python importer, and 379 app Vitest tests.
+- All three workspaces typechecked, Expo lint completed with zero warnings and zero errors, and the final iOS Expo export completed successfully.
 - The repository includes an inspectable 25-case golden manifest: 15 synthetic cases and 10 licensed FERMAT handwriting photographs.
 - The paid live-model golden command remains deliberately separate: it requires an API key and makes external requests. No current paid-pass rate is claimed without a recorded run artifact.
 - Public repository: https://github.com/Johaan-Mannanal/snap-a-mistake
