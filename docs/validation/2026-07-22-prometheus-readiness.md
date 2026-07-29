@@ -1,25 +1,27 @@
-# Prometheus readiness and final verification record — July 27, 2026
+# Prometheus readiness and final verification record — July 28, 2026
 
 This record separates repository-reproducible evidence from paid, device, and rehearsal work that still needs a human operator. It does not contain API keys, private photos, raw provider responses, device identifiers, or recording artifacts.
 
 ## Automated evidence recorded on this branch
 
-The following commands completed on July 27, 2026:
+The following commands completed on July 28, 2026:
 
 ```bash
 npm test
 npm run typecheck
 npm run lint -w app
-(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-readable-handoff)
+(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-prometheus-final)
 git diff --check
 ```
 
 - `npm test`: **567 tests passed** — 42 shared Vitest, 142 server Vitest, 4 stock-Python importer tests, and 379 app Vitest tests.
 - `npm run typecheck`: shared, server, and app each completed `tsc --noEmit`.
 - `npm run lint -w app`: Expo lint completed with zero warnings and zero errors.
-- `(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-readable-handoff)`: completed successfully.
+- `(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-prometheus-final)`: completed successfully.
 - `git diff --check`: completed successfully with no whitespace errors.
 - The app’s lint setup uses SDK 57-compatible `eslint` and `eslint-config-expo`. Its only targeted configuration exceptions are for React Native object-ref forwarding and Reanimated shared-value mutation; ordinary Expo lint rules remain enabled.
+
+The final repository-readiness audit also confirmed that every required tracked submission asset resolves, including the MIT license, FERMAT attribution and provenance, and the three README screenshots at 1206×2622. All local Markdown links in the README, submission documents, and this record resolved. The tracked-tree credential scan returned no matches (exit 1 as expected), and `git ls-files server/.env .env` returned no tracked credential files.
 
 The committed golden manifest still contains 25 inspectable cases: 15 synthetic cases and 10 CC BY 4.0 FERMAT handwriting photographs (2 correct and 8 intentional-error cases). Attribution and provenance are in [FERMAT-ATTRIBUTION.md](../../server/golden/FERMAT-ATTRIBUTION.md) and [fermat-provenance.json](../../server/golden/fermat-provenance.json).
 
