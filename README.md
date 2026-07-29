@@ -4,6 +4,15 @@ I built Snap-a-Mistake to make handwritten-math feedback more useful than a fina
 
 The app is an in-progress learning tool, not a guarantee that a model’s diagnosis is right. When independent verification disagrees, it uses a softer “suspect” state instead of presenting the result as certain.
 
+[Demo script](docs/submission/DEMO-SCRIPT.md) · [Devpost copy](docs/submission/DEVPOST.md) · [Project story](docs/submission/PROMETHEUS-ABOUT.md) · [Validation record](docs/validation/2026-07-22-prometheus-readiness.md) · [MIT license](LICENSE)
+
+## See the learning loop
+
+| Find the first break | Try the idea again | See private progress |
+| --- | --- | --- |
+| ![Snap-a-Mistake highlights the first unsupported handwritten step and explains the misconception.](docs/assets/readme/analysis-error.png) | ![Snap-a-Mistake presents a similar follow-up problem with a hint and a deliberate Check my work action.](docs/assets/readme/follow-up.png) | ![Snap-a-Mistake shows device-local misconception patterns and previous scans.](docs/assets/readme/insights.png) |
+| Keep the original page connected to the diagnosis. | Close the loop with targeted practice. | Review local history without creating an account. |
+
 ## What the app does
 
 1. Capture a photo with the camera or choose one from the library, then review, zoom, retake, or replace it.
