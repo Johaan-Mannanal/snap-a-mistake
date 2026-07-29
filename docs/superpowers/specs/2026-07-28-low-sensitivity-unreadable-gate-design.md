@@ -54,4 +54,4 @@ After the focused red/green cycle, run all server tests, the complete repository
 
 ## Scope
 
-Change only the pipeline decision and its focused tests. Do not alter the app UI, verifier prompt, response schemas, model configuration, unrelated thresholds, submission copy, or demo artifacts.
+Change the pipeline decision and its focused tests. Reconcile only the factual sentences in `README.md`, `docs/submission/DEVPOST.md`, `docs/submission/PROMETHEUS-ABOUT.md`, and `docs/validation/2026-07-22-prometheus-readiness.md` that describe when the retake screen appears. Do not otherwise rewrite submission messaging, and do not alter the app UI, verifier prompt, response schemas, model configuration, unrelated thresholds, or demo artifacts.
