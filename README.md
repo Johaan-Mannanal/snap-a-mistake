@@ -35,7 +35,7 @@ phone photo
 ```
 
 - `shared/` defines the Zod request/response contracts and misconception tags.
-- `server/` normalizes a submitted image, verifies that the transcript is supported by visible ink, then runs diagnosis and an independent diagnosis check. Non-math and zero-step transcripts remain absolute rejections. Every nonempty low-confidence transcript reaches the independent fidelity/legibility verifier before strict rejection; the strict path continues only when that verifier confirms it is both faithful and legible. The optional `allowUncertainTranscript=true` flag is a request-scoped override for a student who chooses **Proceed anyway** when the verifier rejects; it may be less accurate and does not weaken the default safeguard for later requests. The server has no accounts, database, or photo/history store.
+- `server/` normalizes a submitted image, compares every nonempty transcript with the visible ink, then runs diagnosis and an independent diagnosis check. Non-math and zero-step transcripts remain absolute rejections. For nonempty math work, the retake screen appears only when stage-one legibility is at or below `0.15` and the independent image check rejects both faithfulness and legibility; ordinary uncertainty continues into diagnosis. The optional `allowUncertainTranscript=true` flag is a request-scoped override for a student who chooses **Proceed anyway** after that rare rejection. The server has no accounts, database, or photo/history store.
 - `app/` owns reviewed photos in its application document storage and stores scans, revisions, follow-up links, and session recovery state in SQLite on the device. A photo and its scan history remain local until that scan (or Clear all history) is deleted; delete queues the owned photo for safe cleanup. On an unreadable result, **Take a new photo** permanently deletes that unreadable scan and its owned image from device-local Previous scans and Patterns before opening capture.
 
 After a student selects a similar problem, the follow-up problem remains visible until the route is ready and the student makes a fresh **Check my work** activation; the navigation press cannot open capture.
@@ -92,7 +92,7 @@ npm run lint -w app
 npm run golden -w server
 ```
 
-The final automated run on July 28, 2026 completed **567 tests** (42 shared Vitest, 142 server Vitest, 4 stock-Python importer, and 379 app Vitest), all-workspace typechecking, Expo lint, an iOS Expo export to `/tmp/snap-a-mistake-prometheus-final`, and a whitespace check. The exact command results are in the [validation record](docs/validation/2026-07-22-prometheus-readiness.md). `npm run golden -w server` is the paid 25-image live-model gate and requires `OPENAI_API_KEY`; it cannot be treated as a local mock test. Its result is recorded honestly in the validation record.
+The final automated run on July 28, 2026 completed **571 tests** (42 shared Vitest, 146 server Vitest, 4 stock-Python importer, and 379 app Vitest), all-workspace typechecking, Expo lint, an iOS Expo export to `/tmp/snap-a-mistake-prometheus-final`, and a whitespace check. The exact command results are in the [validation record](docs/validation/2026-07-22-prometheus-readiness.md). `npm run golden -w server` is the paid 25-image live-model gate and requires `OPENAI_API_KEY`; it cannot be treated as a local mock test. Its result is recorded honestly in the validation record.
 
 ## Submission and manual verification
 

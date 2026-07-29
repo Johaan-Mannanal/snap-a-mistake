@@ -14,7 +14,7 @@ npm run lint -w app
 git diff --check
 ```
 
-- `npm test`: **567 tests passed** — 42 shared Vitest, 142 server Vitest, 4 stock-Python importer tests, and 379 app Vitest tests.
+- `npm test`: **571 tests passed** — 42 shared Vitest, 146 server Vitest, 4 stock-Python importer tests, and 379 app Vitest tests.
 - `npm run typecheck`: shared, server, and app each completed `tsc --noEmit`.
 - `npm run lint -w app`: Expo lint completed with zero warnings and zero errors.
 - `(cd app && npx expo export --platform ios --output-dir /tmp/snap-a-mistake-prometheus-final)`: completed successfully.
@@ -38,7 +38,7 @@ The recovery-specific focused live recheck was not run during this final verific
 
 ## Unreadable-photo recovery behavior
 
-Strict analysis remains the default. An unreadable transcript returns the recovery screen instead of a diagnosis, and blank or non-math inputs remain blocked. **Proceed anyway** sends `allowUncertainTranscript=true` for that request only; it can be less accurate and does not relax the strict default for subsequent submissions. A forced request may either return a schema-valid analysis that preserves visible work or remain unreadable only when no steps were transcribed.
+The retake screen is now deliberately rare. Non-math and zero-step inputs remain blocked, while ordinary uncertainty continues into diagnosis. A nonempty transcript reaches that screen only when stage-one legibility is at or below `0.15` and the independent image check rejects both faithfulness and legibility. **Proceed anyway** sends `allowUncertainTranscript=true` for that request only; a forced request still cannot bypass a zero-step result.
 
 **Take a new photo** is deliberately destructive for the unreadable attempt: it permanently deletes the unreadable scan and its owned image from device-local history and Patterns, then opens capture. It is not a retry of the same stored photo.
 
