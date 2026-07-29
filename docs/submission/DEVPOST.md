@@ -41,7 +41,7 @@ The goal is not to make a general tutor chat or another final-answer checker. I 
 ## Submission checklist
 
 - [ ] Complete the physical-phone and live-model checks in the validation record.
-- [ ] Record the live-model core diagnosis using the demo script.
+- [ ] Record and review the live-model core diagnosis.
 - [ ] Label any deterministic mock footage as canned throughout.
 - [ ] Review the export for secrets, notifications, unrelated photos, audio, captions, and signed-out playback.
 - [ ] Complete the required Google form, eligibility review, public-repository check, and submission before the official deadline.

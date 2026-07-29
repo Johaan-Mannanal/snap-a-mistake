@@ -4,7 +4,7 @@ I built Snap-a-Mistake to make handwritten-math feedback more useful than a fina
 
 The app is an in-progress learning tool, not a guarantee that a model’s diagnosis is right. When independent verification disagrees, it uses a softer “suspect” state instead of presenting the result as certain.
 
-[Demo script](docs/submission/DEMO-SCRIPT.md) · [Devpost copy](docs/submission/DEVPOST.md) · [Project story](docs/submission/PROMETHEUS-ABOUT.md) · [Validation record](docs/validation/2026-07-22-prometheus-readiness.md) · [MIT license](LICENSE)
+[Devpost copy](docs/submission/DEVPOST.md) · [Project story](docs/submission/PROMETHEUS-ABOUT.md) · [Validation record](docs/validation/2026-07-22-prometheus-readiness.md) · [MIT license](LICENSE)
 
 ## See the learning loop
 
@@ -96,7 +96,7 @@ The final automated run on July 28, 2026 completed **571 tests** (42 shared Vite
 
 ## Submission and manual verification
 
-The exact pending physical-phone and rehearsal checks, clean mock/live commands, and recording-security checklist are in the [validation record](docs/validation/2026-07-22-prometheus-readiness.md) and [demo script](docs/submission/DEMO-SCRIPT.md). They are intentionally unchecked: they require a physical phone, a live API key for live-model checks, and a human-run rehearsal.
+The exact pending physical-phone and rehearsal checks, clean mock/live commands, and recording-security checklist are in the [validation record](docs/validation/2026-07-22-prometheus-readiness.md). They are intentionally unchecked: they require a physical phone, a live API key for live-model checks, and a human-run rehearsal.
 
 The project story and ready-to-paste submission material are in [PROMETHEUS-ABOUT.md](docs/submission/PROMETHEUS-ABOUT.md) and [DEVPOST.md](docs/submission/DEVPOST.md).
 

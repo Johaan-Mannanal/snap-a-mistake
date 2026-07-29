@@ -1,45 +1,49 @@
 ## Inspiration
 
-I kept coming back to a frustrating gap in the way most math tools give feedback. A final-answer checker can tell me that my answer is wrong, but that is usually the least useful part. What I really want to know is: **where did my reasoning first stop making sense?**
+I kept coming back to something that frustrated me about most math tools: they can tell you that your final answer is wrong, but they rarely tell you where your thinking first went off track.
 
-That question matters because one early misconception can make every line after it look wrong. When I was learning math, I often wished I could get feedback on the exact step where I went off track instead of comparing my final answer with a solution and trying to work backward. I built Snap-a-Mistake to make that kind of feedback immediate.
+That is usually the part I actually want help with. One small mistake near the beginning can affect every line that follows, and comparing my answer with a completed solution means working backward to guess what happened. I built Snap-a-Mistake because I wanted feedback that starts with a more useful question: **where did my reasoning first stop making sense?**
 
 ## What it does
 
-Snap-a-Mistake is a mobile app that analyzes a photo of handwritten algebra or calculus. It reads the work as a sequence of steps, finds the earliest unsupported step, names the likely misconception, and explains why that transition fails.
+Snap-a-Mistake is a mobile app for handwritten algebra and calculus. A student takes a photo of their work, and the app reads it as a sequence of steps. It then finds the earliest step that does not follow, identifies the likely misconception, and explains what changed.
 
-It then creates a similar practice problem focused on the same idea. The goal is not just to correct one answer. It is to give the student a short learning loop: find the first break, understand it in context, try the concept again, and check the new work.
+The feedback stays connected to the original photo, so the student can see the explanation beside the line they actually wrote instead of looking at a separate answer key. Afterward, the app creates a similar practice problem focused on the same idea.
 
-The diagnosis is shown alongside the original page so the feedback stays connected to what the student actually wrote. The app records misconception categories, scan revisions, follow-up links, and owned scan photos locally on the device until the student deletes them, without requiring an account.
+The goal is not just to correct one answer. It is to create a short learning loop: find the first break, understand it in context, try the idea again, and check the new work. Previous scans, revisions, linked follow-up attempts, and recurring misconception patterns stay on the student's device until they delete them. No account is required.
 
 ## How I built it
 
-I built Snap-a-Mistake as a TypeScript monorepo with three shared parts: an Expo and React Native mobile app, a stateless Fastify server, and a shared package of Zod schemas used by both sides.
+I built the project by myself as a TypeScript monorepo. It has an Expo and React Native mobile app, a stateless Fastify server, and a shared package of Zod schemas that keeps both sides working with the same validated data.
 
-The AI workflow uses separate checks for reading and reasoning. First, a multimodal transcription pass converts the photographed page into ordered steps and estimates where each step appears vertically. A second image pass compares each nonempty transcript with the visible ink before grading continues. Blank or non-math work stays blocked, while ordinary uncertainty continues into diagnosis. The app asks for a new photo only when stage-one confidence is exceptionally low and that second pass rejects both faithfulness and legibility; **Proceed anyway** remains a clearly warned override for that request only. Then a reasoning pass re-derives the solution, identifies the first incorrect step, selects a label from a controlled misconception vocabulary, and creates an explanation and follow-up problem. A final independent verifier checks the diagnosis. If it disagrees, the app shows a softer “second look” state instead of confidently telling the student that a step is wrong.
+I separated the AI workflow into reading, reasoning, and verification instead of relying on one large model response. First, a multimodal pass turns the photographed page into ordered steps and estimates where each line appears on the page. A second image check compares that transcript with the visible handwriting before any grading happens.
 
-I used structured JSON responses and shared validation because model output is part of the product interface, not just text to display. Invalid output receives one correction attempt before reaching the app. The server does not store photos or learning history, while misconception trends are saved locally with SQLite.
+I deliberately made the unreadable-photo warning conservative because I did not want decent handwriting rejected too easily. Blank and non-math photos are still stopped, but ordinary uncertainty continues to the reasoning stage. The app only asks for a new photo when the first pass has exceptionally low confidence and the second check rejects both the transcript's faithfulness and the image's legibility. Even then, the student can choose **Proceed anyway** for that request.
+
+Next, a reasoning pass works through the full solution, finds the first unsupported step, chooses a label from a controlled misconception vocabulary, and creates an explanation and a similar problem. A separate verifier checks that diagnosis. If it disagrees, the app shows a softer “second look” result instead of presenting an uncertain judgment as a fact.
+
+I used structured JSON and shared validation because model output is part of the product interface, not just text to place on a screen. Malformed output gets one correction attempt before it can reach the app. The server does not store photos or learning history; the app stores scan history and patterns locally with SQLite.
 
 ## Challenges I ran into
 
-The hardest problem was making the system find the **first** incorrect step reliably. Checking whether a final answer is correct is much easier. Once an early step is wrong, later steps may also be invalid, but highlighting those later consequences does not help the student understand the original cause.
+The hardest part was getting the system to focus on the **first** incorrect step. Checking a final answer is much easier. Once one early line is wrong, several later lines may also fail, but highlighting a later consequence does not explain the original mistake.
 
-I had to make the pipeline reason across the entire sequence while still returning one precise location. I also introduced a controlled misconception vocabulary so similar errors would receive consistent labels rather than slightly different descriptions every time.
+I had to make the pipeline consider the whole solution while still returning one precise location. I also added a controlled misconception vocabulary so similar errors receive consistent labels instead of a slightly different description on every scan.
 
-Handwriting created another challenge. A page is not clean structured data: lines can be slanted, crossed out, faint, or spaced unevenly. I kept both a mathematical transcription and a plain-language version of each step, along with vertical position bands, so the app could connect the diagnosis back to the photograph.
+Handwriting was another challenge. Real pages are not clean structured data: lines can be faint, slanted, crossed out, or spaced unevenly. I kept both a mathematical transcription and a plain-language reading of each step, along with its approximate vertical position, so the app could connect its diagnosis back to the photograph.
 
-Model reliability also required more than prompt tuning. Responses can be malformed, truncated, or overly confident. Shared schemas, correction retries, an independent verifier, uncertainty states, and regression tests all became important parts of the design.
+I also learned quickly that reliability needed more than prompt tuning. Responses can be malformed, incomplete, or too confident. Shared schemas, correction retries, an independent verifier, uncertainty states, and regression tests all became important parts of the product.
 
 ## What I learned
 
-The biggest thing I learned is that building a useful AI product is not the same as making one impressive model call. Reliability comes from the system around the model: clear interfaces, validation, disagreement handling, good fallback states, and tests that represent real inputs.
+The biggest thing I learned is that building a useful AI product is not the same as making one impressive model call. Most of the reliability comes from the system around the model: clear interfaces, validation, disagreement handling, careful fallback states, and tests based on realistic inputs.
 
-I created a 25-case validation set with 15 synthetic cases and 10 licensed FERMAT handwriting images, and the final repository run has 571 passing automated tests across the app, server, shared schemas, and dataset importer. That process taught me to treat model behavior as something that needs evaluation, not something I should assume will stay consistent.
+I assembled a 25-case evaluation set with 15 synthetic cases and 10 licensed FERMAT handwriting images. The final repository run also has 571 passing automated tests across the app, server, shared schemas, and dataset importer. I am not treating those automated tests as proof that every model response will be correct; they are the guardrails around the pipeline, while the separate image set is there for live-model evaluation.
 
-I also learned that educational feedback needs restraint. When the verifier is uncertain, admitting that uncertainty is better than giving a confident but incorrect diagnosis.
+Most importantly, I learned that educational feedback needs restraint. When the checks disagree, admitting uncertainty is much better than giving a student a confident but incorrect explanation.
 
 ## What’s next
 
-Next, I want to test Snap-a-Mistake with a wider range of handwriting, topics, and real student workflows. I would also like feedback from students and teachers on whether the explanations are clear, whether the follow-up problems feel appropriately targeted, and which recurring patterns are most useful to surface.
+Next, I want to test Snap-a-Mistake with a wider range of handwriting, math topics, and real student workflows. I would especially like feedback from students and teachers about whether the explanations are clear, whether the similar problems feel genuinely useful, and which long-term patterns are worth showing.
 
-The long-term idea is simple: instead of stopping at “wrong answer,” help a student see the first moment their reasoning changed and give them a useful next step.
+The long-term idea is simple: instead of stopping at “wrong answer,” show the student the first moment their reasoning changed and give them a useful next step.
